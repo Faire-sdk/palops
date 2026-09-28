@@ -11,6 +11,7 @@ export type Permission =
   | 'players.kick'
   | 'players.ban'
   | 'players.note'
+  | 'world.view'
   | 'console.view'
   | 'console.execute'
   | 'config.view'
@@ -65,6 +66,7 @@ export interface Player {
   level: number | null;
   location: { x: number; y: number } | null;
   buildingCount: number | null;
+  guild: string | null;
 }
 
 export interface KnownPlayer {
@@ -74,6 +76,7 @@ export interface KnownPlayer {
   name: string;
   level: number | null;
   guild: string | null;
+  guildId: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   online: boolean;
@@ -97,6 +100,112 @@ export interface PlayerProfile {
   player: KnownPlayer | null;
   banned: boolean;
   history: ModerationRecord[];
+  pals: PlayerPal[];
+  /** Empty unless the viewer has world.view. */
+  signals: PlayerSignal[];
+}
+
+// ---- World data (the REST API's game-data snapshot) ----
+
+export type WorldState = 'ok' | 'disabled' | 'unavailable' | 'unconfigured' | 'pending';
+
+export interface WorldStatus {
+  state: WorldState;
+  message: string | null;
+  takenAt: string | null;
+  fps: number | null;
+  counts: { players: number; ownedPals: number; basePals: number; wildPals: number; npcs: number; palBoxes: number } | null;
+}
+
+/** In-game map coordinates (x east, y north). */
+export interface MapPoint {
+  x: number;
+  y: number;
+}
+
+export interface Guild {
+  guildId: string;
+  name: string;
+  members: number;
+  online: number;
+  bases: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface WorkerPal {
+  instanceId: string;
+  name: string;
+  className: string | null;
+  level: number | null;
+  hp: number | null;
+  maxHp: number | null;
+}
+
+export interface Base {
+  id: number;
+  guildId: string;
+  guildName: string | null;
+  location: MapPoint;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  workers: WorkerPal[] | null;
+}
+
+export interface GuildDetail {
+  guild: Guild;
+  members: KnownPlayer[];
+  bases: Base[];
+}
+
+export interface PlayerPal {
+  instanceId: string;
+  name: string | null;
+  className: string | null;
+  level: number | null;
+  unitType: string;
+  lastSeenAt: string;
+  active: boolean;
+}
+
+export type SignalKind = 'movement' | 'level' | 'shared_ip';
+
+export interface PlayerSignal {
+  id: number;
+  userId: string;
+  playerName: string | null;
+  kind: SignalKind;
+  summary: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+  dismissedAt: string | null;
+  dismissedBy: string | null;
+}
+
+export interface WorldMapData {
+  takenAt: string;
+  players: Array<{ userId: string; name: string; level: number | null; guildId: string | null; guildName: string | null; at: MapPoint }>;
+  pals: Array<{ kind: 'OtomoPal' | 'BaseCampPal' | 'WildPal'; name: string; className: string | null; level: number | null; guildName: string | null; owner: string | null; at: MapPoint }>;
+  npcs: Array<{ className: string | null; at: MapPoint }>;
+  bases: Array<{ id: number; guildId: string; guildName: string | null; workers: number; at: MapPoint }>;
+  truncated: boolean;
+}
+
+export interface Hotspot {
+  cell: string;
+  center: MapPoint;
+  samples: number;
+  avgActors: number;
+  avgPlayers: number;
+  avgFps: number | null;
+  fpsVsAverage: number | null;
+}
+
+export interface WorldPerformance {
+  hours: number;
+  avgFps: number | null;
+  timeline: Array<{ at: string; fps: number | null; actors: number; players: number }>;
+  hotspots: Hotspot[];
 }
 
 export type AdapterKind = 'rest' | 'mock';

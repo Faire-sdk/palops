@@ -1,4 +1,5 @@
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
@@ -20,6 +21,7 @@ import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
+import { palLabel, SignalChip } from './world';
 
 type Action = 'kick' | 'ban' | 'unban';
 
@@ -160,6 +162,45 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
                 </Button>
               ))}
           </Stack>
+        )}
+
+        {data.pals.length > 0 && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+              Pals seen with {name}
+            </Typography>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              {data.pals.map((p) => (
+                <Chip
+                  key={p.instanceId}
+                  label={`${palLabel(p)} · Lv ${p.level ?? '?'}`}
+                  color={p.active ? 'primary' : 'default'}
+                  variant={p.active ? 'filled' : 'outlined'}
+                  title={p.active ? 'Out in the world now' : `Last seen ${formatDateTime(p.lastSeenAt)}`}
+                />
+              ))}
+            </Stack>
+          </>
+        )}
+
+        {data.signals.length > 0 && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+              Signals
+            </Typography>
+            <List dense disablePadding>
+              {data.signals.map((s) => (
+                <ListItem key={s.id} disableGutters alignItems="flex-start" sx={{ gap: 1.5, opacity: s.dismissedAt ? 0.6 : 1 }}>
+                  <Box sx={{ mt: 0.5 }}>
+                    <SignalChip kind={s.kind} />
+                  </Box>
+                  <ListItemText primary={s.summary} secondary={`${formatDateTime(s.createdAt)}${s.dismissedAt ? ` · dismissed by ${s.dismissedBy ?? 'someone'}` : ''}`} />
+                </ListItem>
+              ))}
+            </List>
+          </>
         )}
 
         <Divider />

@@ -28,6 +28,7 @@ const envSchema = z.object({
   SITE_JOIN_ADDRESS: z.string().max(200).optional(),
   SITE_DISCORD_INVITE: z.url().optional(),
   SITE_SHOW_ONLINE_PLAYERS: booleanString.default(true),
+  WORLD_POLL_SECONDS: z.coerce.number().int().min(0).max(3600).default(20),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -53,6 +54,8 @@ export interface Config {
   devDiscordLogin: boolean;
   /** Development only: connect the mock Palworld server on start if none is configured. */
   devMockServer: boolean;
+  /** How often to read the world snapshot (guilds, map, signals); 0 turns it off. */
+  worldPollSeconds: number;
   /** Public website settings. */
   site: { joinAddress: string | null; discordInvite: string | null; showOnlinePlayers: boolean };
 }
@@ -119,6 +122,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     passwordLogin,
     devDiscordLogin: env.DEV_DISCORD_LOGIN,
     devMockServer: env.DEV_MOCK_SERVER,
+    worldPollSeconds: env.WORLD_POLL_SECONDS,
     site: {
       joinAddress: env.SITE_JOIN_ADDRESS ?? null,
       discordInvite: env.SITE_DISCORD_INVITE ?? null,

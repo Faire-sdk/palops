@@ -3,6 +3,8 @@ import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
 import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
 import Pagination from '@mui/material/Pagination';
@@ -13,27 +15,32 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ApiError } from '../api/client';
-import type { KnownPlayer, ModerationRecord, Player } from '../api/types';
+import { api, ApiError, errorMessage } from '../api/client';
+import type { KnownPlayer, ModerationRecord, Player, PlayerSignal } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { DataTable } from '../components/DataTable';
 import { ModerationDialog, PlayerProfileDialog } from '../components/PlayerActions';
+import { useToast } from '../components/Toast';
+import { SignalChip } from '../components/world';
 import { formatDateTime } from '../format';
-import { useApi } from '../hooks/useApi';
+import { refreshAll, useApi } from '../hooks/useApi';
 
 const TABS = [
   { id: 'online', label: 'Online' },
   { id: 'all', label: 'All players' },
   { id: 'bans', label: 'Bans' },
+  { id: 'signals', label: 'Signals' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
 type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string };
 
 export function PlayersPage() {
+  const { can } = useAuth();
   const [params, setParams] = useSearchParams();
-  const tab: TabId = TABS.find((t) => t.id === params.get('tab'))?.id ?? 'online';
+  const tabs = TABS.filter((t) => t.id !== 'signals' || can('world.view'));
+  const tab: TabId = tabs.find((t) => t.id === params.get('tab'))?.id ?? 'online';
   const [profile, setProfile] = useState<string | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
 
@@ -41,13 +48,14 @@ export function PlayersPage() {
     <>
       <PageHeader title="Players" description="Who’s online, everyone the panel has seen, and bans made from the panel." />
       <Tabs value={tab} onChange={(_, v: TabId) => setParams({ tab: v })} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }} variant="scrollable" allowScrollButtonsMobile>
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <Tab key={t.id} value={t.id} label={t.label} />
         ))}
       </Tabs>
       {tab === 'online' && <OnlinePlayers onOpen={setProfile} onAction={setTarget} />}
       {tab === 'all' && <AllPlayers onOpen={setProfile} />}
       {tab === 'bans' && <Bans onOpen={setProfile} onAction={setTarget} />}
+      {tab === 'signals' && <Signals onOpen={setProfile} />}
       <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} />
       <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} onClose={() => setTarget(null)} />
     </>
@@ -115,6 +123,7 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
         columns={[
           { key: 'name', header: 'Player', render: (p) => <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} /> },
           { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
+          { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
           { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
           { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
           { key: 'ping', header: 'Ping', nowrap: true, render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : '—') },
@@ -292,5 +301,96 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         </Section>
       )}
     </Stack>
+  );
+}
+
+/** Unusual movement, level jumps and shared addresses, from the world snapshot. */
+function Signals({ onOpen }: { onOpen: (userId: string) => void }) {
+  const { can } = useAuth();
+  const notify = useToast();
+  const [all, setAll] = useState(false);
+  const [page, setPage] = useState(0);
+  const PAGE = 25;
+  const { data, error, loading, reload } = useApi<{ signals: PlayerSignal[]; total: number }>(
+    `/world/signals?includeDismissed=${all}&limit=${PAGE}&offset=${page * PAGE}`,
+    { pollMs: 30000 },
+  );
+
+  const dismiss = async (id: number) => {
+    try {
+      await api.post(`/world/signals/${id}/dismiss`);
+      refreshAll();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    }
+  };
+
+  let body;
+  if (loading && !data) body = <Loading />;
+  else if (error && !data) body = <ErrorState error={error} onRetry={reload} />;
+  else {
+    body = (
+      <>
+        <DataTable
+          rows={data?.signals ?? []}
+          rowKey={(s) => s.id}
+          empty={<EmptyState title={all ? 'No signals yet' : 'Nothing to review'}>Signals come from the world snapshot, so they need world data switched on.</EmptyState>}
+          columns={[
+            { key: 'player', header: 'Player', render: (s) => <PlayerName name={s.playerName ?? s.userId} userId={s.userId} onOpen={onOpen} /> },
+            { key: 'kind', header: 'Signal', render: (s) => <SignalChip kind={s.kind} /> },
+            { key: 'summary', header: 'What happened', render: (s) => s.summary },
+            { key: 'at', header: 'When', nowrap: true, render: (s) => formatDateTime(s.createdAt) },
+            {
+              key: 'actions',
+              header: '',
+              align: 'right',
+              render: (s) =>
+                s.dismissedAt ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                    Dismissed by {s.dismissedBy ?? 'someone'}
+                  </Typography>
+                ) : (
+                  can('players.note') && (
+                    <Button size="small" variant="outlined" onClick={() => dismiss(s.id)}>
+                      Dismiss
+                    </Button>
+                  )
+                ),
+            },
+          ]}
+        />
+        {data && data.total > PAGE && (
+          <Stack sx={{ alignItems: 'center', py: 2 }}>
+            <Pagination count={Math.ceil(data.total / PAGE)} page={page + 1} onChange={(_, p) => setPage(p - 1)} color="primary" />
+          </Stack>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <Section
+      title={data ? `Signals (${data.total})` : 'Signals'}
+      disablePadding
+      action={
+        <FormControlLabel
+          control={
+            <Switch
+              checked={all}
+              onChange={(e) => {
+                setAll(e.target.checked);
+                setPage(0);
+              }}
+            />
+          }
+          label="Show dismissed"
+        />
+      }
+    >
+      <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+        Hints worth a look, not proof of cheating. Fast travel, respawning, boss rewards and shared home networks can all trigger them.
+      </Typography>
+      {body}
+    </Section>
   );
 }

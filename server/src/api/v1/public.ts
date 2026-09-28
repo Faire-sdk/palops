@@ -39,10 +39,21 @@ export default async function publicRoutes(app: FastifyInstance, { services }: {
     if (!site.showOnlinePlayers) throw forbidden('This server does not publish its player list');
     try {
       const players = await services.players.refreshOnline();
-      return { players: players.map((p) => ({ name: p.name, level: p.level, guild: p.guild })) };
+      // The online list has no guilds; the world snapshot fills them in on the known player.
+      return {
+        players: players.map((p) => ({ name: p.name, level: p.level, guild: p.guild ?? services.players.byUserId(p.userId)?.guild ?? null })),
+      };
     } catch {
       services.players.markAllOffline();
       return { players: [] };
     }
+  });
+
+  /** Guild names with member and base counts. Follows the same switch as the player list. */
+  app.get('/guilds', async () => {
+    if (!site.showOnlinePlayers) throw forbidden('This server does not publish its player list');
+    return {
+      guilds: services.world.guilds().map((g) => ({ name: g.name, members: g.members, online: g.online, bases: g.bases })),
+    };
   });
 }

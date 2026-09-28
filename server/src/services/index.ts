@@ -13,6 +13,7 @@ import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
 import { SiteAccountService } from './site/site-accounts.js';
 import { ServerRegistry } from './servers/server-registry.js';
+import { WorldService } from './world/world-service.js';
 
 export interface Services {
   config: Config;
@@ -30,6 +31,7 @@ export interface Services {
   players: PlayerDirectory;
   moderation: ModerationService;
   siteAccounts: SiteAccountService;
+  world: WorldService;
 }
 
 /**
@@ -86,5 +88,6 @@ export function createServices(config: Config, db: DB): Services {
     players,
     moderation: new ModerationService(db, palworld, players, servers, audit),
     siteAccounts: new SiteAccountService(db, config.sessionMaxMs),
+    world: new WorldService(db, palworld, players, servers, audit),
   };
 }

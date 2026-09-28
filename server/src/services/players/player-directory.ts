@@ -10,6 +10,7 @@ export interface KnownPlayer {
   name: string;
   level: number | null;
   guild: string | null;
+  guildId: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   online: boolean;
@@ -23,6 +24,7 @@ interface PlayerRow {
   name: string;
   level: number | null;
   guild: string | null;
+  guild_id: string | null;
   first_seen_at: string;
   last_seen_at: string;
 }
@@ -96,6 +98,25 @@ export class PlayerDirectory {
     this.online = new Set(players.map((p) => p.userId));
   }
 
+  /** Guild and level from the world snapshot, which the online list doesn't include. */
+  applyWorld(serverId: number, players: Array<{ userId: string; level: number | null; guildId: string | null; guildName: string | null }>): void {
+    const update = this.db.prepare(
+      `UPDATE players SET level = COALESCE(@level, level), guild_id = COALESCE(@guildId, guild_id), guild = COALESCE(@guildName, guild)
+       WHERE server_id = @serverId AND user_id = @userId`,
+    );
+    for (const p of players) update.run({ serverId, ...p });
+  }
+
+  /** Known players on the primary server who belong to a guild. */
+  inGuilds(): KnownPlayer[] {
+    const server = this.servers.getPrimary();
+    if (!server) return [];
+    const rows = this.db
+      .prepare('SELECT * FROM players WHERE server_id = ? AND guild_id IS NOT NULL ORDER BY name COLLATE NOCASE')
+      .all(server.id) as PlayerRow[];
+    return rows.map((r) => this.toPlayer(r));
+  }
+
   get(id: number): KnownPlayer | undefined {
     const row = this.db.prepare('SELECT * FROM players WHERE id = ?').get(id) as PlayerRow | undefined;
     return row && this.toPlayer(row);
@@ -146,6 +167,7 @@ export class PlayerDirectory {
       name: row.name,
       level: row.level,
       guild: row.guild,
+      guildId: row.guild_id,
       firstSeenAt: row.first_seen_at,
       lastSeenAt: row.last_seen_at,
       online: this.online.has(row.user_id),

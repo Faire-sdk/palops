@@ -21,7 +21,7 @@ import { Mono } from '../components/common';
 import { formatDuration } from '../format';
 import { useApi } from '../hooks/useApi';
 import type { PlayerSession } from './SiteApp';
-import type { PublicPlayer, PublicServer } from './types';
+import type { PublicGuild, PublicPlayer, PublicServer } from './types';
 
 interface Props {
   server: { data?: PublicServer; loading: boolean; error?: Error };
@@ -39,6 +39,7 @@ function SectionTitle({ children }: { children: ReactNode }) {
 export function HomePage({ server, session }: Props) {
   const s = server.data;
   const players = useApi<{ players: PublicPlayer[] }>('/public/players', { pollMs: 30000, enabled: !!s?.showOnlinePlayers });
+  const guilds = useApi<{ guilds: PublicGuild[] }>('/public/guilds', { pollMs: 60000, enabled: !!s?.showOnlinePlayers });
   const [copied, setCopied] = useState(false);
 
   const copyAddress = async () => {
@@ -150,6 +151,31 @@ export function HomePage({ server, session }: Props) {
             ) : (
               <Typography color="text.secondary">{online ? 'Nobody is online right now. Be the first!' : 'The server is offline.'}</Typography>
             )}
+          </Box>
+        )}
+
+        {s?.showOnlinePlayers && !!guilds.data?.guilds.length && (
+          <Box component="section" id="guilds" sx={{ mb: 6, scrollMarginTop: 80 }}>
+            <SectionTitle>Guilds</SectionTitle>
+            <Grid container spacing={1.5}>
+              {guilds.data.guilds.map((g) => (
+                <Grid key={g.name} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                  <Card sx={{ height: '100%' }}>
+                    <CardContent sx={{ '&:last-child': { pb: 2 } }}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography noWrap sx={{ fontWeight: 600 }}>
+                          {g.name}
+                        </Typography>
+                        {g.online > 0 && <Chip label={`${g.online} online`} color="success" variant="outlined" />}
+                      </Stack>
+                      <Typography variant="body2" color="text.secondary">
+                        {g.members} {g.members === 1 ? 'member' : 'members'} · {g.bases} {g.bases === 1 ? 'base' : 'bases'}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
           </Box>
         )}
 

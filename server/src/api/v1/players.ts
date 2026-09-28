@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
+import { hasPermission } from '../../services/authentication/permissions.js';
 import { parse } from '../../utils/validation.js';
 
 /** Platform ids look like steam_76561198000000000 or epic_0f3a...; keep them to a safe charset. */
@@ -9,11 +10,12 @@ const userIdParams = z.object({ userId: z.string().regex(/^[A-Za-z0-9_.:-]{1,80}
 const reasonBody = z.object({ reason: z.string().trim().max(200).default('') });
 
 export default async function playerRoutes(app: FastifyInstance, { services }: { services: Services }) {
-  const { players, moderation } = services;
+  const { players, moderation, world } = services;
 
   /** Players online right now. */
   app.get('/', { preHandler: requirePermission(services, 'players.view') }, async () => ({
-    players: await players.refreshOnline(),
+    // The online list has no guilds; the world snapshot fills them in on the known player.
+    players: (await players.refreshOnline()).map((p) => ({ ...p, guild: p.guild ?? players.byUserId(p.userId)?.guild ?? null })),
   }));
 
   /** Every player the panel has seen, with ban state. */
@@ -38,11 +40,15 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
 
   app.get('/:userId', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
     const { userId } = parse(userIdParams, request.params);
+    const staff = hasPermission(request.user!.role, 'world.view');
     return {
       userId,
       player: players.byUserId(userId) ?? null,
       banned: moderation.isBanned(userId),
       history: moderation.history(userId),
+      pals: world.palsOf(userId),
+      /** Cheat signals are staff-only, like the map. */
+      signals: staff ? world.signals({ userId, includeDismissed: true, limit: 20, offset: 0 }).signals : [],
     };
   });
 

@@ -5,6 +5,10 @@ import type {
   PalworldPlayer,
   PalworldServerInfo,
   PalworldSettings,
+  WorldCharacter,
+  WorldPalBox,
+  WorldSnapshot,
+  WorldUnitType,
 } from './types.js';
 import { PalworldError } from './types.js';
 
@@ -18,6 +22,10 @@ export interface RestApiConnection {
 
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const optStr = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+const UNIT_TYPES: WorldUnitType[] = ['Player', 'OtomoPal', 'BaseCampPal', 'WildPal', 'NPC'];
+/** The world snapshot lists every actor, so it can be large and slow on busy servers. */
+const WORLD_TIMEOUT_MS = 15000;
 
 /**
  * Talks to the official Palworld dedicated server REST API
@@ -90,6 +98,40 @@ export class RestApiAdapter implements PalworldAdapter {
     return settings;
   }
 
+  async getWorld(): Promise<WorldSnapshot> {
+    const body = await this.request<Record<string, unknown>>('GET', 'game-data', undefined, WORLD_TIMEOUT_MS);
+    if (!body || !Array.isArray(body.ActorData)) throw new PalworldError('invalid_response', 'Unexpected world data format');
+    const characters: WorldCharacter[] = [];
+    const palBoxes: WorldPalBox[] = [];
+    for (const raw of body.ActorData as Array<Record<string, unknown>>) {
+      const x = num(raw.LocationX);
+      const y = num(raw.LocationY);
+      if (x === null || y === null) continue;
+      const location = { x, y, z: num(raw.LocationZ) ?? 0 };
+      if (raw.Type === 'PalBox') {
+        palBoxes.push({ guildId: optStr(raw.GuildID), guildName: optStr(raw.GuildName), location });
+      } else if (raw.Type === 'Character') {
+        const unitType = UNIT_TYPES.includes(raw.UnitType as WorldUnitType) ? (raw.UnitType as WorldUnitType) : 'Other';
+        characters.push({
+          instanceId: str(raw.InstanceID),
+          unitType,
+          name: str(raw.NickName),
+          className: optStr(raw.Class),
+          trainerInstanceId: optStr(raw.TrainerInstanceID),
+          userId: optStr(raw.userid),
+          ip: optStr(raw.ip),
+          level: num(raw.level),
+          hp: num(raw.HP),
+          maxHp: num(raw.MaxHP),
+          guildId: optStr(raw.GuildID),
+          guildName: optStr(raw.GuildName),
+          location,
+        });
+      }
+    }
+    return { serverTime: optStr(body.Time), fps: num(body.FPS), averageFps: num(body.AverageFPS), characters, palBoxes };
+  }
+
   announce(message: string) {
     return this.request<void>('POST', 'announce', { message });
   }
@@ -118,7 +160,7 @@ export class RestApiAdapter implements PalworldAdapter {
     return this.request<void>('POST', 'stop');
   }
 
-  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown, timeoutMs = this.timeoutMs): Promise<T> {
     let response: Response;
     try {
       response = await fetch(new URL(path, this.baseUrl), {
@@ -129,7 +171,7 @@ export class RestApiAdapter implements PalworldAdapter {
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
         redirect: 'error',
       });
     } catch (err) {
@@ -139,6 +181,9 @@ export class RestApiAdapter implements PalworldAdapter {
 
     if (response.status === 401 || response.status === 403) {
       throw new PalworldError('unauthorized', 'The server rejected the admin credentials');
+    }
+    if (response.status === 404) {
+      throw new PalworldError('unsupported', 'The server does not offer this endpoint');
     }
     if (!response.ok) {
       throw new PalworldError('api_error', `The server returned HTTP ${response.status}`);
