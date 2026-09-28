@@ -1,9 +1,11 @@
+import BlockIcon from '@mui/icons-material/Block';
+import TerminalIcon from '@mui/icons-material/Terminal';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import type { Permission } from '../api/types';
 import { AuthProvider, useAuth } from '../auth/AuthContext';
 import { ToastProvider } from '../components/Toast';
 import { Layout } from '../components/Layout';
-import { EmptyState, Loading } from '../components/ui';
+import { EmptyState, Loading } from '../components/common';
 import { LoginPage, ResetPasswordPage, SetupPage } from '../pages/AuthPages';
 import { ComingSoonPage } from '../pages/ComingSoonPage';
 import { ConfigurationPage } from '../pages/ConfigurationPage';
@@ -15,7 +17,7 @@ import { SettingsPage } from '../pages/SettingsPage';
 
 function Guard({ permission, children }: { permission: Permission; children: React.ReactNode }) {
   const { can } = useAuth();
-  return can(permission) ? <>{children}</> : <EmptyState icon="alert" title="You don’t have access to this page" />;
+  return can(permission) ? <>{children}</> : <EmptyState icon={BlockIcon} title="You don’t have access to this page" />;
 }
 
 function PanelRoutes() {
@@ -39,7 +41,7 @@ function PanelRoutes() {
         <Route path="players" element={<Guard permission="players.view"><PlayersPage /></Guard>} />
         <Route
           path="console"
-          element={<Guard permission="console.view"><ComingSoonPage title="Console" icon="console" description="The Palworld REST API has no console. Commands will come with RCON support or PalOps running on the game machine." /></Guard>}
+          element={<Guard permission="console.view"><ComingSoonPage title="Console" icon={TerminalIcon} description="The Palworld REST API has no console. Commands will come with RCON support or PalOps running on the game machine." /></Guard>}
         />
         <Route path="server" element={<Guard permission="server.control"><ServerPage /></Guard>} />
         <Route path="configuration" element={<Guard permission="config.view"><ConfigurationPage /></Guard>} />

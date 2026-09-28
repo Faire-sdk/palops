@@ -1,14 +1,30 @@
+import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
+import Alert from '@mui/material/Alert';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Grid from '@mui/material/Grid';
+import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { ROLES, type AdapterKind, type Role, type ServerConnection, type ServerStatus, type User } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { authErrorMessage, DiscordLogo, discordAvatarUrl } from '../auth/discord';
-import { ConfirmDialog, Modal } from '../components/Modal';
-import { ServerStateBadge } from '../components/ServerStateBadge';
-import { Table } from '../components/Table';
+import { authErrorMessage, DiscordButton, DiscordLogo, discordAvatarUrl } from '../auth/discord';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ErrorState, KeyValue, Loading, Mono, PageHeader, Section, ServerStateChip } from '../components/common';
+import { DataTable } from '../components/DataTable';
 import { useToast } from '../components/Toast';
-import { Alert, Badge, Button, Card, ErrorState, Field, Input, Loading, PageHeader, Select } from '../components/ui';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 
@@ -25,13 +41,11 @@ export function SettingsPage() {
   return (
     <>
       <PageHeader title="Settings" />
-      <div className="tabs" role="tablist">
+      <Tabs value={tab} onChange={(_, v: string) => setParams({ tab: v })} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }} variant="scrollable" allowScrollButtonsMobile>
         {tabs.map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'active' : ''} onClick={() => setParams({ tab: t.id })}>
-            {t.label}
-          </button>
+          <Tab key={t.id} value={t.id} label={t.label} />
         ))}
-      </div>
+      </Tabs>
       {tab === 'account' && <AccountSettings />}
       {tab === 'connection' && <ConnectionSettings />}
       {tab === 'users' && <UserSettings />}
@@ -42,14 +56,19 @@ export function SettingsPage() {
 function DiscordIdentity({ discord }: { discord: NonNullable<User['discord']> }) {
   const avatar = discordAvatarUrl(discord);
   return (
-    <span className="discord-user">
-      {avatar ? <img src={avatar} alt="" /> : <span className="avatar"><DiscordLogo size={16} /></span>}
-      <span>
-        <strong>{discord.username ?? 'Not signed in yet'}</strong>
-        <br />
-        <span className="muted mono">{discord.id}</span>
-      </span>
-    </span>
+    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+      <Avatar src={avatar ?? undefined} sx={{ width: 36, height: 36, bgcolor: '#5865F2' }}>
+        <DiscordLogo fontSize="small" />
+      </Avatar>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {discord.username ?? 'Not signed in yet'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          <Mono>{discord.id}</Mono>
+        </Typography>
+      </Box>
+    </Stack>
   );
 }
 
@@ -83,49 +102,56 @@ function AccountSettings() {
 
   return (
     <>
-      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
-      <div className="grid grid-2">
-        <Card title="Profile">
-          <dl className="kv">
-            <dt>Username</dt>
-            <dd>{user?.username}</dd>
-            <dt>Role</dt>
-            <dd>
-              <Badge tone="accent">{user?.role}</Badge>
-            </dd>
-            <dt>Last sign-in</dt>
-            <dd>{formatDateTime(user?.lastLoginAt ?? null)}</dd>
-          </dl>
-        </Card>
+      {notice && (
+        <Alert severity={notice.tone} sx={{ mb: 2 }}>
+          {notice.text}
+        </Alert>
+      )}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Section title="Profile">
+            <KeyValue
+              items={[
+                ['Username', user?.username],
+                ['Role', <Chip label={user?.role} color="primary" variant="outlined" />],
+                ['Last sign-in', formatDateTime(user?.lastLoginAt ?? null)],
+              ]}
+            />
+          </Section>
+        </Grid>
         {(options.providers.discord || user?.discord) && (
-          <Card title="Discord">
-            {user?.discord ? (
-              <div className="form">
-                <DiscordIdentity discord={user.discord} />
-                {canUnlink ? (
-                  <div>
-                    <Button variant="danger" onClick={unlink}>
-                      Unlink Discord
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="muted small">Discord is how you sign in, so it can’t be unlinked.</p>
-                )}
-              </div>
-            ) : (
-              <div className="form">
-                <p className="muted">Link your Discord account to sign in with Discord.</p>
-                <div>
-                  <button className="btn btn-discord-inline" onClick={() => startDiscord('link').catch((e) => notify(errorMessage(e), 'error'))}>
-                    <DiscordLogo /> Link Discord
-                  </button>
-                </div>
-              </div>
-            )}
-          </Card>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Section title="Discord">
+              {user?.discord ? (
+                <Stack spacing={2}>
+                  <DiscordIdentity discord={user.discord} />
+                  {canUnlink ? (
+                    <div>
+                      <Button variant="outlined" color="error" onClick={unlink}>
+                        Unlink Discord
+                      </Button>
+                    </div>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Discord is how you sign in, so it can’t be unlinked.
+                    </Typography>
+                  )}
+                </Stack>
+              ) : (
+                <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>
+                  <Typography color="text.secondary">Link your Discord account to sign in with Discord.</Typography>
+                  <DiscordButton onClick={() => startDiscord('link').catch((e) => notify(errorMessage(e), 'error'))}>Link Discord</DiscordButton>
+                </Stack>
+              )}
+            </Section>
+          </Grid>
         )}
-        {options.providers.password && user?.hasPassword && <ChangePassword />}
-      </div>
+        {options.providers.password && user?.hasPassword && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <ChangePassword />
+          </Grid>
+        )}
+      </Grid>
     </>
   );
 }
@@ -157,25 +183,19 @@ function ChangePassword() {
   };
 
   return (
-    <Card title="Change password">
-      <form className="form" onSubmit={submit}>
-        {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Current password">
-          <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-        </Field>
-        <Field label="New password" hint="At least 10 characters">
-          <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
-        </Field>
-        <Field label="Confirm new password">
-          <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
-        </Field>
+    <Section title="Change password">
+      <Stack component="form" spacing={2} onSubmit={submit}>
+        {error && <Alert severity="error">{error}</Alert>}
+        <TextField label="Current password" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+        <TextField label="New password" helperText="At least 10 characters" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+        <TextField label="Confirm new password" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
         <div>
-          <Button variant="primary" type="submit" loading={busy}>
+          <Button variant="contained" type="submit" loading={busy}>
             Update password
           </Button>
         </div>
-      </form>
-    </Card>
+      </Stack>
+    </Section>
   );
 }
 
@@ -226,74 +246,83 @@ function ConnectionSettings() {
   const isMock = form.adapter === 'mock';
 
   return (
-    <div className="grid grid-2">
-      <Card title="Palworld server">
-        <form
-          className="form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run('save');
-          }}
-        >
-          <Field label="Display name">
-            <Input value={form.name} onChange={set('name')} required maxLength={64} />
-          </Field>
-          <Field label="Connection type">
-            <Select value={form.adapter} onChange={set('adapter')}>
-              <option value="rest">Palworld REST API</option>
-              <option value="mock">Mock server (for testing the panel)</option>
-            </Select>
-          </Field>
-          {!isMock && (
-            <>
-              <div className="row">
-                <Field label="Host" hint="IP or hostname of the Palworld server">
-                  <Input value={form.host} onChange={set('host')} placeholder="127.0.0.1" required />
-                </Field>
-                <Field label="REST API port">
-                  <Input type="number" min={1} max={65535} value={form.port} onChange={set('port')} required />
-                </Field>
-              </div>
-              <Field label="Username">
-                <Input value={form.username} onChange={set('username')} required />
-              </Field>
-              <Field
-                label="Admin password"
-                hint={data?.connection?.hasPassword ? 'A password is saved. Leave blank to keep it.' : 'The AdminPassword from PalWorldSettings.ini'}
-              >
-                <Input type="password" autoComplete="off" value={form.password} onChange={set('password')} />
-              </Field>
-            </>
-          )}
-          <div className="button-row">
-            <Button variant="primary" type="submit" loading={busy === 'save'}>
-              Save
-            </Button>
-            <Button type="button" onClick={() => run('test')} loading={busy === 'test'}>
-              Test connection
-            </Button>
-          </div>
-          {test && (
-            <Alert tone={test.state === 'online' ? 'success' : 'error'}>
-              <ServerStateBadge state={test.state} />{' '}
-              {test.state === 'online' ? `Connected to ${test.info?.name} (${test.info?.version})` : test.error?.message}
-            </Alert>
-          )}
-        </form>
-      </Card>
-      <Card title="Setting up the REST API">
-        <ol className="steps">
-          <li>
-            In <code>PalWorldSettings.ini</code>, set <code>RESTAPIEnabled=True</code> and an <code>AdminPassword</code>.
-          </li>
-          <li>
-            Note <code>RESTAPIPort</code> (default <code>8212</code>) and restart the server.
-          </li>
-          <li>Keep that port private: allow it only from the panel’s host, never from the internet.</li>
-        </ol>
-        <p className="muted small">The password is encrypted at rest and never sent back to the browser.</p>
-      </Card>
-    </div>
+    <Grid container spacing={2}>
+      <Grid size={{ xs: 12, md: 7 }}>
+        <Section title="Palworld server">
+          <Stack
+            component="form"
+            spacing={2}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run('save');
+            }}
+          >
+            <TextField label="Display name" value={form.name} onChange={set('name')} required slotProps={{ htmlInput: { maxLength: 64 } }} />
+            <TextField select label="Connection type" value={form.adapter} onChange={set('adapter')}>
+              <MenuItem value="rest">Palworld REST API</MenuItem>
+              <MenuItem value="mock">Mock server (for testing the panel)</MenuItem>
+            </TextField>
+            {!isMock && (
+              <>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField label="Host" helperText="IP or hostname of the Palworld server" value={form.host} onChange={set('host')} placeholder="127.0.0.1" required />
+                  <TextField
+                    label="REST API port"
+                    type="number"
+                    value={form.port}
+                    onChange={set('port')}
+                    required
+                    sx={{ maxWidth: { sm: 160 } }}
+                    slotProps={{ htmlInput: { min: 1, max: 65535 } }}
+                  />
+                </Stack>
+                <TextField label="Username" value={form.username} onChange={set('username')} required />
+                <TextField
+                  label="Admin password"
+                  type="password"
+                  autoComplete="off"
+                  value={form.password}
+                  onChange={set('password')}
+                  helperText={data?.connection?.hasPassword ? 'A password is saved. Leave blank to keep it.' : 'The AdminPassword from PalWorldSettings.ini'}
+                />
+              </>
+            )}
+            <Stack direction="row" spacing={1}>
+              <Button variant="contained" type="submit" loading={busy === 'save'}>
+                Save
+              </Button>
+              <Button variant="outlined" type="button" onClick={() => run('test')} loading={busy === 'test'}>
+                Test connection
+              </Button>
+            </Stack>
+            {test && (
+              <Alert severity={test.state === 'online' ? 'success' : 'error'} icon={false}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                  <ServerStateChip state={test.state} />
+                  <span>{test.state === 'online' ? `Connected to ${test.info?.name} (${test.info?.version})` : test.error?.message}</span>
+                </Stack>
+              </Alert>
+            )}
+          </Stack>
+        </Section>
+      </Grid>
+      <Grid size={{ xs: 12, md: 5 }}>
+        <Section title="Setting up the REST API">
+          <Box component="ol" sx={{ pl: 2.5, mt: 0, '& li': { mb: 1 } }}>
+            <li>
+              In <Mono>PalWorldSettings.ini</Mono>, set <Mono>RESTAPIEnabled=True</Mono> and an <Mono>AdminPassword</Mono>.
+            </li>
+            <li>
+              Note <Mono>RESTAPIPort</Mono> (default <Mono>8212</Mono>) and restart the server.
+            </li>
+            <li>Keep that port private: allow it only from the panel’s host, never from the internet.</li>
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            The password is encrypted at rest and never sent back to the browser.
+          </Typography>
+        </Section>
+      </Grid>
+    </Grid>
   );
 }
 
@@ -328,71 +357,108 @@ function UserSettings() {
   };
 
   return (
-    <Card title="Panel users" actions={<Button variant="primary" onClick={() => setCreating(true)}>Add user</Button>}>
-      <Table
+    <Section
+      title="Panel users"
+      disablePadding
+      action={
+        <Button variant="contained" startIcon={<PersonAddAlt1OutlinedIcon />} onClick={() => setCreating(true)}>
+          Add user
+        </Button>
+      }
+    >
+      <DataTable
         rows={data?.users ?? []}
         rowKey={(u) => u.id}
         columns={[
-          { key: 'username', header: 'Username', render: (u) => <strong>{u.username}</strong> },
+          { key: 'username', header: 'Username', render: (u) => <Typography sx={{ fontWeight: 600 }}>{u.username}</Typography> },
           {
             key: 'discord',
             header: 'Discord',
-            render: (u) => (u.discord ? <DiscordIdentity discord={u.discord} /> : <span className="muted">Not linked</span>),
+            render: (u) =>
+              u.discord ? (
+                <DiscordIdentity discord={u.discord} />
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Not linked
+                </Typography>
+              ),
           },
           {
             key: 'role',
             header: 'Role',
             render: (u) => (
-              <Select value={u.role} onChange={(e) => update(u, { role: e.target.value as Role })} aria-label={`Role for ${u.username}`}>
+              <TextField
+                select
+                value={u.role}
+                onChange={(e) => update(u, { role: e.target.value as Role })}
+                sx={{ minWidth: 130 }}
+                slotProps={{ htmlInput: { 'aria-label': `Role for ${u.username}` } }}
+              >
                 {ROLES.map((r) => (
-                  <option key={r} value={r}>
+                  <MenuItem key={r} value={r}>
                     {r}
-                  </option>
+                  </MenuItem>
                 ))}
-              </Select>
+              </TextField>
             ),
           },
-          { key: 'status', header: 'Status', render: (u) => (u.disabled ? <Badge tone="error">Disabled</Badge> : <Badge tone="success">Active</Badge>) },
-          { key: 'last', header: 'Last sign-in', render: (u) => formatDateTime(u.lastLoginAt) },
+          {
+            key: 'status',
+            header: 'Status',
+            render: (u) => (u.disabled ? <Chip label="Disabled" color="error" variant="outlined" /> : <Chip label="Active" color="success" variant="outlined" />),
+          },
+          { key: 'last', header: 'Last sign-in', nowrap: true, render: (u) => formatDateTime(u.lastLoginAt) },
           {
             key: 'actions',
             header: '',
-            className: 'actions-cell',
+            align: 'right',
             render: (u) => (
-              <div className="button-row">
-                {options.providers.password && <Button onClick={() => issueReset(u)}>Reset link</Button>}
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                {options.providers.password && (
+                  <Button size="small" variant="outlined" onClick={() => issueReset(u)}>
+                    Reset link
+                  </Button>
+                )}
                 {u.id !== session?.user.id &&
                   (u.disabled ? (
-                    <Button onClick={() => update(u, { disabled: false })}>Enable</Button>
+                    <Button size="small" variant="outlined" onClick={() => update(u, { disabled: false })}>
+                      Enable
+                    </Button>
                   ) : (
-                    <Button variant="danger" onClick={() => setDisabling(u)}>
+                    <Button size="small" variant="outlined" color="error" onClick={() => setDisabling(u)}>
                       Disable
                     </Button>
                   ))}
-              </div>
+              </Stack>
             ),
           },
         ]}
       />
-      <CreateUserModal open={creating} onClose={() => setCreating(false)} onCreated={reload} />
+      <CreateUserDialog open={creating} onClose={() => setCreating(false)} onCreated={reload} />
       <ConfirmDialog
         open={!!disabling}
         title="Disable user"
         danger
         confirmLabel="Disable"
-        message={<p>{disabling?.username} will be signed out and won’t be able to sign in until re-enabled.</p>}
+        message={`${disabling?.username} will be signed out and won’t be able to sign in until re-enabled.`}
         onConfirm={() => (disabling ? update(disabling, { disabled: true }) : undefined)}
         onClose={() => setDisabling(null)}
       />
-      <Modal open={!!resetLink} title="Password reset link" onClose={() => setResetLink(undefined)}>
-        <p>Share this link privately. It works once and expires in one hour.</p>
-        <Input readOnly value={resetLink ?? ''} onFocus={(e) => e.target.select()} />
-      </Modal>
-    </Card>
+      <Dialog open={!!resetLink} onClose={() => setResetLink(undefined)} maxWidth="sm" fullWidth>
+        <DialogTitle>Password reset link</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>Share this link privately. It works once and expires in one hour.</Typography>
+          <TextField value={resetLink ?? ''} onFocus={(e) => e.target.select()} slotProps={{ htmlInput: { readOnly: true, 'aria-label': 'Reset link' } }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResetLink(undefined)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </Section>
   );
 }
 
-function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+function CreateUserDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const { options } = useAuth();
   const notify = useToast();
   const [username, setUsername] = useState('');
@@ -427,41 +493,47 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
   };
 
   return (
-    <Modal open={open} title="Add user" onClose={onClose}>
-      <form className="form" onSubmit={submit}>
-        {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Username" hint="Their name inside the panel">
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
-        </Field>
-        <Field
-          label="Discord user ID"
-          hint="In Discord, enable Developer Mode, right-click the user and choose Copy User ID. They can also try signing in; the panel will show them their ID."
-        >
-          <Input inputMode="numeric" value={discordId} onChange={(e) => setDiscordId(e.target.value)} placeholder="e.g. 80351110224678912" />
-        </Field>
-        {options.providers.password && (
-          <Field label="Temporary password" hint="Optional. At least 10 characters; ask them to change it after signing in.">
-            <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </Field>
-        )}
-        <Field label="Role">
-          <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth slotProps={{ paper: { component: 'form', onSubmit: submit } as object }}>
+      <DialogTitle>Add user</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          {error && <Alert severity="error">{error}</Alert>}
+          <TextField label="Username" helperText="Their name inside the panel" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
+          <TextField
+            label="Discord user ID"
+            helperText="In Discord, enable Developer Mode, right-click the user and choose Copy User ID. They can also try signing in; the panel will show them their ID."
+            value={discordId}
+            onChange={(e) => setDiscordId(e.target.value)}
+            placeholder="e.g. 80351110224678912"
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          />
+          {options.providers.password && (
+            <TextField
+              label="Temporary password"
+              helperText="Optional. At least 10 characters; ask them to change it after signing in."
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          )}
+          <TextField select label="Role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ROLES.map((r) => (
-              <option key={r} value={r}>
+              <MenuItem key={r} value={r}>
                 {r}
-              </option>
+              </MenuItem>
             ))}
-          </Select>
-        </Field>
-        <div className="button-row end">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={busy}>
-            Create user
-          </Button>
-        </div>
-      </form>
-    </Modal>
+          </TextField>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button type="button" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" variant="contained" loading={busy}>
+          Create user
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

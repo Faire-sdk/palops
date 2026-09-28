@@ -1,6 +1,14 @@
-import { useMemo, useState } from 'react';
+import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
+import SearchIcon from '@mui/icons-material/Search';
+import TuneIcon from '@mui/icons-material/Tune';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import Grid from '@mui/material/Grid';
+import InputAdornment from '@mui/material/InputAdornment';
+import TextField from '@mui/material/TextField';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ApiError } from '../api/client';
-import { Alert, Badge, Card, EmptyState, ErrorState, Input, Loading, PageHeader } from '../components/ui';
+import { EmptyState, ErrorState, KeyValue, Loading, Mono, PageHeader, Section } from '../components/common';
 import { useApi } from '../hooks/useApi';
 
 type Settings = Record<string, string | number | boolean>;
@@ -16,9 +24,9 @@ const GROUPS: Array<{ title: string; keys: string[] }> = [
 ];
 
 function Value({ value }: { value: string | number | boolean }) {
-  if (typeof value === 'boolean') return value ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>;
-  if (value === '') return <span className="muted">not set</span>;
-  return <span className="mono">{String(value)}</span>;
+  if (typeof value === 'boolean') return value ? <Chip label="On" color="success" variant="outlined" /> : <Chip label="Off" variant="outlined" />;
+  if (value === '') return <Mono muted>not set</Mono>;
+  return <Mono>{String(value)}</Mono>;
 }
 
 export function ConfigurationPage() {
@@ -39,24 +47,33 @@ export function ConfigurationPage() {
   if (loading && !data) body = <Loading />;
   else if (error && !data) {
     const offline = error instanceof ApiError && ['palworld_unreachable', 'palworld_not_configured'].includes(error.code);
-    body = offline ? <EmptyState icon="server" title="Server unavailable">{error.message}</EmptyState> : <ErrorState error={error} onRetry={reload} />;
+    body = offline ? (
+      <Section>
+        <EmptyState icon={DnsOutlinedIcon} title="Server unavailable">
+          {error.message}
+        </EmptyState>
+      </Section>
+    ) : (
+      <ErrorState error={error} onRetry={reload} />
+    );
   } else if (groups.length === 0) {
-    body = <EmptyState icon="config" title="No matching settings" />;
+    body = (
+      <Section>
+        <EmptyState icon={TuneIcon} title="No matching settings" />
+      </Section>
+    );
   } else {
-    body = groups.map((g) => (
-      <Card key={g.title} title={g.title} className="settings-group">
-        <dl className="kv">
-          {g.keys.map((k) => (
-            <div key={k} style={{ display: 'contents' }}>
-              <dt className="mono small">{k}</dt>
-              <dd>
-                <Value value={data!.settings[k] ?? ''} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
-    ));
+    body = (
+      <Grid container spacing={2}>
+        {groups.map((g) => (
+          <Grid key={g.title} size={{ xs: 12, lg: 6 }}>
+            <Section title={g.title}>
+              <KeyValue items={g.keys.map((k) => [k, <Value value={data!.settings[k] ?? ''} />] as [string, ReactNode])} />
+            </Section>
+          </Grid>
+        ))}
+      </Grid>
+    );
   }
 
   return (
@@ -64,9 +81,26 @@ export function ConfigurationPage() {
       <PageHeader
         title="Configuration"
         description="The settings the server is running with, read live from the REST API."
-        actions={<Input placeholder="Search settings…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search settings" />}
+        actions={
+          <TextField
+            placeholder="Search settings"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            sx={{ width: { xs: '100%', sm: 260 } }}
+            slotProps={{
+              htmlInput: { 'aria-label': 'Search settings' },
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        }
       />
-      <Alert tone="info">
+      <Alert severity="info" sx={{ mb: 2 }}>
         Read-only for now. The REST API can’t change settings; editing PalWorldSettings.ini needs PalOps on the game machine, which is planned.
       </Alert>
       {body}

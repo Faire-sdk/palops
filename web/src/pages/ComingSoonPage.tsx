@@ -1,15 +1,14 @@
-import { Card, EmptyState, PageHeader } from '../components/ui';
-import type { IconName } from '../components/icons';
+import { EmptyState, PageHeader, Section, type IconComponent } from '../components/common';
 
-export function ComingSoonPage({ title, icon, description }: { title: string; icon: IconName; description: string }) {
+export function ComingSoonPage({ title, icon, description }: { title: string; icon: IconComponent; description: string }) {
   return (
     <>
       <PageHeader title={title} />
-      <Card>
+      <Section>
         <EmptyState icon={icon} title="Coming soon">
           {description}
         </EmptyState>
-      </Card>
+      </Section>
     </>
   );
 }

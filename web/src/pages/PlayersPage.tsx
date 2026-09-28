@@ -1,11 +1,24 @@
+import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
+import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
+import SearchIcon from '@mui/icons-material/Search';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import InputAdornment from '@mui/material/InputAdornment';
+import Link from '@mui/material/Link';
+import Pagination from '@mui/material/Pagination';
+import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { KnownPlayer, ModerationRecord, Player } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { ModerationDialog, PlayerProfileModal } from '../components/PlayerActions';
-import { Table } from '../components/Table';
-import { Badge, Button, Card, EmptyState, ErrorState, Input, Loading, PageHeader } from '../components/ui';
+import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
+import { DataTable } from '../components/DataTable';
+import { ModerationDialog, PlayerProfileDialog } from '../components/PlayerActions';
 import { formatDateTime } from '../format';
 import { useApi } from '../hooks/useApi';
 
@@ -14,30 +27,28 @@ const TABS = [
   { id: 'all', label: 'All players' },
   { id: 'bans', label: 'Bans' },
 ] as const;
-type Tab = (typeof TABS)[number]['id'];
+type TabId = (typeof TABS)[number]['id'];
 
 type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string };
 
 export function PlayersPage() {
   const [params, setParams] = useSearchParams();
-  const tab: Tab = TABS.find((t) => t.id === params.get('tab'))?.id ?? 'online';
+  const tab: TabId = TABS.find((t) => t.id === params.get('tab'))?.id ?? 'online';
   const [profile, setProfile] = useState<string | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
 
   return (
     <>
       <PageHeader title="Players" description="Who’s online, everyone the panel has seen, and bans made from the panel." />
-      <div className="tabs" role="tablist">
+      <Tabs value={tab} onChange={(_, v: TabId) => setParams({ tab: v })} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }} variant="scrollable" allowScrollButtonsMobile>
         {TABS.map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'active' : ''} onClick={() => setParams({ tab: t.id })}>
-            {t.label}
-          </button>
+          <Tab key={t.id} value={t.id} label={t.label} />
         ))}
-      </div>
+      </Tabs>
       {tab === 'online' && <OnlinePlayers onOpen={setProfile} onAction={setTarget} />}
       {tab === 'all' && <AllPlayers onOpen={setProfile} />}
       {tab === 'bans' && <Bans onOpen={setProfile} onAction={setTarget} />}
-      <PlayerProfileModal userId={profile} onClose={() => setProfile(null)} />
+      <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} />
       <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} onClose={() => setTarget(null)} />
     </>
   );
@@ -45,11 +56,34 @@ export function PlayersPage() {
 
 function PlayerName({ name, userId, onOpen }: { name: string; userId: string; onOpen: (userId: string) => void }) {
   return (
-    <button className="link-btn" onClick={() => onOpen(userId)}>
+    <Link component="button" underline="hover" onClick={() => onOpen(userId)} sx={{ fontWeight: 600, textAlign: 'left' }}>
       {name}
-    </button>
+    </Link>
   );
 }
+
+function SearchField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  return (
+    <TextField
+      placeholder={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      sx={{ width: { xs: '100%', sm: 260 } }}
+      slotProps={{
+        htmlInput: { 'aria-label': label },
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon fontSize="small" />
+            </InputAdornment>
+          ),
+        },
+      }}
+    />
+  );
+}
+
+const isOffline = (error: Error) => error instanceof ApiError && ['palworld_unreachable', 'palworld_not_configured'].includes(error.code);
 
 function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction: (t: Target) => void }) {
   const { can } = useAuth();
@@ -65,35 +99,42 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
   let body;
   if (loading && !data) body = <Loading />;
   else if (error && !data) {
-    const offline = error instanceof ApiError && ['palworld_unreachable', 'palworld_not_configured'].includes(error.code);
-    body = offline ? <EmptyState icon="server" title="Server unavailable">{error.message}</EmptyState> : <ErrorState error={error} onRetry={reload} />;
+    body = isOffline(error) ? (
+      <EmptyState icon={DnsOutlinedIcon} title="Server unavailable">
+        {error.message}
+      </EmptyState>
+    ) : (
+      <ErrorState error={error} onRetry={reload} />
+    );
   } else {
     body = (
-      <Table
+      <DataTable
         rows={players}
         rowKey={(p) => p.userId || p.playerId}
-        empty={<EmptyState icon="players" title={query ? 'No matching players' : 'Nobody is online right now'} />}
+        empty={<EmptyState icon={PeopleOutlinedIcon} title={query ? 'No matching players' : 'Nobody is online right now'} />}
         columns={[
           { key: 'name', header: 'Player', render: (p) => <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} /> },
           { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
-          { key: 'userId', header: 'Platform ID', render: (p) => <span className="mono">{p.userId}</span> },
+          { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
           { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
-          { key: 'ping', header: 'Ping', render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : '—') },
+          { key: 'ping', header: 'Ping', nowrap: true, render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : '—') },
           {
             key: 'actions',
             header: '',
-            className: 'actions-cell',
+            align: 'right',
             render: (p) => (
-              <div className="button-row">
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                 {can('players.kick') && (
-                  <Button onClick={() => onAction({ action: 'kick', userId: p.userId, name: p.name })}>Kick</Button>
+                  <Button size="small" variant="outlined" onClick={() => onAction({ action: 'kick', userId: p.userId, name: p.name })}>
+                    Kick
+                  </Button>
                 )}
                 {can('players.ban') && (
-                  <Button variant="danger" onClick={() => onAction({ action: 'ban', userId: p.userId, name: p.name })}>
+                  <Button size="small" variant="outlined" color="error" onClick={() => onAction({ action: 'ban', userId: p.userId, name: p.name })}>
                     Ban
                   </Button>
                 )}
-              </div>
+              </Stack>
             ),
           },
         ]}
@@ -102,12 +143,9 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
   }
 
   return (
-    <Card
-      title={data ? `Online (${data.players.length})` : 'Online'}
-      actions={<Input placeholder="Search players…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search players" />}
-    >
+    <Section title={data ? `Online (${data.players.length})` : 'Online'} action={<SearchField label="Search players" value={query} onChange={setQuery} />} disablePadding>
       {body}
-    </Card>
+    </Section>
   );
 }
 
@@ -127,62 +165,58 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
   else {
     body = (
       <>
-        <Table
+        <DataTable
           rows={data?.players ?? []}
           rowKey={(p) => p.id}
-          empty={<EmptyState icon="players" title={search ? 'No matching players' : 'No players seen yet'}>{!search && 'Players are recorded once a minute while they’re online.'}</EmptyState>}
+          empty={
+            <EmptyState icon={PeopleOutlinedIcon} title={search ? 'No matching players' : 'No players seen yet'}>
+              {!search && 'Players are recorded once a minute while they’re online.'}
+            </EmptyState>
+          }
           columns={[
             {
               key: 'name',
               header: 'Player',
               render: (p) => (
-                <span className="inline-row">
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} />
-                  {p.online && <Badge tone="success">Online</Badge>}
-                  {p.banned && <Badge tone="error">Banned</Badge>}
-                </span>
+                  {p.online && <Chip label="Online" color="success" variant="outlined" />}
+                  {p.banned && <Chip label="Banned" color="error" variant="outlined" />}
+                </Stack>
               ),
             },
             { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
-            { key: 'guild', header: 'Guild', render: (p) => p.guild ?? <span className="muted">—</span> },
-            { key: 'userId', header: 'Platform ID', render: (p) => <span className="mono">{p.userId}</span> },
-            { key: 'lastSeen', header: 'Last seen', render: (p) => <span className="nowrap">{formatDateTime(p.lastSeenAt)}</span> },
+            { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
+            { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
+            { key: 'lastSeen', header: 'Last seen', nowrap: true, render: (p) => formatDateTime(p.lastSeenAt) },
           ]}
         />
         {pages > 1 && (
-          <div className="pager">
-            <Button disabled={page === 0} onClick={() => setPage(page - 1)}>
-              Previous
-            </Button>
-            <span className="muted">
-              Page {page + 1} of {pages}
-            </span>
-            <Button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>
-              Next
-            </Button>
-          </div>
+          <Stack sx={{ alignItems: 'center', py: 2 }}>
+            <Pagination count={pages} page={page + 1} onChange={(_, p) => setPage(p - 1)} color="primary" />
+          </Stack>
         )}
       </>
     );
   }
 
   return (
-    <Card
+    <Section
       title={data ? `All players (${data.total})` : 'All players'}
-      actions={
-        <Input
-          placeholder="Search name, ID or guild…"
+      disablePadding
+      action={
+        <SearchField
+          label="Search name, ID or guild"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
+          onChange={(v) => {
+            setQuery(v);
             setPage(0);
           }}
-          aria-label="Search all players"
         />
       }
     >
       {body}
-    </Card>
+    </Section>
   );
 }
 
@@ -196,23 +230,25 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
   else if (error && !data) body = <ErrorState error={error} onRetry={reload} />;
   else {
     body = (
-      <Table
+      <DataTable
         rows={data?.bans ?? []}
         rowKey={(b) => b.id}
-        empty={<EmptyState icon="players" title="No bans from the panel" />}
+        empty={<EmptyState icon={PeopleOutlinedIcon} title="No bans from the panel" />}
         columns={[
           { key: 'name', header: 'Player', render: (b) => <PlayerName name={b.playerName ?? b.playerUserId} userId={b.playerUserId} onOpen={onOpen} /> },
-          { key: 'userId', header: 'Platform ID', render: (b) => <span className="mono">{b.playerUserId}</span> },
-          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? <span className="muted">—</span> },
+          { key: 'userId', header: 'Platform ID', render: (b) => <Mono>{b.playerUserId}</Mono> },
+          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
           { key: 'by', header: 'Banned by', render: (b) => b.actorUsername ?? '—' },
-          { key: 'at', header: 'When', render: (b) => <span className="nowrap">{formatDateTime(b.createdAt)}</span> },
+          { key: 'at', header: 'When', nowrap: true, render: (b) => formatDateTime(b.createdAt) },
           {
             key: 'actions',
             header: '',
-            className: 'actions-cell',
+            align: 'right',
             render: (b) =>
               can('players.ban') && (
-                <Button onClick={() => onAction({ action: 'unban', userId: b.playerUserId, name: b.playerName ?? b.playerUserId })}>Unban</Button>
+                <Button size="small" variant="outlined" onClick={() => onAction({ action: 'unban', userId: b.playerUserId, name: b.playerName ?? b.playerUserId })}>
+                  Unban
+                </Button>
               ),
           },
         ]}
@@ -221,30 +257,40 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
   }
 
   return (
-    <div className="grid">
-      <Card title={data ? `Bans (${data.bans.length})` : 'Bans'}>
-        <p className="muted small card-note">
+    <Stack spacing={2}>
+      <Section title={data ? `Bans (${data.bans.length})` : 'Bans'} disablePadding>
+        <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
           Only bans made from PalOps are listed. The REST API can’t read bans made in-game or through a shared ban list.
-        </p>
+        </Typography>
         {body}
-      </Card>
+      </Section>
       {can('players.ban') && (
-        <Card title="Ban by platform ID">
-          <p className="muted small card-note">For someone who isn’t online, e.g. steam_76561198000000000.</p>
-          <form
-            className="inline-row"
+        <Section title="Ban by platform ID">
+          <Stack
+            component="form"
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ alignItems: { sm: 'flex-start' } }}
             onSubmit={(e) => {
               e.preventDefault();
               if (userId.trim()) onAction({ action: 'ban', userId: userId.trim(), name: userId.trim() });
             }}
           >
-            <Input aria-label="Platform ID" placeholder="Platform ID" value={userId} onChange={(e) => setUserId(e.target.value)} pattern="[A-Za-z0-9_.:\-]{1,80}" required />
-            <Button variant="danger" type="submit">
+            <TextField
+              label="Platform ID"
+              helperText="For someone who isn’t online, e.g. steam_76561198000000000"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              required
+              slotProps={{ htmlInput: { pattern: '[A-Za-z0-9_.:\\-]{1,80}' } }}
+              sx={{ maxWidth: { sm: 420 } }}
+            />
+            <Button variant="contained" color="error" type="submit" sx={{ height: 40 }}>
               Ban
             </Button>
-          </form>
-        </Card>
+          </Stack>
+        </Section>
       )}
-    </div>
+    </Stack>
   );
 }

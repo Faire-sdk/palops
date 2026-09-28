@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Grid from '@mui/material/Grid';
+import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import { useState, type ReactNode } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { ServerStatus } from '../api/types';
-import { ConfirmDialog, Modal } from '../components/Modal';
-import { ServerStateBadge } from '../components/ServerStateBadge';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ErrorState, KeyValue, Loading, PageHeader, Section, ServerStateChip } from '../components/common';
 import { useToast } from '../components/Toast';
-import { Alert, Button, Card, ErrorState, Field, Input, Loading, PageHeader, Select } from '../components/ui';
 import { formatDuration } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 
@@ -14,6 +25,20 @@ const COUNTDOWNS = [
   { seconds: 300, label: '5 minutes' },
   { seconds: 600, label: '10 minutes' },
 ];
+
+function ActionCard({ title, children, action, danger }: { title: string; children: ReactNode; action: ReactNode; danger?: boolean }) {
+  return (
+    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2.5, gap: 1.5, borderColor: danger ? 'error.main' : undefined }}>
+      <Typography variant="h6" component="h2" sx={{ fontSize: 17 }}>
+        {title}
+      </Typography>
+      <Typography color="text.secondary" sx={{ flexGrow: 1 }}>
+        {children}
+      </Typography>
+      <div>{action}</div>
+    </Card>
+  );
+}
 
 export function ServerPage() {
   const notify = useToast();
@@ -42,50 +67,69 @@ export function ServerPage() {
   return (
     <>
       <PageHeader title="Server" description="Save the world or shut the server down. Every action is recorded in the audit log." />
-      <div className="grid grid-2">
-        <Card title="Status" actions={<ServerStateBadge state={status.state} />}>
-          <dl className="kv">
-            <dt>Server</dt>
-            <dd>{status.info?.name ?? status.connection?.name ?? '—'}</dd>
-            <dt>Uptime</dt>
-            <dd>{status.metrics ? formatDuration(status.metrics.uptimeSeconds) : '—'}</dd>
-            <dt>Players</dt>
-            <dd>{status.metrics ? `${status.metrics.currentPlayers} of ${status.metrics.maxPlayers}` : '—'}</dd>
-          </dl>
-          {!online && status.error && <Alert tone="warning">{status.error.message}</Alert>}
-        </Card>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Section title="Status" action={<ServerStateChip state={status.state} />}>
+            <KeyValue
+              items={[
+                ['Server', status.info?.name ?? status.connection?.name ?? '—'],
+                ['Uptime', status.metrics ? formatDuration(status.metrics.uptimeSeconds) : '—'],
+                ['Players', status.metrics ? `${status.metrics.currentPlayers} of ${status.metrics.maxPlayers}` : '—'],
+              ]}
+            />
+            {!online && status.error && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                {status.error.message}
+              </Alert>
+            )}
+          </Section>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <ActionCard
+            title="Save the world"
+            action={
+              <Button variant="contained" onClick={save} loading={saving} disabled={!online}>
+                Save now
+              </Button>
+            }
+          >
+            Writes the world to disk now, without interrupting players. Palworld also autosaves on its own.
+          </ActionCard>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <ActionCard
+            title="Shut down"
+            action={
+              <Button variant="outlined" onClick={() => setShutdownOpen(true)} disabled={!online}>
+                Schedule shutdown…
+              </Button>
+            }
+          >
+            Warns players with a countdown, saves the world and stops the server. It stays off until it’s started on the game machine (or restarted
+            automatically by your service manager).
+          </ActionCard>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <ActionCard
+            title="Force stop"
+            danger
+            action={
+              <Button variant="outlined" color="error" onClick={() => setStopOpen(true)} disabled={!online}>
+                Force stop
+              </Button>
+            }
+          >
+            Stops the server immediately <strong>without saving</strong>. Use only if it’s stuck; progress since the last save is lost.
+          </ActionCard>
+        </Grid>
+      </Grid>
 
-        <Card title="Save the world">
-          <p className="muted">Writes the world to disk now, without interrupting players. Palworld also autosaves on its own.</p>
-          <Button variant="primary" onClick={save} loading={saving} disabled={!online}>
-            Save now
-          </Button>
-        </Card>
-
-        <Card title="Shut down">
-          <p className="muted">
-            Warns players with a countdown, saves the world and stops the server. It stays off until it’s started on the game machine
-            (or restarted automatically by your service manager).
-          </p>
-          <Button onClick={() => setShutdownOpen(true)} disabled={!online}>
-            Schedule shutdown…
-          </Button>
-        </Card>
-
-        <Card title="Force stop" className="danger-zone">
-          <p className="muted">Stops the server immediately <strong>without saving</strong>. Use only if it’s stuck; progress since the last save is lost.</p>
-          <Button variant="danger" onClick={() => setStopOpen(true)} disabled={!online}>
-            Force stop
-          </Button>
-        </Card>
-      </div>
-
-      <Alert tone="info">
-        Starting a stopped server isn’t possible through the Palworld REST API. That needs PalOps on the game machine with access to
-        its service manager, which is planned.
+      <Alert severity="info">
+        Starting a stopped server isn’t possible through the Palworld REST API. That needs PalOps on the game machine with access to its service
+        manager, which is planned.
       </Alert>
 
-      <ShutdownModal open={shutdownOpen} onClose={() => setShutdownOpen(false)} />
+      <ShutdownDialog open={shutdownOpen} onClose={() => setShutdownOpen(false)} />
       <ConfirmDialog
         open={stopOpen}
         danger
@@ -107,7 +151,7 @@ export function ServerPage() {
   );
 }
 
-function ShutdownModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function ShutdownDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const notify = useToast();
   const [waitSeconds, setWaitSeconds] = useState(60);
   const [message, setMessage] = useState('');
@@ -129,40 +173,35 @@ function ShutdownModal({ open, onClose }: { open: boolean; onClose: () => void }
   };
 
   return (
-    <Modal
-      open={open}
-      title="Schedule a shutdown"
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={submit} loading={busy}>
-            Shut down
-          </Button>
-        </>
-      }
-    >
-      <div className="form">
-        <Field label="Countdown">
-          <Select value={waitSeconds} onChange={(e) => setWaitSeconds(Number(e.target.value))}>
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Schedule a shutdown</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField select label="Countdown" value={waitSeconds} onChange={(e) => setWaitSeconds(Number(e.target.value))}>
             {COUNTDOWNS.map((c) => (
-              <option key={c.seconds} value={c.seconds}>
+              <MenuItem key={c.seconds} value={c.seconds}>
                 {c.label}
-              </option>
+              </MenuItem>
             ))}
-          </Select>
-        </Field>
-        <Field label="Message to players" hint="Shown in game during the countdown.">
-          <Input
-            maxLength={200}
+          </TextField>
+          <TextField
+            label="Message to players"
+            helperText="Shown in game during the countdown."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={`Server shutting down in ${waitSeconds} seconds`}
+            slotProps={{ htmlInput: { maxLength: 200 } }}
           />
-        </Field>
-      </div>
-    </Modal>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="contained" color="error" onClick={submit} loading={busy}>
+          Shut down
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
