@@ -32,10 +32,8 @@ From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 sec
 - A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
 - Bases with their worker pals, levels and HP, and injured workers flagged.
 - Pals seen with each player, kept for 30 days.
-- Cheat signals: unusual movement, level jumps and players sharing an address, with dismissal recorded in the audit log.
+- Cheat signals: unusual movement, level jumps, players sharing an address and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.
 - Lag hotspots: FPS over time and the busiest 500 m areas, kept for 7 days.
-
-Planned next: base intrusion alerts in the panel (for PvP servers).
 
 ## Discord bot (planned)
 

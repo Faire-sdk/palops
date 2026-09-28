@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { WorldCharacter, WorldSnapshot } from '../src/services/palworld/index.js';
+import type { WorldCharacter, WorldPalBox, WorldSnapshot } from '../src/services/palworld/index.js';
 import { fromMap, toMap } from '../src/services/world/map-coords.js';
 import { api, createTestApp, loginAs } from './helpers.js';
 
@@ -109,6 +109,27 @@ describe('world data', () => {
 
     const viewer = await loginAs(ctx.app, ctx.services, 'viewer');
     expect((await api(ctx.app, { method: 'POST', url: `/api/v1/world/signals/${id}/dismiss`, cookie: viewer })).statusCode).toBe(403);
+  });
+
+  it('flags players from other guilds standing at a base, once per visit', async () => {
+    const world = ctx.services.world;
+    const box = (guildId: string, guildName: string, x: number, y: number): WorldPalBox => ({ guildId, guildName, location: fromMap({ x, y }) });
+    const boxes = [box('G-HOME', 'Home Guild', 0, 0)];
+    const t0 = Date.now();
+
+    // Anubis (guild G1) is about 46 m from Home Guild's box; Lamball is a member of it, and Cattiva is far away.
+    const inside = [
+      player(ANUBIS, 'Anubis', 10, 0),
+      player(LAMBALL, 'Lamball Enjoyer', 5, 0, { guildId: 'G-HOME', guildName: 'Home Guild' }),
+      player('steam_3', 'Far Away', 200, 0),
+    ];
+    world.ingest({ ...snapshot(inside), palBoxes: boxes }, new Date(t0));
+    world.ingest({ ...snapshot(inside), palBoxes: boxes }, new Date(t0 + 20000));
+
+    const { signals } = world.signals({ limit: 50, offset: 0 });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toMatchObject({ kind: 'base_intrusion', playerName: 'Anubis' });
+    expect(signals[0]!.summary).toContain("Home Guild's base");
   });
 
   it('matches FPS to the busiest areas', async () => {

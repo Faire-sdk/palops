@@ -270,4 +270,31 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 7,
+    name: 'base_intrusion_signals',
+    rebuildsTables: true,
+    sql: `
+      -- Adds the base_intrusion kind; SQLite can't change a CHECK in place.
+      CREATE TABLE player_signals_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        player_name TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('movement', 'level', 'shared_ip', 'base_intrusion')),
+        summary TEXT NOT NULL,
+        dedupe_key TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        dismissed_at TEXT,
+        dismissed_by TEXT
+      );
+      INSERT INTO player_signals_new SELECT * FROM player_signals;
+      DROP TABLE player_signals;
+      ALTER TABLE player_signals_new RENAME TO player_signals;
+      CREATE INDEX player_signals_open ON player_signals(server_id, dismissed_at, id);
+      CREATE INDEX player_signals_player ON player_signals(server_id, user_id, id);
+      CREATE INDEX player_signals_dedupe ON player_signals(server_id, dedupe_key, created_at);
+    `,
+  },
 ];

@@ -168,7 +168,7 @@ export interface PlayerPal {
   active: boolean;
 }
 
-export type SignalKind = 'movement' | 'level' | 'shared_ip';
+export type SignalKind = 'movement' | 'level' | 'shared_ip' | 'base_intrusion';
 
 export interface PlayerSignal {
   id: number;
