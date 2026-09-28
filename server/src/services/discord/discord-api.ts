@@ -47,6 +47,16 @@ export class DiscordApi {
     return this.call('POST', `/channels/${channelId}/messages`, { content: content.slice(0, 2000), allowed_mentions: { parse: [] } });
   }
 
+  /** Answers an interaction that arrived over the gateway (over HTTP the answer is the response itself). */
+  interactionCallback(interactionId: string, interactionToken: string, response: unknown): Promise<unknown> {
+    return this.call('POST', `/interactions/${interactionId}/${interactionToken}/callback`, response, false);
+  }
+
+  /** Discord allows two name changes per channel every ten minutes, so callers must not do this often. */
+  renameChannel(channelId: string, name: string): Promise<unknown> {
+    return this.call('PATCH', `/channels/${channelId}`, { name });
+  }
+
   /** Fills in the reply to a command that was answered with "thinking…". */
   editOriginal(applicationId: string, interactionToken: string, content: string): Promise<unknown> {
     return this.call('PATCH', `/webhooks/${applicationId}/${interactionToken}/messages/@original`, { content: content.slice(0, 2000), allowed_mentions: { parse: [] } }, false);

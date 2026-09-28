@@ -47,6 +47,9 @@ const settingsSchema = z.object({
   notifySignals: z.boolean().default(true),
   notifyServer: z.boolean().default(true),
   notifyJoins: z.boolean().default(false),
+  gatewayEnabled: z.boolean().default(true),
+  presenceEnabled: z.boolean().default(true),
+  statusChannelId: id,
 });
 
 /** Owner-only setup for the optional Discord bot. */
@@ -56,6 +59,7 @@ export default async function discordBotRoutes(app: FastifyInstance, { services 
 
   app.get('/settings', owner, async (request) => ({
     settings: discordBot.settings(),
+    gateway: discordBot.gatewayStatus(),
     // Where to paste into the Developer Portal's "Interactions Endpoint URL".
     interactionsUrl: `${request.protocol}://${request.host}/api/v1/discord/interactions`,
     commands: COMMANDS.map((c) => ({ name: c.name, description: c.description })),
@@ -74,13 +78,13 @@ export default async function discordBotRoutes(app: FastifyInstance, { services 
       // Never log the token itself, only whether it changed.
       details: { before: beforeSummary, after: summary, tokenChanged: token !== undefined },
     });
-    return { settings };
+    return { settings, gateway: discordBot.gatewayStatus() };
   });
 
   /** Tries the token, server and channels without saving. */
   app.post('/test', owner, async (request) => {
-    const { botToken, guildId, eventsChannelId, logChannelId } = parse(settingsSchema.pick({ botToken: true, guildId: true, eventsChannelId: true, logChannelId: true }), request.body);
-    return { checks: await discordBot.check({ botToken: botToken || undefined, guildId, eventsChannelId, logChannelId }) };
+    const { botToken, guildId, eventsChannelId, logChannelId, statusChannelId } = parse(settingsSchema.pick({ botToken: true, guildId: true, eventsChannelId: true, logChannelId: true, statusChannelId: true }), request.body);
+    return { checks: await discordBot.check({ botToken: botToken || undefined, guildId, eventsChannelId, logChannelId, statusChannelId }) };
   });
 
   app.post('/register-commands', owner, async (request) => {

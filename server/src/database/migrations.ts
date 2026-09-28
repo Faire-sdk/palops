@@ -417,4 +417,17 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 13,
+    name: 'discord_bot_gateway',
+    sql: `
+      -- The bot's live connection: presence (player count, do not disturb) and, later, chat relay.
+      ALTER TABLE discord_bot ADD COLUMN gateway_enabled INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE discord_bot ADD COLUMN presence_enabled INTEGER NOT NULL DEFAULT 1;
+      -- A channel whose name shows the server status, e.g. "🟢 5/32 online".
+      ALTER TABLE discord_bot ADD COLUMN status_channel_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN status_channel_name TEXT;
+      ALTER TABLE discord_bot ADD COLUMN status_channel_changed_at TEXT;
+    `,
+  },
 ];

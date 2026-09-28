@@ -446,8 +446,17 @@ export interface DiscordBotSettings {
   notifySignals: boolean;
   notifyServer: boolean;
   notifyJoins: boolean;
+  gatewayEnabled: boolean;
+  presenceEnabled: boolean;
+  statusChannelId: string | null;
   commandsRegisteredAt: string | null;
   updatedAt: string | null;
+}
+
+export interface GatewayStatus {
+  state: 'off' | 'connecting' | 'connected' | 'error';
+  message: string | null;
+  botUserId: string | null;
 }
 
 export interface BotCheck {

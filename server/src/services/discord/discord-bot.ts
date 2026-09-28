@@ -11,6 +11,7 @@ import type { ModerationService } from '../players/moderation.js';
 import type { KnownPlayer, PlayerDirectory } from '../players/player-directory.js';
 import type { WorldService } from '../world/world-service.js';
 import { DiscordApi, DiscordApiError } from './discord-api.js';
+import { DiscordGateway, Intents, type GatewayStatus, type Presence } from './gateway.js';
 import { COMMANDS, EPHEMERAL, InteractionType, ResponseType, type CommandOption, type Interaction } from './interactions.js';
 
 export interface DiscordBotSettings {
@@ -28,6 +29,11 @@ export interface DiscordBotSettings {
   notifySignals: boolean;
   notifyServer: boolean;
   notifyJoins: boolean;
+  /** Keep a live connection to Discord (needed for the bot's status and, later, the chat relay). */
+  gatewayEnabled: boolean;
+  /** Show the player count, or that the server is offline, as the bot's status. */
+  presenceEnabled: boolean;
+  statusChannelId: string | null;
   commandsRegisteredAt: string | null;
   updatedAt: string | null;
 }
@@ -47,6 +53,9 @@ export interface DiscordBotInput {
   notifySignals: boolean;
   notifyServer: boolean;
   notifyJoins: boolean;
+  gatewayEnabled: boolean;
+  presenceEnabled: boolean;
+  statusChannelId: string | null;
 }
 
 export interface BotCheck {
@@ -70,6 +79,11 @@ interface Row {
   notify_server: number;
   notify_joins: number;
   commands_registered_at: string | null;
+  gateway_enabled: number;
+  presence_enabled: number;
+  status_channel_id: string | null;
+  status_channel_name: string | null;
+  status_channel_changed_at: string | null;
   updated_at: string;
 }
 
@@ -178,6 +192,13 @@ export class DiscordBotService {
   private serverTimer: NodeJS.Timeout | undefined;
   private lastState: 'online' | 'offline' | undefined;
   private offlineStreak = 0;
+  private gateway: DiscordGateway | undefined;
+  private gatewayKey = '';
+  private gatewayUrl: string | undefined;
+  /** What the bot shows as its status. */
+  private server: { state: 'online' | 'offline' | 'restarting' | 'unknown'; players: number; max: number } = { state: 'unknown', players: 0, max: 0 };
+  /** Set when a shutdown starts; cleared once the server has gone down and come back, or after a while. */
+  private restarting: { since: number; sawOffline: boolean } | undefined;
 
   constructor(
     private readonly db: DB,
@@ -203,8 +224,9 @@ export class DiscordBotService {
   }
 
   /** Test hook: point at a fake Discord. */
-  setApiBase(base: string | undefined): void {
+  setApiBase(base: string | undefined, gatewayUrl?: string): void {
     this.apiBase = base;
+    this.gatewayUrl = gatewayUrl;
   }
 
   // ---- Settings ----
@@ -230,6 +252,9 @@ export class DiscordBotService {
       notifySignals: (r?.notify_signals ?? 1) === 1,
       notifyServer: (r?.notify_server ?? 1) === 1,
       notifyJoins: r?.notify_joins === 1,
+      gatewayEnabled: (r?.gateway_enabled ?? 1) === 1,
+      presenceEnabled: (r?.presence_enabled ?? 1) === 1,
+      statusChannelId: r?.status_channel_id ?? null,
       commandsRegisteredAt: r?.commands_registered_at ?? null,
       updatedAt: r?.updated_at ?? null,
     };
@@ -237,7 +262,7 @@ export class DiscordBotService {
 
   save(input: DiscordBotInput): DiscordBotSettings {
     const existing = this.row();
-    const ids: Array<[string, string | null]> = [['Application ID', input.applicationId], ['Server ID', input.guildId], ['Events channel ID', input.eventsChannelId], ['Log channel ID', input.logChannelId]];
+    const ids: Array<[string, string | null]> = [['Application ID', input.applicationId], ['Server ID', input.guildId], ['Events channel ID', input.eventsChannelId], ['Log channel ID', input.logChannelId], ['Status channel ID', input.statusChannelId]];
     for (const [label, value] of ids) if (value && !SNOWFLAKE.test(value)) throw badRequest(`${label} should be the long number from Discord (Developer Mode → Copy ID)`, 'invalid_id');
     if (input.publicKey && !/^[0-9a-f]{64}$/i.test(input.publicKey)) throw badRequest('The public key is 64 hexadecimal characters, from the Developer Portal’s General Information page', 'invalid_public_key');
     if (input.enabled) {
@@ -252,11 +277,12 @@ export class DiscordBotService {
     this.db
       .prepare(
         `INSERT INTO discord_bot (id, enabled, application_id, public_key, bot_token_encrypted, guild_id, public_info, events_channel_id, log_channel_id, log_min_level,
-           notify_bans, notify_signals, notify_server, notify_joins)
-         VALUES (1, @enabled, @app, @key, @token, @guild, @pub, @events, @logs, @level, @bans, @signals, @server, @joins)
+           notify_bans, notify_signals, notify_server, notify_joins, gateway_enabled, presence_enabled, status_channel_id)
+         VALUES (1, @enabled, @app, @key, @token, @guild, @pub, @events, @logs, @level, @bans, @signals, @server, @joins, @gateway, @presence, @statusChannel)
          ON CONFLICT (id) DO UPDATE SET enabled = @enabled, application_id = @app, public_key = @key, bot_token_encrypted = COALESCE(@token, bot_token_encrypted),
            guild_id = @guild, public_info = @pub, events_channel_id = @events, log_channel_id = @logs, log_min_level = @level,
            notify_bans = @bans, notify_signals = @signals, notify_server = @server, notify_joins = @joins,
+           gateway_enabled = @gateway, presence_enabled = @presence, status_channel_id = @statusChannel,
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
       )
       .run({
@@ -273,9 +299,13 @@ export class DiscordBotService {
         signals: input.notifySignals ? 1 : 0,
         server: input.notifyServer ? 1 : 0,
         joins: input.notifyJoins ? 1 : 0,
+        gateway: input.gatewayEnabled ? 1 : 0,
+        presence: input.presenceEnabled ? 1 : 0,
+        statusChannel: input.statusChannelId || null,
       });
     this.queueKey = '';
     this.lastState = undefined;
+    this.applyGateway();
     return this.settings();
   }
 
@@ -297,7 +327,7 @@ export class DiscordBotService {
 
   // ---- Checks and command registration (owner tools) ----
 
-  async check(input: { botToken?: string; guildId: string | null; eventsChannelId: string | null; logChannelId: string | null }): Promise<BotCheck[]> {
+  async check(input: { botToken?: string; guildId: string | null; eventsChannelId: string | null; logChannelId: string | null; statusChannelId?: string | null }): Promise<BotCheck[]> {
     const token = input.botToken || this.token();
     if (!token) return [{ name: 'Bot token', ok: false, message: 'Enter the bot token' }];
     const api = new DiscordApi(token, this.apiBase);
@@ -313,6 +343,7 @@ export class DiscordBotService {
     if (input.guildId) await run('Server', async () => (await api.guild(input.guildId!)).name);
     if (input.eventsChannelId) await run('Events channel', async () => `#${(await api.channel(input.eventsChannelId!)).name ?? 'channel'}`);
     if (input.logChannelId) await run('Log channel', async () => `#${(await api.channel(input.logChannelId!)).name ?? 'channel'}`);
+    if (input.statusChannelId) await run('Status channel', async () => `#${(await api.channel(input.statusChannelId!)).name ?? 'channel'} (the bot needs Manage Channels to rename it)`);
     return checks;
   }
 
@@ -520,6 +551,11 @@ export class DiscordBotService {
   }
 
   private onAudit(actor: AuditActor, entry: { category: string; action: string; target?: string }): void {
+    if (entry.category === 'server' && (entry.action === 'shutdown' || entry.action === 'force_stop') && this.active) {
+      this.markRestarting();
+      this.notify('notify_server', '🟠 The server is shutting down or restarting.');
+      return;
+    }
     if (entry.category !== 'players') return;
     const who = escapeMd(actor.username ?? 'system');
     const target = entry.target ? escapeMd(entry.target) : 'a player';
@@ -538,10 +574,11 @@ export class DiscordBotService {
     for (const l of lines) if (l.source !== 'panel' && rank[l.level] >= rank[r.log_min_level]) queue.push(l.message);
   }
 
-  /** Starts the check that tells the events channel when the server goes down or comes back. */
+  /** Starts the periodic server check and the gateway connection. */
   start(): void {
     this.serverTimer ??= setInterval(() => void this.checkServer(), 30_000);
     this.serverTimer.unref();
+    this.applyGateway();
   }
 
   stop(): void {
@@ -549,23 +586,135 @@ export class DiscordBotService {
     this.serverTimer = undefined;
     this.events?.stop();
     this.logs?.stop();
+    this.gateway?.stop();
+    this.gateway = undefined;
+    this.gatewayKey = '';
   }
 
-  /** One look at the server. It has to be down twice running before it's announced, so a blip stays quiet. */
+  // ---- The live connection and the bot's status ----
+
+  gatewayStatus(): GatewayStatus {
+    return this.gateway?.status() ?? { state: 'off', message: null, botUserId: null };
+  }
+
+  /** What the bot's status should say right now. Offline and restarting show "do not disturb". */
+  presence(): Presence {
+    const { state, players, max } = this.server;
+    switch (state) {
+      case 'online':
+        return { status: 'online', activity: { name: `${players}/${max} players`, type: 3 } };
+      case 'restarting':
+        return { status: 'dnd', activity: { name: 'Server restarting', type: 3 } };
+      case 'offline':
+        return { status: 'dnd', activity: { name: 'Server offline', type: 3 } };
+      default:
+        return { status: 'idle', activity: { name: 'Checking the server…', type: 3 } };
+    }
+  }
+
+  /** The intents the bot needs for what's switched on. Message content is privileged, so it's only asked for when something reads messages. */
+  protected intents(): number {
+    return Intents.Guilds | Intents.GuildModeration | Intents.GuildMessages;
+  }
+
+  /** Starts, restarts or stops the gateway to match the settings. Safe to call at any time. */
+  private applyGateway(): void {
+    const s = this.settings();
+    // Tests only connect when they've pointed the bot at a fake gateway, never to the real one.
+    const wanted = this.active && s.gatewayEnabled && (this.config.env !== 'test' || !!this.gatewayUrl);
+    const key = wanted ? `${s.updatedAt}|${this.intents()}` : '';
+    if (key === this.gatewayKey && (wanted === !!this.gateway)) return;
+    this.gateway?.stop();
+    this.gateway = undefined;
+    this.gatewayKey = key;
+    const token = wanted ? this.token() : null;
+    if (!wanted || !token) return;
+    this.gateway = new DiscordGateway({ token, intents: this.intents(), presence: () => (s.presenceEnabled ? this.presence() : { status: 'online', activity: null }), onDispatch: (event, data) => this.onGatewayEvent(event, data), url: this.gatewayUrl });
+    this.gateway.start();
+  }
+
+  private onGatewayEvent(event: string, data: unknown): void {
+    if (event === 'INTERACTION_CREATE') {
+      const interaction = data as Interaction;
+      const response = this.handleInteraction(interaction);
+      const task = this.api()
+        ?.interactionCallback(interaction.id, interaction.token, response)
+        .catch(() => undefined)
+        .finally(() => this.pending.delete(task!));
+      if (task) this.pending.add(task);
+    }
+  }
+
+  /** A shutdown or stop has been ordered: show "restarting" until the server has gone down and come back. */
+  private markRestarting(): void {
+    this.restarting = { since: Date.now(), sawOffline: false };
+    this.server = { ...this.server, state: 'restarting' };
+    this.pushStatus();
+  }
+
+  private pushStatus(): void {
+    if (this.settings().presenceEnabled) this.gateway?.updatePresence();
+    void this.updateStatusChannel();
+  }
+
+  /** e.g. "🟢 5/32 online". Discord limits renames to about twice per ten minutes per channel, so this waits at least six between changes. */
+  private async updateStatusChannel(): Promise<void> {
+    const r = this.row();
+    const api = this.api();
+    if (!r?.status_channel_id || !api || r.enabled !== 1) return;
+    const { state, players, max } = this.server;
+    const name = state === 'online' ? `🟢 ${players}/${max} online` : state === 'restarting' ? '🟠 restarting' : state === 'offline' ? '🔴 offline' : '⚪ checking';
+    if (name === r.status_channel_name) return;
+    const last = r.status_channel_changed_at ? Date.parse(r.status_channel_changed_at) : 0;
+    if (Date.now() - last < 6 * 60 * 1000) return;
+    try {
+      await api.renameChannel(r.status_channel_id, name);
+      this.db.prepare(`UPDATE discord_bot SET status_channel_name = ?, status_channel_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = 1`).run(name);
+    } catch {
+      // Missing permission or a rate limit; it tries again at the next change.
+    }
+  }
+
+  /**
+   * One look at the server. It has to be down twice running before it's announced,
+   * so a blip stays quiet, and a shutdown ordered from PalOps shows as "restarting".
+   */
   async checkServer(): Promise<void> {
     if (!this.active) return;
     let state: 'online' | 'offline';
+    let players = 0;
+    let max = 0;
     try {
       const s = await this.deps.palworld.getStatus({ fresh: true });
-      if (s.state === 'unconfigured') return;
+      if (s.state === 'unconfigured') {
+        this.server = { state: 'unknown', players: 0, max: 0 };
+        return;
+      }
       state = s.state === 'online' ? 'online' : 'offline';
+      players = s.metrics?.currentPlayers ?? 0;
+      max = s.metrics?.maxPlayers ?? 0;
     } catch {
       state = 'offline';
     }
     this.offlineStreak = state === 'offline' ? this.offlineStreak + 1 : 0;
-    if (state === 'offline' && this.offlineStreak < 2) return;
-    if (this.lastState && this.lastState !== state) this.notify('notify_server', state === 'online' ? '🟢 The server is back online.' : '🔴 The server is offline.');
-    this.lastState = state;
+
+    if (this.restarting) {
+      if (state === 'offline') this.restarting.sawOffline = true;
+      if ((state === 'online' && this.restarting.sawOffline) || Date.now() - this.restarting.since > 20 * 60 * 1000) this.restarting = undefined;
+    }
+    const shown = this.restarting ? 'restarting' : state === 'offline' && this.offlineStreak < 2 && this.server.state === 'online' ? 'online' : state;
+    const before = this.server;
+    this.server = { state: shown, players, max };
+
+    // Announce real changes. A planned restart was already announced when it was ordered.
+    if (shown !== 'restarting' && (shown === 'online' || shown === 'offline')) {
+      const announced = this.lastState;
+      this.lastState = shown;
+      if (announced && announced !== shown) this.notify('notify_server', shown === 'online' ? '🟢 The server is back online.' : '🔴 The server is offline.');
+    }
+    if (before.state !== this.server.state || before.players !== this.server.players || before.max !== this.server.max) this.pushStatus();
+    // A rename that had to wait (Discord's rate limit) is retried on every check until the channel matches.
+    else void this.updateStatusChannel();
   }
 }
 

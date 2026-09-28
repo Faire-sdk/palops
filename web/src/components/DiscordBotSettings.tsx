@@ -16,7 +16,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { BotCheck, ConsoleLevel, DiscordBotSettings } from '../api/types';
+import type { BotCheck, ConsoleLevel, DiscordBotSettings, GatewayStatus } from '../api/types';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 import { ErrorState, Loading, Mono, Section } from './common';
@@ -36,6 +36,9 @@ interface Form {
   notifySignals: boolean;
   notifyServer: boolean;
   notifyJoins: boolean;
+  gatewayEnabled: boolean;
+  presenceEnabled: boolean;
+  statusChannelId: string;
 }
 
 const blank = (v: string) => v.trim() || null;
@@ -43,7 +46,7 @@ const blank = (v: string) => v.trim() || null;
 /** The optional Discord bot: slash commands and channel notifications. Owners only. */
 export function DiscordBotSettingsTab() {
   const notify = useToast();
-  const { data, error, loading, reload } = useApi<{ settings: DiscordBotSettings; interactionsUrl: string; commands: Array<{ name: string; description: string }> }>('/discord-bot/settings');
+  const { data, error, loading, reload } = useApi<{ settings: DiscordBotSettings; gateway: GatewayStatus; interactionsUrl: string; commands: Array<{ name: string; description: string }> }>('/discord-bot/settings', { pollMs: 10000 });
   const [form, setForm] = useState<Form | null>(null);
   const [checks, setChecks] = useState<BotCheck[]>();
   const [busy, setBusy] = useState<'save' | 'test' | 'register' | 'send' | null>(null);
@@ -65,6 +68,9 @@ export function DiscordBotSettingsTab() {
         notifySignals: s.notifySignals,
         notifyServer: s.notifyServer,
         notifyJoins: s.notifyJoins,
+        gatewayEnabled: s.gatewayEnabled,
+        presenceEnabled: s.presenceEnabled,
+        statusChannelId: s.statusChannelId ?? '',
       });
     }
   }, [data, form]);
@@ -99,13 +105,14 @@ export function DiscordBotSettingsTab() {
     guildId: blank(form.guildId),
     eventsChannelId: blank(form.eventsChannelId),
     logChannelId: blank(form.logChannelId),
+    statusChannelId: blank(form.statusChannelId),
   });
 
   const run = async (kind: 'save' | 'test' | 'register' | 'send') => {
     setBusy(kind);
     try {
       if (kind === 'test') {
-        setChecks((await api.post<{ checks: BotCheck[] }>('/discord-bot/test', { botToken: form.botToken || undefined, guildId: blank(form.guildId), eventsChannelId: blank(form.eventsChannelId), logChannelId: blank(form.logChannelId) })).checks);
+        setChecks((await api.post<{ checks: BotCheck[] }>('/discord-bot/test', { botToken: form.botToken || undefined, guildId: blank(form.guildId), eventsChannelId: blank(form.eventsChannelId), logChannelId: blank(form.logChannelId), statusChannelId: blank(form.statusChannelId) })).checks);
       } else if (kind === 'register') {
         const res = await api.post<{ count: number }>('/discord-bot/register-commands');
         notify(`Registered ${res.count} slash commands on your server`, 'success');
@@ -158,6 +165,18 @@ export function DiscordBotSettingsTab() {
               helperText={s.hasToken ? 'A token is saved. Leave blank to keep it.' : 'Developer Portal → Bot → Reset Token. Encrypted here and never shown again.'}
             />
             <TextField label="Server ID" value={form.guildId} onChange={text('guildId')} helperText="Right-click your server with Developer Mode on → Copy Server ID. Commands only work here." />
+
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, pt: 1 }}>
+              Live connection and status
+            </Typography>
+            {flag('gatewayEnabled', 'Keep a live connection to Discord', 'Needed for the bot’s status. It also lets slash commands work without a public web address (leave Interactions Endpoint URL empty in the portal).')}
+            {flag('presenceEnabled', 'Show the server in the bot’s status', 'Online with “5/32 players”, or Do Not Disturb when the server is offline or restarting')}
+            <TextField label="Status channel ID" value={form.statusChannelId} onChange={text('statusChannelId')} helperText="Optional: a channel renamed to “🟢 5/32 online”. The bot needs Manage Channels. Discord limits renames, so it updates at most every six minutes." />
+            {s.enabled && form.gatewayEnabled && (
+              <Alert severity={data.gateway.state === 'connected' ? 'success' : data.gateway.state === 'error' ? 'warning' : 'info'} icon={false}>
+                Live connection: {data.gateway.state === 'connected' ? 'connected' : (data.gateway.message ?? data.gateway.state)}
+              </Alert>
+            )}
 
             <Typography variant="subtitle1" sx={{ fontWeight: 600, pt: 1 }}>
               Notifications
@@ -235,7 +254,7 @@ export function DiscordBotSettingsTab() {
                 </Stack>
                 Discord checks it straight away, so PalOps must be reachable there over HTTPS.
               </li>
-              <li>Press <strong>Register slash commands</strong>, then <strong>Test</strong>.</li>
+              <li>Press <strong>Register slash commands</strong>, then <strong>Test</strong>. With the live connection on, you can skip step 4 and leave the Interactions Endpoint URL empty.</li>
             </Box>
           </Section>
           <Section title="Commands">
