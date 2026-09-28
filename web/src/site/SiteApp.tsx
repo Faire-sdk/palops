@@ -14,6 +14,8 @@ import { Brand } from '../components/Brand';
 import { useApi } from '../hooks/useApi';
 import { AccountPage } from './AccountPage';
 import { HomePage } from './HomePage';
+import { PlayerProfilePage } from './PlayerProfilePage';
+import { PlayersPage } from './PlayersPage';
 import type { PlayerProfile, PublicServer } from './types';
 
 export interface PlayerSession {
@@ -77,7 +79,7 @@ export default function SiteApp() {
                   How to join
                 </Button>
                 {server.data?.showOnlinePlayers && (
-                  <Button color="inherit" href="/#players">
+                  <Button color="inherit" component={RouterLink} to="/players">
                     Players
                   </Button>
                 )}
@@ -105,6 +107,8 @@ export default function SiteApp() {
 
         <Box component="main" sx={{ flexGrow: 1 }}>
           <Routes>
+            <Route path="/players" element={<PlayersPage />} />
+            <Route path="/players/:id" element={<PlayerProfilePage />} />
             <Route path="/account" element={<AccountPage session={session} enabled={server.data?.playerLogin ?? true} />} />
             <Route path="*" element={<HomePage server={server} session={session} />} />
           </Routes>

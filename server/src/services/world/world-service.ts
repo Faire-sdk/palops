@@ -1,6 +1,6 @@
 import type { DB } from '../../database/db.js';
 import type { AuditActor, AuditLog } from '../audit/audit-log.js';
-import { PalworldError, type PalworldService, type WorldCharacter, type WorldPoint, type WorldSnapshot } from '../palworld/index.js';
+import { PalworldError, type PalworldService, type WorldCharacter, type WorldPalBox, type WorldPoint, type WorldSnapshot } from '../palworld/index.js';
 import type { KnownPlayer, PlayerDirectory } from '../players/player-directory.js';
 import type { ServerRegistry } from '../servers/server-registry.js';
 import { notFound } from '../../utils/errors.js';
@@ -61,7 +61,7 @@ export interface PlayerPal {
   active: boolean;
 }
 
-export type SignalKind = 'movement' | 'level' | 'shared_ip';
+export type SignalKind = 'movement' | 'level' | 'shared_ip' | 'base_intrusion';
 
 export interface PlayerSignal {
   id: number;
@@ -113,7 +113,9 @@ const MOVEMENT_MIN_SPEED = 4000;
 const MOVEMENT_MAX_GAP_MS = 3 * 60 * 1000;
 const LEVEL_JUMP = 5;
 const LEVEL_WINDOW_MS = 15 * 60 * 1000;
-const DEDUPE_MS: Record<SignalKind, number> = { movement: 10 * 60 * 1000, level: 60 * 60 * 1000, shared_ip: 24 * 60 * 60 * 1000 };
+const DEDUPE_MS: Record<SignalKind, number> = { movement: 10 * 60 * 1000, level: 60 * 60 * 1000, shared_ip: 24 * 60 * 60 * 1000, base_intrusion: 30 * 60 * 1000 };
+/** A player from another guild this close to a Pal Box (60 m) is inside the base. */
+const INTRUSION_RANGE = 6000;
 const MAX_WILD_PALS = 3000;
 /** When the endpoint is switched off, only re-check every 5 minutes. */
 const DISABLED_RETRY_MS = 5 * 60 * 1000;
@@ -147,6 +149,7 @@ export class WorldService {
   /** A slow server can take longer than the poll interval to answer; don't stack requests. */
   private polling = false;
   private tracked = new Map<string, Tracked>();
+  private signalListeners: Array<(signal: { playerName: string; kind: SignalKind; summary: string }) => void> = [];
 
   constructor(
     private readonly db: DB,
@@ -155,6 +158,11 @@ export class WorldService {
     private readonly servers: ServerRegistry,
     private readonly audit: AuditLog,
   ) {}
+
+  /** Runs when a new cheat signal is raised. */
+  onSignal(listener: (signal: { playerName: string; kind: SignalKind; summary: string }) => void): void {
+    this.signalListeners.push(listener);
+  }
 
   /** Called on a timer. Backs off while the endpoint is switched off on the server. */
   async poll(): Promise<void> {
@@ -260,11 +268,17 @@ export class WorldService {
         upsertPal.run(serverId, pal.instanceId, owner.userId, pal.className, pal.name || null, pal.level, pal.unitType, now);
       }
 
-      this.detectSignals(serverId, playerChars, takenAt);
+      this.detectSignals(serverId, playerChars, snapshot.palBoxes, takenAt);
       this.recordPerformance(serverId, snapshot, now);
     })();
 
     this.latest = { takenAt, snapshot, baseIds, workersByBase: assignWorkers(snapshot, baseIds) };
+  }
+
+  /** Where a player is in the latest snapshot, in map coordinates. */
+  positionOf(userId: string): MapPoint | null {
+    const p = this.state === 'ok' ? this.latest?.snapshot.characters.find((c) => c.unitType === 'Player' && c.userId === userId) : undefined;
+    return p ? toMap(p.location) : null;
   }
 
   // ---- Guilds and bases ----
@@ -411,7 +425,7 @@ export class WorldService {
     return toSignal(this.db.prepare('SELECT * FROM player_signals WHERE id = ?').get(id) as SignalRow);
   }
 
-  private detectSignals(serverId: number, players: WorldCharacter[], takenAt: Date): void {
+  private detectSignals(serverId: number, players: WorldCharacter[], palBoxes: WorldPalBox[], takenAt: Date): void {
     const at = takenAt.getTime();
     const raise = (userId: string, name: string, kind: SignalKind, summary: string, dedupeKey: string, details: Record<string, unknown>) => {
       const since = new Date(at - DEDUPE_MS[kind]).toISOString();
@@ -424,6 +438,7 @@ export class WorldService {
           'INSERT INTO player_signals (server_id, user_id, player_name, kind, summary, dedupe_key, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         )
         .run(serverId, userId, name, kind, summary, dedupeKey, JSON.stringify(details), takenAt.toISOString());
+      for (const listener of this.signalListeners) listener({ playerName: name, kind, summary });
     };
 
     for (const p of players) {
@@ -457,6 +472,23 @@ export class WorldService {
         }
       }
       this.tracked.set(userId, { location: p.location, at, levelBaseline: baseline });
+    }
+
+    for (const p of players) {
+      for (const box of palBoxes) {
+        if (!box.guildId || box.guildId === p.guildId) continue;
+        const d = distance(p.location, box.location);
+        if (d > INTRUSION_RANGE) continue;
+        const owner = box.guildName ?? 'an unknown guild';
+        raise(
+          p.userId!,
+          p.name,
+          'base_intrusion',
+          `Inside ${owner}'s base, ${Math.round(d / 100)} m from its Pal Box, and not a member of that guild. Visiting friends and allies also do this.`,
+          `base_intrusion:${p.userId}:${baseKey(box.guildId, box.location)}`,
+          { guildId: box.guildId, guildName: box.guildName, base: toMap(box.location), player: toMap(p.location), meters: Math.round(d / 100) },
+        );
+      }
     }
 
     const byIp = groupBy(

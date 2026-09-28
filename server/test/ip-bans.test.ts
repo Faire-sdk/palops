@@ -83,6 +83,15 @@ describe('address bans', () => {
     expect((await post(admin, '/api/v1/players/steam_76561199999999999/ban', { banAddress: true })).json().error.code).toBe('no_address');
   });
 
+  it('bans only the account when the address is private or loopback', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    ctx.services.players.recordAddresses(ctx.services.servers.getPrimary()!.id, [{ userId: 'steam_local', ip: '192.168.1.5' }]);
+    const res = (await post(admin, '/api/v1/players/steam_local/ban', { banAddress: true })).json();
+    expect(res.ipBan).toBeNull();
+    expect(res.ipSkipped).toContain('private');
+    expect(res.record).toMatchObject({ action: 'ban' });
+  });
+
   it('parses addresses and ranges', () => {
     expect(parseIpRule(' 203.0.113.7 ')).toBe('203.0.113.7');
     expect(parseIpRule('2001:DB8::1')).toBe('2001:db8::1');

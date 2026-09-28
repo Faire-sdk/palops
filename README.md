@@ -10,7 +10,7 @@ the server where players sign in with Discord and see their character.
 | `/api/v1` | JSON API. `/api/v1/public/*` is open (CORS) for embedding status on an existing site |
 
 > **Status:** early MVP. Foundation, authentication/roles and the server connection layer are in place.
-> Player moderation, console, configuration editing, lifecycle controls and backups are next.
+> A view-only console, configuration editing, lifecycle controls and backups are next.
 > See [docs/roadmap-status.md](docs/roadmap-status.md).
 
 ## Stack
@@ -245,6 +245,16 @@ the next time it reads the player list (every 20 seconds). Someone can be in the
 The REST API can't start a stopped server, change settings, list bans made elsewhere, or give console or log access; those need PalOps on the game machine
 (see [docs/deployment.md](docs/deployment.md)).
 
+### Optional: Discord bot
+
+Slash commands, a live status showing the player count, roles and joining the server for verified players, bans kept in step, a chat relay and channel notifications, using each
+person's panel role. Off by default and PalOps doesn't need it. See [docs/discord-bot.md](docs/discord-bot.md) and [docs/player-accounts.md](docs/player-accounts.md).
+
+### Optional: PalDefender
+
+If your Windows server runs the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin, PalOps can mirror bans (including IP bans) to it, show its ban list,
+player inventories, pals, guilds and bases, and let admins give items and pals, teach technologies, summon, delete bases and send messages. It's off by default and PalOps doesn't need it. See [docs/paldefender.md](docs/paldefender.md).
+
 ### Keep the API private
 
 **Never expose the REST API port to the internet.** Anyone who reaches it with the admin password can kick, ban or shut down the server, and it has no TLS.
@@ -337,12 +347,23 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET/PUT | `/server/connection` | `server.connection` |
 | POST | `/server/connection/test` | `server.connection` |
 | GET | `/players` | `players.view` (online players; IPs only with `players.ip`) |
-| GET | `/players/known`, `/players/bans`, `/players/:userId` | `players.view` (everyone seen, panel bans, a player's profile and history) |
+| GET | `/players/known` (`sort`, `filter`), `/players/bans`, `/players/:userId` | `players.view` (everyone seen with playtime and Discord link, panel bans, a player's profile, activity and history) |
+| GET/POST | `/players/link-requests`, `/players/link-requests/:accountId/approve` or `reject`; POST `/players/:userId/link/verify`, DELETE `/players/:userId/link` | `players.ban` (verify players' Discord links) |
 | POST | `/players/:userId/kick` | `players.kick` |
 | POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` (`banAddress: true` also bans the player's last IP) |
 | POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (IP address or CIDR range bans, enforced by PalOps) |
 | POST | `/players/:userId/notes` | `players.note` |
 | POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
+| GET/PUT | `/paldefender/settings` | `server.connection` (optional PalDefender integration; the token is never returned) |
+| POST | `/paldefender/test` | `server.connection` |
+| GET | `/paldefender/status` | `players.view` |
+| GET | `/paldefender/banlist` | `world.view` (PalDefender's ban list) |
+| POST | `/paldefender/unban`, `/paldefender/unbanip` | `players.ban` (lift an entry from PalDefender's list) |
+| GET | `/paldefender/players/:userId/pals`, `/items`, `/techs`, `/progression`; `/paldefender/guilds`, `/guilds/:id` | `world.view` (online players only) |
+| POST | `/paldefender/players/:userId/give/{items,pals,eggs,templates,progression}`, `/tech/{learn,forget}` | `paldefender.manage` |
+| POST | `/paldefender/summon/{pal,npc}`, `/paldefender/bases/:id/delete`, `/paldefender/reload-config` | `paldefender.manage` |
+| POST | `/paldefender/alert`, `/paldefender/broadcast` | `server.broadcast` |
+| POST | `/paldefender/message` | `players.kick` (chat or log messages to chosen players) |
 | GET | `/config` | `config.view` (live settings from the REST API) |
 | GET | `/world/status`, `/world/guilds`, `/world/guilds/:guildId` | `players.view` (world data state, guilds and their members) |
 | GET | `/world/map`, `/world/bases`, `/world/signals`, `/world/performance` | `world.view` (positions, bases, cheat signals, FPS and hotspots) |
@@ -351,8 +372,13 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/world/map-image`, `/world/map-image/file` | `world.view` (the live map's background and its alignment) |
 | PUT/PATCH/DELETE | `/world/map-image` | `config.edit` (upload as a raw PNG/JPEG/WebP body up to 25 MB, align, remove) |
 | GET | `/logs/audit` | `audit.view` |
-| GET | `/public/server`, `/public/players`, `/public/guilds` | public, CORS open, no IPs, platform IDs or positions |
+| GET | `/console/lines`, `/console/stream` | `console.view` (view-only console: history and a live server-sent event stream) |
+| GET/PUT | `/console/settings`, POST `/console/settings/test` | `server.connection` (where the game and PalDefender log files are, and the PalServerLogger websocket) |
+| POST | `/discord/interactions` | public, but every request must carry Discord's signature (slash commands arrive here) |
+| GET/PUT | `/discord-bot/settings`; POST `/discord-bot/test`, `/register-commands`, `/send-test`, `/sync-roles`, `/relay/test` | `server.connection` (the optional Discord bot; the token is never returned) |
+| GET | `/public/server`, `/public/players`, `/public/guilds`, `/public/players/known`, `/public/players/:id` | public, CORS open, no IPs, platform IDs or positions (the directory and profiles follow the player-list switch) |
 | GET | `/site/me` | player signed in on the website |
+| POST | `/site/verify/code`, `/site/verify/confirm`, `/site/verify/request`, `/site/privacy` | player signed in (prove a character link with an in-game code or ask staff; choose whether the Discord name is public) |
 | POST | `/site/link`, `/site/unlink`, `/site/logout` | player signed in on the website |
 | GET | `/api/health` | public (unversioned) |
 

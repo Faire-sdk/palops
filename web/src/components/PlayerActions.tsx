@@ -18,15 +18,25 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { ModerationAction, PlayerProfile } from '../api/types';
+import type { IpBan, ModerationAction, PalDefenderResult, PlayerProfile } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { formatDateTime } from '../format';
+import { formatDateTime, formatDuration } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
+import { usePalDefender } from '../hooks/usePalDefender';
+import { PalDefenderPlayerDialog } from './PalDefenderPlayer';
 import { formatMapPoint, palLabel, SignalChip } from './world';
 
 type Action = 'kick' | 'ban' | 'unban';
+
+/**
+ * The official API did the action; with PalDefender switched on the panel also
+ * mirrors it there. Say so when that part failed, so it isn't a silent gap.
+ */
+export function warnIfPalDefenderFailed(notify: (message: string, tone?: 'warning') => void, result: PalDefenderResult | undefined) {
+  if (result && !result.ok && result.message) notify(`${result.message}. The action itself worked; PalDefender’s own list wasn’t updated.`, 'warning');
+}
 
 const ACTION_COPY: Record<Action, { title: string; button: string; hint: string; done: string }> = {
   kick: { title: 'Kick', button: 'Kick player', hint: 'Shown to the player and kept in their history. They can rejoin right away.', done: 'kicked' },
@@ -74,8 +84,13 @@ export function ModerationDialog({
     if (!action || !copy) return;
     setBusy(true);
     try {
-      await api.post(`/players/${encodeURIComponent(userId)}/${action}`, { reason, ...(offerAddress && banAddress ? { banAddress: true } : {}) });
-      notify(`${name} was ${copy.done}${offerAddress && banAddress ? ' along with their address' : ''}`, 'success');
+      const res = await api.post<{ ipBan?: IpBan | null; ipSkipped?: string | null; paldefender?: PalDefenderResult }>(
+        `/players/${encodeURIComponent(userId)}/${action}`,
+        { reason, ...(offerAddress && banAddress ? { banAddress: true } : {}) },
+      );
+      notify(`${name} was ${copy.done}${res?.ipBan ? ` along with ${res.ipBan.ip}` : ''}`, 'success');
+      if (res?.ipSkipped) notify(res.ipSkipped, 'warning');
+      warnIfPalDefenderFailed(notify, res?.paldefender);
       setReason('');
       refreshAll();
       onClose();
@@ -142,6 +157,8 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
   const notify = useToast();
   const { data, error, loading, reload } = useApi<PlayerProfile>(`/players/${encodeURIComponent(userId ?? '')}`, { enabled: !!userId });
   const [action, setAction] = useState<Action | null>(null);
+  const [pdOpen, setPdOpen] = useState(false);
+  const paldefender = usePalDefender();
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -151,8 +168,9 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
 
   const banAddress = async (ip: string) => {
     try {
-      await api.post('/players/ip-bans', { ip, reason: `Address used by ${name}` });
+      const res = await api.post<{ paldefender?: PalDefenderResult }>('/players/ip-bans', { ip, reason: `Address used by ${name}` });
       notify(`${ip} is banned`, 'success');
+      warnIfPalDefenderFailed(notify, res?.paldefender);
       refreshAll();
     } catch (err) {
       notify(errorMessage(err), 'error');
@@ -200,8 +218,76 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
         />
         {!player && <Alert severity="info">PalOps hasn’t seen this player online yet.</Alert>}
 
-        {(can('players.kick') || can('players.ban')) && (
-          <Stack direction="row" spacing={1}>
+        {data.activity.sessions > 0 && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+              Activity
+            </Typography>
+            <Stack direction="row" spacing={3} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              {(
+                [
+                  ['Playtime', formatDuration(data.activity.seconds)],
+                  ['Visits', data.activity.sessions],
+                  ['Average visit', formatDuration(data.activity.averageSeconds)],
+                  ['Longest visit', formatDuration(data.activity.longestSeconds)],
+                ] as const
+              ).map(([label, value]) => (
+                <Box key={label}>
+                  <Typography variant="h6" component="div">
+                    {value}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {label}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              Recent visits:{' '}
+              {data.activity.recent
+                .slice(0, 5)
+                .map((v) => `${formatDateTime(v.startedAt)} (${v.endedAt ? formatDuration(v.seconds) : 'now'})`)
+                .join(' · ')}
+            </Typography>
+          </>
+        )}
+
+        {data.link && (
+          <>
+            <Divider />
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+                Discord
+              </Typography>
+              <Chip label={data.link.verified ? `Verified · ${data.link.verifiedBy === 'code' ? 'in-game code' : `by ${data.link.verifiedBy}`}` : data.link.requestedAt ? 'Verification requested' : 'Claimed, not verified'} color={data.link.verified ? 'success' : 'warning'} variant="outlined" />
+            </Stack>
+            <Typography>
+              Linked to <strong>{data.link.discord.username ?? data.link.discord.id}</strong> <Mono muted>{data.link.discord.id}</Mono>
+            </Typography>
+            {!data.link.verified && <Typography variant="body2" color="text.secondary">A claim proves nothing: anyone can claim a name. Only verified links give Discord roles or carry bans.</Typography>}
+            {can('players.ban') && (
+              <Stack direction="row" spacing={1}>
+                {!data.link.verified && (
+                  <Button size="small" variant="outlined" onClick={async () => { try { await api.post(`/players/${encodeURIComponent(data.userId)}/link/verify`); notify('Link verified', 'success'); await reload(); } catch (err) { notify(errorMessage(err), 'error'); } }}>
+                    Verify this link
+                  </Button>
+                )}
+                <Button size="small" color="error" variant="outlined" onClick={async () => { try { await api.delete(`/players/${encodeURIComponent(data.userId)}/link`); notify('Link removed', 'success'); await reload(); } catch (err) { notify(errorMessage(err), 'error'); } }}>
+                  Remove link
+                </Button>
+              </Stack>
+            )}
+          </>
+        )}
+
+        {(can('players.kick') || can('players.ban') || (paldefender && can('world.view') && player?.online)) && (
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            {paldefender && can('world.view') && player?.online && (
+              <Button variant="outlined" onClick={() => setPdOpen(true)} title="Inventory, pals, technologies and progression from PalDefender">
+                PalDefender
+              </Button>
+            )}
             {can('players.kick') && player?.online && (
               <Button variant="outlined" onClick={() => setAction('kick')}>
                 Kick
@@ -349,6 +435,7 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
           <Button onClick={onClose}>Close</Button>
         </DialogActions>
       </Dialog>
+      <PalDefenderPlayerDialog userId={pdOpen ? userId : null} name={name} onClose={() => setPdOpen(false)} />
       <ModerationDialog
         action={action}
         userId={userId ?? ''}

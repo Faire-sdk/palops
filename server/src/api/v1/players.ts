@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
 import { hasPermission } from '../../services/authentication/permissions.js';
+import { notFound } from '../../utils/errors.js';
 import { toMap } from '../../services/world/map-coords.js';
 import { parse } from '../../utils/validation.js';
 
@@ -13,32 +14,60 @@ const reasonBody = z.object({ reason: z.string().trim().max(200).default('') });
 export default async function playerRoutes(app: FastifyInstance, { services }: { services: Services }) {
   const { players, moderation, world } = services;
 
-  /** Players online right now. Addresses only for staff with players.ip. */
+  /** Players online right now. Addresses only for staff with players.ip, positions for staff with world.view. */
   app.get('/', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
     const showIp = hasPermission(request.user!.role, 'players.ip');
+    const staff = hasPermission(request.user!.role, 'world.view');
+    const online = await players.refreshOnline();
+    const playtime = players.playtimeOf(online.map((p) => p.userId));
     return {
       // The online list has no guilds; the world snapshot fills them in on the known player.
-      players: (await players.refreshOnline()).map((p) => ({
-        ...p,
-        ip: showIp ? p.ip : null,
-        guild: p.guild ?? players.byUserId(p.userId)?.guild ?? null,
-      })),
+      players: online.map((p) => {
+        const link = services.siteAccounts.byPlayerUserId(p.userId, false);
+        return {
+          ...p,
+          ip: showIp ? p.ip : null,
+          location: staff ? p.location : null,
+          guild: p.guild ?? players.byUserId(p.userId)?.guild ?? null,
+          playtimeSeconds: playtime.get(p.userId) ?? 0,
+          link: link ? (link.playerVerified ? 'verified' : 'claimed') : null,
+        };
+      }),
     };
   });
 
-  /** Every player the panel has seen, with ban state. */
+  /** Every player the panel has seen, with ban state, playtime and whether they've linked a website account. */
   app.get('/known', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
     const query = parse(
       z.object({
         search: z.string().max(80).optional(),
         limit: z.coerce.number().int().min(1).max(100).default(50),
         offset: z.coerce.number().int().min(0).default(0),
+        sort: z.enum(['recent', 'name', 'playtime', 'level']).default('recent'),
+        filter: z.enum(['all', 'online', 'banned', 'linked', 'verified', 'unverified']).default('all'),
       }),
       request.query,
     );
     const banned = new Set(moderation.activeBans().map((b) => b.playerUserId));
-    const { players: list, total } = players.list(query);
-    return { players: list.map((p) => ({ ...p, banned: banned.has(p.userId) })), total };
+    let only: string[] | undefined;
+    if (query.filter === 'banned') only = [...banned];
+    if (query.filter === 'online') only = (await players.refreshOnline().catch(() => [])).map((p) => p.userId);
+    const { players: list, total } = players.list({
+      search: query.search,
+      limit: query.limit,
+      offset: query.offset,
+      sort: query.sort,
+      only,
+      linked: query.filter === 'linked' ? 'any' : query.filter === 'verified' ? 'verified' : query.filter === 'unverified' ? 'unverified' : undefined,
+    });
+    const playtime = players.playtimeOf(list.map((p) => p.userId));
+    return {
+      players: list.map((p) => {
+        const link = services.siteAccounts.byPlayerUserId(p.userId, false);
+        return { ...p, banned: banned.has(p.userId), playtimeSeconds: playtime.get(p.userId) ?? 0, link: link ? (link.playerVerified ? 'verified' : 'claimed') : null };
+      }),
+      total,
+    };
   });
 
   /** Players banned through the panel. The REST API can't list bans made elsewhere. */
@@ -50,12 +79,53 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
 
   app.post('/ip-bans', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
     const { ip, reason } = parse(z.object({ ip: z.string().trim().min(1, 'Enter an address').max(64), reason: z.string().trim().max(200).default('') }), request.body);
-    return { ipBan: await moderation.banIp(actorOf(request), ip, reason) };
+    return await moderation.banIp(actorOf(request), ip, reason);
   });
 
   app.delete('/ip-bans/:id', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
     const { id } = parse(z.object({ id: z.coerce.number().int().positive() }), request.params);
-    moderation.liftIpBan(actorOf(request), id);
+    return { ok: true, paldefender: await moderation.unbanIp(actorOf(request), id) };
+  });
+
+  /** Character links waiting for staff to confirm. */
+  app.get('/link-requests', { preHandler: requirePermission(services, 'players.ban') }, async () => ({
+    requests: services.siteAccounts.pendingRequests().map((r) => ({
+      accountId: r.account.id,
+      discord: r.account.discord,
+      player: r.player,
+      requestedAt: r.account.verificationRequestedAt,
+      linkedAt: r.account.linkedAt,
+    })),
+  }));
+
+  app.post('/link-requests/:accountId/:decision', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
+    const { accountId, decision } = parse(z.object({ accountId: z.coerce.number().int().positive(), decision: z.enum(['approve', 'reject']) }), request.params);
+    const account = services.siteAccounts.get(accountId);
+    const player = account?.playerId ? players.get(account.playerId) : undefined;
+    if (!account || !player) throw notFound('That link request no longer exists');
+    const actor = actorOf(request);
+    if (decision === 'approve') services.siteAccounts.verify(accountId, actor.username ?? 'staff');
+    else services.siteAccounts.unlinkPlayer(accountId);
+    services.audit.record(actor, { category: 'players', action: decision === 'approve' ? 'character_verified' : 'character_link_rejected', target: player.name, details: { discordId: account.discord.id, platformId: player.userId, method: 'staff' } });
+    return { ok: true };
+  });
+
+  app.post('/:userId/link/verify', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
+    const { userId } = parse(userIdParams, request.params);
+    const account = services.siteAccounts.byPlayerUserId(userId, false);
+    if (!account) throw notFound('Nobody has linked this player');
+    const actor = actorOf(request);
+    services.siteAccounts.verify(account.id, actor.username ?? 'staff');
+    services.audit.record(actor, { category: 'players', action: 'character_verified', target: players.byUserId(userId)?.name ?? userId, details: { discordId: account.discord.id, method: 'staff' } });
+    return { ok: true };
+  });
+
+  app.delete('/:userId/link', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
+    const { userId } = parse(userIdParams, request.params);
+    const account = services.siteAccounts.byPlayerUserId(userId, false);
+    if (!account) throw notFound('Nobody has linked this player');
+    services.siteAccounts.unlinkPlayer(account.id);
+    services.audit.record(actorOf(request), { category: 'players', action: 'character_unlinked', target: players.byUserId(userId)?.name ?? userId, details: { discordId: account.discord.id } });
     return { ok: true };
   });
 
@@ -83,6 +153,13 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
       linkedPlayers: showIp ? players.linkedTo(userId) : [],
       history: moderation.history(userId),
       pals: world.palsOf(userId),
+      /** Time on the server, from the visits the panel has recorded. */
+      activity: players.playtime(userId),
+      /** The website account linked to this character, and whether the link is proven. */
+      link: (() => {
+        const a = services.siteAccounts.byPlayerUserId(userId, false);
+        return a ? { discord: a.discord, verified: a.playerVerified, verifiedBy: a.verifiedBy, verifiedAt: a.verifiedAt, requestedAt: a.verificationRequestedAt, linkedAt: a.linkedAt } : null;
+      })(),
       /** Cheat signals are staff-only, like the map. */
       signals: staff ? world.signals({ userId, includeDismissed: true, limit: 20, offset: 0 }).signals : [],
     };
@@ -103,7 +180,7 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
   app.post('/:userId/unban', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
     const { userId } = parse(userIdParams, request.params);
     const { reason } = parse(reasonBody, request.body);
-    return { record: await moderation.unban(actorOf(request), userId, reason) };
+    return moderation.unban(actorOf(request), userId, reason);
   });
 
   app.post('/:userId/notes', { preHandler: requirePermission(services, 'players.note') }, async (request) => {

@@ -5,10 +5,14 @@ import type { DiscordAccount } from '../authentication/users.js';
  * the Discord identity boundary; a future Discord bot will live beside it in
  * services/discord and map Discord users to panel users by their Discord id.
  */
+/** The signed-in Discord user. The access token is only present for the moment of sign-in and is never stored. */
+export type DiscordSignIn = DiscordAccount & { accessToken?: string };
+
 export interface DiscordOAuthProvider {
-  authorizeUrl(state: string): string;
+  /** `joinServer` also asks for permission to add the person to the community's Discord server. */
+  authorizeUrl(state: string, options?: { joinServer?: boolean }): string;
   /** Exchanges an authorization code for the signed-in Discord user. */
-  exchange(code: string): Promise<DiscordAccount>;
+  exchange(code: string): Promise<DiscordSignIn>;
 }
 
 export interface DiscordOAuthConfig {
@@ -28,12 +32,12 @@ export class DiscordOAuthClient implements DiscordOAuthProvider {
     this.apiBase = config.apiBase ?? 'https://discord.com/api/v10';
   }
 
-  authorizeUrl(state: string): string {
+  authorizeUrl(state: string, options: { joinServer?: boolean } = {}): string {
     const url = new URL('https://discord.com/oauth2/authorize');
     url.search = new URLSearchParams({
       response_type: 'code',
       client_id: this.config.clientId,
-      scope: 'identify',
+      scope: options.joinServer ? 'identify guilds.join' : 'identify',
       redirect_uri: this.config.redirectUri,
       state,
       prompt: 'none',
@@ -41,7 +45,7 @@ export class DiscordOAuthClient implements DiscordOAuthProvider {
     return url.toString();
   }
 
-  async exchange(code: string): Promise<DiscordAccount> {
+  async exchange(code: string): Promise<DiscordSignIn> {
     const credentials = Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64');
     const tokenResponse = await this.call(`${this.apiBase}/oauth2/token`, {
       method: 'POST',
@@ -59,6 +63,7 @@ export class DiscordOAuthClient implements DiscordOAuthProvider {
       id: me.id,
       username: typeof me.username === 'string' ? me.username : null,
       avatar: typeof me.avatar === 'string' ? me.avatar : null,
+      accessToken,
     };
   }
 

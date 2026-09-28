@@ -20,6 +20,7 @@ export type Permission =
   | 'logs.view'
   | 'audit.view'
   | 'backups.manage'
+  | 'paldefender.manage'
   | 'users.manage';
 
 export interface User {
@@ -68,6 +69,9 @@ export interface Player {
   location: { x: number; y: number } | null;
   buildingCount: number | null;
   guild: string | null;
+  playtimeSeconds?: number;
+  /** Whether a website account is linked to this character, and whether that link is proven. */
+  link?: 'verified' | 'claimed' | null;
 }
 
 export interface KnownPlayer {
@@ -83,6 +87,8 @@ export interface KnownPlayer {
   lastSeenAt: string;
   online: boolean;
   banned?: boolean;
+  playtimeSeconds?: number;
+  link?: 'verified' | 'claimed' | null;
 }
 
 /** An address the panel enforces a ban on: one IP or a CIDR range. */
@@ -108,8 +114,36 @@ export interface ModerationRecord {
   createdAt: string;
 }
 
+/** The website account linked to a character. */
+export interface CharacterLink {
+  discord: { id: string; username: string | null; avatar: string | null };
+  verified: boolean;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  requestedAt: string | null;
+  linkedAt: string | null;
+}
+
+export interface LinkRequest {
+  accountId: number;
+  discord: { id: string; username: string | null; avatar: string | null };
+  player: { id: number; userId: string; name: string; level: number | null };
+  requestedAt: string | null;
+  linkedAt: string | null;
+}
+
+export interface PlayerActivity {
+  seconds: number;
+  sessions: number;
+  longestSeconds: number;
+  averageSeconds: number;
+  recent: Array<{ startedAt: string; endedAt: string | null; seconds: number }>;
+}
+
 export interface PlayerProfile {
   userId: string;
+  activity: PlayerActivity;
+  link: CharacterLink | null;
   player: KnownPlayer | null;
   /** Only while the player is online. ip is null without players.ip. */
   live: { ping: number | null; location: { x: number; y: number } | null; buildingCount: number | null; ip: string | null } | null;
@@ -187,7 +221,7 @@ export interface PlayerPal {
   active: boolean;
 }
 
-export type SignalKind = 'movement' | 'level' | 'shared_ip';
+export type SignalKind = 'movement' | 'level' | 'shared_ip' | 'base_intrusion';
 
 export interface PlayerSignal {
   id: number;
@@ -265,4 +299,209 @@ export interface MapImage {
   aligned: boolean;
   updatedAt: string;
   updatedBy: string | null;
+}
+
+// ---- PalDefender (optional plugin integration) ----
+
+export interface PalDefenderSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  useTls: boolean;
+  hasToken: boolean;
+  updatedAt: string;
+}
+
+export interface PalDefenderStatus {
+  enabled: boolean;
+  version: string | null;
+  lastSyncAt: string | null;
+  error: string | null;
+}
+
+export interface PalDefenderCheck {
+  name: string;
+  permission: string;
+  ok: boolean;
+  message: string | null;
+}
+
+/** How mirroring an action to PalDefender went. Null when the integration is off. */
+export type PalDefenderResult = { ok: boolean; message: string | null } | null;
+
+export interface PalDefenderBan {
+  kind: 'user' | 'ip';
+  id: string;
+  active: boolean;
+  reason: string | null;
+  bannedBy: string | null;
+  bannedVia: string | null;
+  bannedAt: string | null;
+  unbannedAt: string | null;
+}
+
+export interface PdPal {
+  instanceId: string;
+  palId: string;
+  nickname: string | null;
+  gender: string | null;
+  level: number | null;
+  shiny: boolean;
+  hp: number | null;
+  passives: string[];
+  activeSkills: string[];
+  slot: number | null;
+  page: number | null;
+}
+
+export interface PdPals {
+  player: { uid: string | null; name: string | null };
+  team: PdPal[];
+  palbox: PdPal[];
+  baseCamps: Array<{ id: string; level: number | null; state: string | null; mapPos: MapPoint | null; pals: PdPal[] }>;
+}
+
+export interface PdItems {
+  player: { uid: string | null; name: string | null };
+  containers: Array<{ name: string; available: boolean; usedSlots: number | null; maxSlots: number | null; slots: Array<{ slot: number; itemId: string; count: number }> }>;
+}
+
+export interface PdTechs {
+  unlocked: string[];
+  unlockedCount: number;
+  lockedCount: number;
+  totalCount: number;
+}
+
+export interface PdProgression {
+  progression: Record<string, unknown>;
+}
+
+export interface PdGuildSummary {
+  id: string;
+  name: string;
+  level: number | null;
+  admin: { id: string; name: string } | null;
+  memberCount: number;
+  campCount: number;
+}
+
+export interface PdGuild {
+  name: string;
+  level: number | null;
+  admin: { id: string; name: string } | null;
+  members: Array<{ uid: string; name: string; status: string | null }>;
+  camps: Array<{ id: string; level: number | null; state: string | null; mapPos: MapPoint | null }>;
+  storage: { used: number; max: number } | null;
+  currentResearch: string | null;
+}
+
+export const PD_RELICS = ['CapturePower', 'HungerReduction', 'SwimSpeed', 'FoodDecayReduction', 'JumpPower', 'GliderSpeed', 'ClimbSpeed', 'StatusAilmentResist', 'StaminaReduction', 'SphereHoming', 'ExpBonus', 'RainbowPassiveRate', 'MoveSpeed'] as const;
+
+export const PD_MESSAGE_TYPES = [
+  { id: 'PlayerChat', label: 'Chat message to them' },
+  { id: 'PlayerGlobalChat', label: 'Global chat message' },
+  { id: 'PlayerGuildChat', label: 'Guild chat message' },
+  { id: 'PlayerLogNormal', label: 'Log line (normal)' },
+  { id: 'PlayerLogImportant', label: 'Log line (important)' },
+  { id: 'PlayerLogVeryImportant', label: 'Log line (very important)' },
+] as const;
+
+// ---- Console ----
+
+export type ConsoleSource = 'panel' | 'game' | 'paldefender';
+export type ConsoleLevel = 'info' | 'warn' | 'error';
+
+export interface ConsoleLine {
+  id: number;
+  at: string;
+  source: ConsoleSource;
+  level: ConsoleLevel;
+  message: string;
+}
+
+export interface TailStatus {
+  source: ConsoleSource;
+  path: string;
+  state: 'watching' | 'missing';
+  files: number;
+  lastLineAt: string | null;
+}
+
+export interface LoggerSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  tls: boolean;
+  hasToken: boolean;
+}
+
+export interface LoggerStatus {
+  state: 'off' | 'connecting' | 'connected' | 'error';
+  message: string | null;
+  lastMessageAt: string | null;
+}
+
+export interface ConsoleSettings {
+  tailEnabled: boolean;
+  gameLogPath: string | null;
+  paldefenderLogPath: string | null;
+  logger: LoggerSettings;
+  updatedAt: string | null;
+}
+
+export interface PathCheck {
+  source: 'game' | 'paldefender';
+  ok: boolean;
+  kind: 'file' | 'directory' | null;
+  message: string | null;
+}
+
+// ---- Discord bot (optional) ----
+
+export interface DiscordBotSettings {
+  enabled: boolean;
+  applicationId: string | null;
+  publicKey: string | null;
+  hasToken: boolean;
+  guildId: string | null;
+  publicInfo: boolean;
+  eventsChannelId: string | null;
+  logChannelId: string | null;
+  logMinLevel: ConsoleLevel;
+  notifyBans: boolean;
+  notifySignals: boolean;
+  notifyServer: boolean;
+  notifyJoins: boolean;
+  gatewayEnabled: boolean;
+  presenceEnabled: boolean;
+  statusChannelId: string | null;
+  joinOnLogin: boolean;
+  verifiedRoleId: string | null;
+  roleOwnerId: string | null;
+  roleAdminId: string | null;
+  roleModeratorId: string | null;
+  syncNicknames: boolean;
+  syncBans: boolean;
+  relayEnabled: boolean;
+  relayChannelId: string | null;
+  relayToDiscord: boolean;
+  relayToGame: boolean;
+  relayPattern: string | null;
+  relaySources: Array<'game' | 'paldefender'>;
+  relayPrefix: string;
+  commandsRegisteredAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface GatewayStatus {
+  state: 'off' | 'connecting' | 'connected' | 'error';
+  message: string | null;
+  botUserId: string | null;
+}
+
+export interface BotCheck {
+  name: string;
+  ok: boolean;
+  message: string | null;
 }

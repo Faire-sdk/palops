@@ -6,7 +6,7 @@ import { getDummyHash, passwordProblem, verifyPassword } from '../../services/au
 import { permissionsFor } from '../../services/authentication/permissions.js';
 import type { DiscordAccount, User } from '../../services/authentication/users.js';
 import { DevDiscordOAuth, devDiscordPage } from '../../services/discord/dev-oauth.js';
-import { DiscordOAuthError } from '../../services/discord/oauth.js';
+import { DiscordOAuthError, type DiscordSignIn } from '../../services/discord/oauth.js';
 import { OAUTH_STATE_TTL_MS, type OAuthIntent } from '../../services/discord/oauth-states.js';
 import { safeEqual } from '../../utils/crypto.js';
 import { badRequest, forbidden, HttpError, tooManyRequests, unauthorized } from '../../utils/errors.js';
@@ -196,7 +196,8 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
       secure: config.cookieSecure,
       maxAge: OAUTH_STATE_TTL_MS / 1000,
     });
-    return { url: discord.authorizeUrl(state) };
+    // Players signing in on the website may be added to the Discord server, which needs one extra permission from them.
+    return { url: discord.authorizeUrl(state, { joinServer: intent.kind === 'player' && services.discordBot.joinOnLoginActive }) };
   });
 
   app.get('/discord/callback', async (request, reply) => {
@@ -216,7 +217,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
     const back = intent.kind === 'link' ? `${PANEL}/settings?tab=account` : intent.kind === 'player' ? SITE_ACCOUNT : PANEL;
     if (query.error || !query.code) return fail(query.error === 'access_denied' ? 'cancelled' : 'discord_error', back);
 
-    let account: DiscordAccount;
+    let account: DiscordSignIn;
     try {
       account = await services.discordOAuth.exchange(query.code);
     } catch (err) {
@@ -269,6 +270,10 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
         case 'player': {
           const player = services.siteAccounts.signIn(account);
           setPlayerCookie(reply, services, services.siteAccounts.createSession(player.id));
+          // Best effort: signing in must never fail because Discord wouldn't add them. The access token is used once and dropped.
+          if (account.accessToken && services.discordBot.joinOnLoginActive) {
+            await services.discordBot.addToGuild(account.id, account.accessToken).catch((err) => request.log.warn({ err: err instanceof Error ? err.message : err }, 'Could not add player to the Discord server'));
+          }
           return reply.redirect(SITE_ACCOUNT);
         }
       }

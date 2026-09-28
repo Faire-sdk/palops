@@ -7,6 +7,8 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -16,7 +18,8 @@ import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { authErrorMessage, DiscordButton, DiscordLogo, discordAvatarUrl } from '../auth/discord';
 import { KeyValue, Loading, Mono } from '../components/common';
-import { formatDateTime } from '../format';
+import { formatDateTime, formatDuration } from '../format';
+import { Link as RouterLink } from 'react-router-dom';
 import type { PlayerSession } from './SiteApp';
 import type { PlayerProfile } from './types';
 
@@ -101,7 +104,7 @@ function CharacterCard({ session }: { session: PlayerSession }) {
               </Typography>
               <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
                 <Chip label={c.online ? 'Online now' : 'Offline'} color={c.online ? 'success' : 'default'} variant="outlined" />
-                {!c.verified && <Chip label="Unverified link" color="warning" variant="outlined" />}
+                {c.verified ? <Chip label="Verified" color="success" /> : <Chip label="Not verified yet" color="warning" variant="outlined" />}
               </Stack>
             </Box>
           </Stack>
@@ -110,6 +113,8 @@ function CharacterCard({ session }: { session: PlayerSession }) {
             {[
               ['Level', c.level ?? '—'],
               ['Guild', c.guild ?? '—'],
+              ['Time played', formatDuration(c.playtimeSeconds)],
+              ['Visits', c.sessions],
             ].map(([label, value]) => (
               <Grid key={label as string} size={6}>
                 <Card sx={{ bgcolor: 'action.hover', border: 0 }}>
@@ -138,8 +143,27 @@ function CharacterCard({ session }: { session: PlayerSession }) {
               Guild info appears once the server reports it.
             </Typography>
           )}
+          {c.verified ? (
+            <Typography variant="body2" color="text.secondary">
+              Verified by {c.verifiedBy}{c.verifiedAt ? ` on ${formatDateTime(c.verifiedAt)}` : ''}.
+            </Typography>
+          ) : (
+            <VerifyCharacter session={session} />
+          )}
+          <FormControlLabel
+            control={
+              <Switch
+                checked={session.profile!.privacy.showDiscord}
+                onChange={async (e) => session.setProfile(await api.post<PlayerProfile>('/site/privacy', { showDiscord: e.target.checked }))}
+              />
+            }
+            label="Show my Discord name on my public profile"
+          />
           <Divider />
-          <div>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <Button variant="outlined" component={RouterLink} to={`/players/${c.profileId}`}>
+              View my public profile
+            </Button>
             <Button
               loading={busy}
               onClick={async () => {
@@ -153,7 +177,84 @@ function CharacterCard({ session }: { session: PlayerSession }) {
             >
               Not you? Unlink this character
             </Button>
-          </div>
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Proving the character is yours: a code sent in the game, or a request for staff to confirm. */
+function VerifyCharacter({ session }: { session: PlayerSession }) {
+  const c = session.profile!.character!;
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState<'send' | 'confirm' | 'request' | null>(null);
+  const [message, setMessage] = useState<{ severity: 'success' | 'error' | 'info'; text: string }>();
+  const [sent, setSent] = useState(c.verification.codePending);
+
+  const run = async (kind: 'send' | 'confirm' | 'request') => {
+    setBusy(kind);
+    setMessage(undefined);
+    try {
+      if (kind === 'send') {
+        await api.post('/site/verify/code');
+        setSent(true);
+        setMessage({ severity: 'success', text: 'A code was sent to you in the game. Check your chat, then enter it below. It works for 10 minutes.' });
+      } else if (kind === 'confirm') {
+        session.setProfile(await api.post<PlayerProfile>('/site/verify/confirm', { code }));
+      } else {
+        session.setProfile(await api.post<PlayerProfile>('/site/verify/request'));
+        setMessage({ severity: 'info', text: 'Thanks. Server staff will review your request.' });
+      }
+    } catch (err) {
+      setMessage({ severity: 'error', text: errorMessage(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card sx={{ bgcolor: 'action.hover', border: 0 }}>
+      <CardContent>
+        <Stack spacing={1.5}>
+          <Typography sx={{ fontWeight: 600 }}>Verify that this is you</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Anyone can claim a name, so PalOps only gives Discord roles and links your Discord account to your character once you’ve proved it’s yours.
+          </Typography>
+          {c.verification.inGameCode && (
+            <Stack spacing={1}>
+              <div>
+                <Button variant="contained" onClick={() => run('send')} loading={busy === 'send'} disabled={!c.online}>
+                  Send me a code in the game
+                </Button>
+                {!c.online && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    Join the server with this character first.
+                  </Typography>
+                )}
+              </div>
+              {sent && (
+                <Stack direction="row" spacing={1} component="form" onSubmit={(e) => (e.preventDefault(), void run('confirm'))}>
+                  <TextField label="Code from the game" value={code} onChange={(e) => setCode(e.target.value)} slotProps={{ htmlInput: { maxLength: 16, autoComplete: 'off' } }} />
+                  <Button variant="outlined" type="submit" loading={busy === 'confirm'} disabled={code.trim().length < 4}>
+                    Verify
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
+          )}
+          {c.verification.requestedAt ? (
+            <Typography variant="body2" color="text.secondary">
+              You asked staff to verify you on {formatDateTime(c.verification.requestedAt)}.
+            </Typography>
+          ) : (
+            <div>
+              <Button onClick={() => run('request')} loading={busy === 'request'}>
+                {c.verification.inGameCode ? 'Or ask staff to verify me' : 'Ask staff to verify me'}
+              </Button>
+            </div>
+          )}
+          {message && <Alert severity={message.severity}>{message.text}</Alert>}
         </Stack>
       </CardContent>
     </Card>

@@ -1,6 +1,7 @@
 import { BlockList, isIP } from 'node:net';
 import type { DB } from '../../database/db.js';
 import type { AuditActor, AuditLog } from '../audit/audit-log.js';
+import type { Mirror, PalDefenderService } from '../paldefender/paldefender-service.js';
 import type { PalworldService } from '../palworld/index.js';
 import { PalworldError, type PalworldPlayer } from '../palworld/index.js';
 import type { ServerRegistry } from '../servers/server-registry.js';
@@ -18,6 +19,16 @@ export interface ModerationRecord {
   reason: string | null;
   actorUsername: string | null;
   createdAt: string;
+}
+
+/**
+ * Loopback and private ranges: behind a proxy, a tunnel or the same network,
+ * every player can look like one of these, so banning one would ban everybody.
+ */
+export function isSharedRangeIp(ip: string): boolean {
+  if (isIP(ip) === 6) return ip === '::1' || ip === '::' || /^(fc|fd|fe80)/.test(ip);
+  const [a = 0, b = 0] = ip.split('.').map(Number);
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
 }
 
 interface ModerationRow {
@@ -97,6 +108,7 @@ export class ModerationService {
     private readonly players: PlayerDirectory,
     private readonly servers: ServerRegistry,
     private readonly audit: AuditLog,
+    private readonly paldefender: PalDefenderService,
   ) {
     players.onRefresh((online) => {
       this.enforceIpBans(online).catch(() => undefined);
@@ -104,6 +116,17 @@ export class ModerationService {
   }
 
   private lastEnforced = new Map<string, number>();
+  private banListeners: Array<(event: { userId: string; name: string | null; reason: string; actor: AuditActor }) => void> = [];
+  private unbanListeners: Array<(event: { userId: string; name: string | null; actor: AuditActor }) => void> = [];
+
+  /** Runs after a player is banned by staff or the Discord bot. */
+  onBan(listener: (event: { userId: string; name: string | null; reason: string; actor: AuditActor }) => void): void {
+    this.banListeners.push(listener);
+  }
+
+  onUnban(listener: (event: { userId: string; name: string | null; actor: AuditActor }) => void): void {
+    this.unbanListeners.push(listener);
+  }
 
   /** The reason is stored for staff and shown to the player as the kick message. */
   async kick(actor: AuditActor, userId: string, reason: string): Promise<ModerationRecord> {
@@ -112,33 +135,54 @@ export class ModerationService {
     return this.store(actor, userId, 'kick', reason);
   }
 
-  /** With banAddress, the player's last known address is banned too, so a new account can't get back in from it. */
-  async ban(actor: AuditActor, userId: string, reason: string, options: { banAddress?: boolean } = {}): Promise<{ record: ModerationRecord; ipBan: IpBan | null }> {
+  /**
+   * Bans the account. With banAddress, the player's last known address is banned too, so a new
+   * account can't get back in from it (a private or loopback address is skipped: it could be everybody).
+   * With PalDefender switched on, the ban is mirrored there too.
+   */
+  async ban(
+    actor: AuditActor,
+    userId: string,
+    reason: string,
+    options: { banAddress?: boolean } = {},
+  ): Promise<{ record: ModerationRecord; ipBan: IpBan | null; ipSkipped: string | null; paldefender: Mirror | null }> {
     const ip = options.banAddress ? this.players.lastAddress(userId) : null;
     if (options.banAddress && !ip) throw badRequest('PalOps hasn’t seen an address for this player yet', 'no_address');
     await this.palworld.ban(userId, reason);
     this.players.markOffline(userId);
     const record = this.store(actor, userId, 'ban', reason);
-    const ipBan = ip ? await this.banIp(actor, ip, reason, userId) : null;
-    return { record, ipBan };
+    let ipBan: IpBan | null = null;
+    let ipSkipped: string | null = null;
+    if (ip) {
+      if (isSharedRangeIp(ip)) ipSkipped = `${ip} is a private or loopback address shared by many players, so it wasn't banned.`;
+      else ipBan = (await this.banIp(actor, ip, reason, userId)).ipBan;
+    }
+    // PalDefender resolves the address itself, so only ask it to ban one when the panel did.
+    const paldefender = await this.paldefender.mirrorBanPlayer(userId, reason, !!ipBan);
+    for (const listener of this.banListeners) listener({ userId, name: record.playerName, reason, actor });
+    return { record, ipBan, ipSkipped, paldefender };
   }
 
   /** Also lifts the address bans that came with this player's ban. */
-  async unban(actor: AuditActor, userId: string, reason: string): Promise<ModerationRecord> {
+  async unban(actor: AuditActor, userId: string, reason: string): Promise<{ record: ModerationRecord; paldefender: Mirror | null }> {
     await this.palworld.unban(userId);
-    for (const ban of this.ipBans().filter((b) => b.playerUserId === userId)) this.liftIpBan(actor, ban.id);
-    return this.store(actor, userId, 'unban', reason);
+    const lifted = this.ipBans().filter((b) => b.playerUserId === userId);
+    for (const ban of lifted) this.liftIpBan(actor, ban.id);
+    const results = [await this.paldefender.mirrorUnbanPlayer(userId, reason), ...(await Promise.all(lifted.map((b) => this.paldefender.mirrorUnbanAddress(b.ip, reason))))];
+    const record = this.store(actor, userId, 'unban', reason);
+    for (const listener of this.unbanListeners) listener({ userId, name: record.playerName, actor });
+    return { record, paldefender: combine(results) };
   }
 
   // ---- Address bans ----
 
   /** Bans an address or range, and kicks anyone online from it now. */
-  async banIp(actor: AuditActor, value: string, reason: string, playerUserId: string | null = null): Promise<IpBan> {
+  async banIp(actor: AuditActor, value: string, reason: string, playerUserId: string | null = null): Promise<{ ipBan: IpBan; paldefender: Mirror | null }> {
     const ip = parseIpRule(value);
     if (!ip) throw badRequest('Enter an IP address, or a range like 203.0.113.0/24', 'invalid_ip');
     const serverId = this.serverId();
     const existing = this.ipBans().find((b) => b.ip === ip);
-    if (existing) return existing;
+    if (existing) return { ipBan: existing, paldefender: null };
     const playerName = playerUserId ? (this.players.byUserId(playerUserId)?.name ?? null) : null;
     const { lastInsertRowid } = this.db
       .prepare(
@@ -157,15 +201,25 @@ export class ModerationService {
     } catch {
       // Server offline: the ban applies as soon as the online list can be read again.
     }
-    return toIpBan(this.db.prepare('SELECT * FROM ip_bans WHERE id = ?').get(lastInsertRowid) as IpBanRow);
+    const ipBan = toIpBan(this.db.prepare('SELECT * FROM ip_bans WHERE id = ?').get(lastInsertRowid) as IpBanRow);
+    // A single address can be mirrored to PalDefender; it has no range bans.
+    const paldefender = ip.includes('/') ? null : await this.paldefender.mirrorBanAddress(ip, reason, playerUserId);
+    return { ipBan, paldefender };
   }
 
-  liftIpBan(actor: AuditActor, id: number): void {
+  /** Lifts an address ban and mirrors that to PalDefender. */
+  async unbanIp(actor: AuditActor, id: number): Promise<Mirror | null> {
+    const ip = this.liftIpBan(actor, id);
+    return ip.includes('/') ? null : this.paldefender.mirrorUnbanAddress(ip);
+  }
+
+  liftIpBan(actor: AuditActor, id: number): string {
     const server = this.servers.getPrimary();
     const row = server && (this.db.prepare('SELECT * FROM ip_bans WHERE id = ? AND server_id = ? AND lifted_at IS NULL').get(id, server.id) as IpBanRow | undefined);
     if (!row) throw notFound('Address ban not found');
     this.db.prepare('UPDATE ip_bans SET lifted_at = ?, lifted_by = ? WHERE id = ?').run(new Date().toISOString(), actor.username, id);
     this.audit.record(actor, { category: 'players', action: 'ip_unban', target: row.ip });
+    return row.ip;
   }
 
   ipBans(): IpBan[] {
@@ -271,6 +325,13 @@ export class ModerationService {
     if (!server) throw new PalworldError('not_configured', 'No Palworld server is configured');
     return server.id;
   }
+}
+
+/** One result for several mirrored calls: ok only if all were, with the first failure's message. */
+function combine(results: Array<Mirror | null>): Mirror | null {
+  const present = results.filter((r): r is Mirror => r !== null);
+  if (present.length === 0) return null;
+  return present.find((r) => !r.ok) ?? { ok: true, message: null };
 }
 
 function toIpBan(row: IpBanRow): IpBan {

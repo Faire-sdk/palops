@@ -1,0 +1,127 @@
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { actorOf, requirePermission } from '../../middleware/auth.js';
+import type { Services } from '../../services/index.js';
+import { COMMANDS, verifyDiscordSignature, type Interaction } from '../../services/discord/interactions.js';
+import { parse } from '../../utils/validation.js';
+
+/**
+ * Where Discord sends slash commands. It's public but every request must carry
+ * Discord's Ed25519 signature, and it has its own plugin so the body stays raw
+ * (the signature covers the exact bytes).
+ */
+export async function discordInteractionRoutes(app: FastifyInstance, { services }: { services: Services }) {
+  const { discordBot } = services;
+  app.addContentTypeParser('application/json', { parseAs: 'buffer', bodyLimit: 32 * 1024 }, (_request, body, done) => done(null, body));
+
+  app.post('/interactions', async (request, reply) => {
+    const key = discordBot.publicKey();
+    const signature = request.headers['x-signature-ed25519'];
+    const timestamp = request.headers['x-signature-timestamp'];
+    if (!key || typeof signature !== 'string' || typeof timestamp !== 'string' || !Buffer.isBuffer(request.body) || !verifyDiscordSignature(key, signature, timestamp, request.body)) {
+      return reply.code(401).send({ error: { code: 'invalid_signature', message: 'Invalid request signature' } });
+    }
+    let interaction: Interaction;
+    try {
+      interaction = JSON.parse(request.body.toString('utf8')) as Interaction;
+    } catch {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'Invalid JSON' } });
+    }
+    return discordBot.handleInteraction(interaction);
+  });
+}
+
+const id = z.string().trim().regex(/^\d{15,25}$/, 'Use the long number from Discord').nullable().default(null);
+
+const settingsSchema = z.object({
+  enabled: z.boolean(),
+  applicationId: id,
+  publicKey: z.string().trim().max(64).nullable().default(null),
+  botToken: z.string().trim().max(200).optional(),
+  guildId: id,
+  publicInfo: z.boolean().default(false),
+  eventsChannelId: id,
+  logChannelId: id,
+  logMinLevel: z.enum(['info', 'warn', 'error']).default('error'),
+  notifyBans: z.boolean().default(true),
+  notifySignals: z.boolean().default(true),
+  notifyServer: z.boolean().default(true),
+  notifyJoins: z.boolean().default(false),
+  gatewayEnabled: z.boolean().default(true),
+  presenceEnabled: z.boolean().default(true),
+  statusChannelId: id,
+  joinOnLogin: z.boolean().default(false),
+  verifiedRoleId: id,
+  roleOwnerId: id,
+  roleAdminId: id,
+  roleModeratorId: id,
+  syncNicknames: z.boolean().default(false),
+  syncBans: z.boolean().default(false),
+  relayEnabled: z.boolean().default(false),
+  relayChannelId: id,
+  relayToDiscord: z.boolean().default(true),
+  relayToGame: z.boolean().default(true),
+  relayPattern: z.string().trim().max(300).nullable().default(null),
+  relaySources: z.array(z.enum(['game', 'paldefender'])).default(['game']),
+  relayPrefix: z.string().trim().max(20).default('Discord'),
+});
+
+/** Owner-only setup for the optional Discord bot. */
+export default async function discordBotRoutes(app: FastifyInstance, { services }: { services: Services }) {
+  const { discordBot } = services;
+  const owner = { preHandler: requirePermission(services, 'server.connection') };
+
+  app.get('/settings', owner, async (request) => ({
+    settings: discordBot.settings(),
+    gateway: discordBot.gatewayStatus(),
+    // Where to paste into the Developer Portal's "Interactions Endpoint URL".
+    interactionsUrl: `${request.protocol}://${request.host}/api/v1/discord/interactions`,
+    commands: COMMANDS.map((c) => ({ name: c.name, description: c.description })),
+  }));
+
+  app.put('/settings', owner, async (request) => {
+    const { botToken, ...rest } = parse(settingsSchema, request.body);
+    const before = discordBot.settings();
+    const token = botToken === '' ? undefined : botToken;
+    const settings = discordBot.save({ ...rest, botToken: token });
+    const { hasToken: _t, updatedAt: _u, commandsRegisteredAt: _c, ...summary } = settings;
+    const { hasToken: _bt, updatedAt: _bu, commandsRegisteredAt: _bc, ...beforeSummary } = before;
+    services.audit.record(actorOf(request), {
+      category: 'server',
+      action: 'discord_bot_updated',
+      // Never log the token itself, only whether it changed.
+      details: { before: beforeSummary, after: summary, tokenChanged: token !== undefined },
+    });
+    return { settings, gateway: discordBot.gatewayStatus() };
+  });
+
+  /** Tries the token, server and channels without saving. */
+  app.post('/test', owner, async (request) => {
+    const { botToken, guildId, eventsChannelId, logChannelId, statusChannelId } = parse(settingsSchema.pick({ botToken: true, guildId: true, eventsChannelId: true, logChannelId: true, statusChannelId: true }), request.body);
+    return { checks: await discordBot.check({ botToken: botToken || undefined, guildId, eventsChannelId, logChannelId, statusChannelId }) };
+  });
+
+  /** Brings every linked player's and panel user's Discord roles in line. */
+  app.post('/sync-roles', owner, async (request) => {
+    const result = await discordBot.syncAll();
+    services.audit.record(actorOf(request), { category: 'server', action: 'discord_roles_synced', details: { ...result } });
+    return result;
+  });
+
+  /** Tries a chat pattern on a sample line from the console, so it can be checked before it's switched on. */
+  app.post('/relay/test', owner, async (request) => {
+    const { pattern, line } = parse(z.object({ pattern: z.string().trim().max(300).nullable().default(null), line: z.string().max(600) }), request.body);
+    return discordBot.testChatPattern(pattern, line);
+  });
+
+  app.post('/register-commands', owner, async (request) => {
+    const count = await discordBot.registerCommands();
+    services.audit.record(actorOf(request), { category: 'server', action: 'discord_commands_registered', details: { count } });
+    return { count, settings: discordBot.settings() };
+  });
+
+  app.post('/send-test', owner, async () => {
+    await discordBot.sendTest();
+    return { ok: true };
+  });
+}

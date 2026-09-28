@@ -22,6 +22,9 @@ import { ROLES, type AdapterKind, type Role, type ServerConnection, type ServerS
 import { useAuth } from '../auth/AuthContext';
 import { authErrorMessage, DiscordButton, DiscordLogo, discordAvatarUrl } from '../auth/discord';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ConsoleSettingsTab } from '../components/ConsoleSettings';
+import { DiscordBotSettingsTab } from '../components/DiscordBotSettings';
+import { PalDefenderSettingsTab } from '../components/PalDefenderSettings';
 import { ErrorState, KeyValue, Loading, Mono, PageHeader, Section, ServerStateChip } from '../components/common';
 import { DataTable } from '../components/DataTable';
 import { useToast } from '../components/Toast';
@@ -33,7 +36,7 @@ export function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const tabs = [
     { id: 'account', label: 'Account' },
-    ...(can('server.connection') ? [{ id: 'connection', label: 'Server connection' }] : []),
+    ...(can('server.connection') ? [{ id: 'connection', label: 'Server connection' }, { id: 'console', label: 'Console logs' }, { id: 'paldefender', label: 'PalDefender' }, { id: 'discord', label: 'Discord bot' }] : []),
     ...(can('users.manage') ? [{ id: 'users', label: 'Users' }] : []),
   ];
   const tab = tabs.find((t) => t.id === params.get('tab'))?.id ?? 'account';
@@ -48,6 +51,9 @@ export function SettingsPage() {
       </Tabs>
       {tab === 'account' && <AccountSettings />}
       {tab === 'connection' && <ConnectionSettings />}
+      {tab === 'console' && <ConsoleSettingsTab />}
+      {tab === 'discord' && <DiscordBotSettingsTab />}
+      {tab === 'paldefender' && <PalDefenderSettingsTab />}
       {tab === 'users' && <UserSettings />}
     </>
   );

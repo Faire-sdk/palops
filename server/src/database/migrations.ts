@@ -304,4 +304,197 @@ export const migrations: Migration[] = [
       CREATE INDEX ip_bans_active ON ip_bans(server_id, lifted_at);
     `,
   },
+  {
+    id: 8,
+    name: 'base_intrusion_signals',
+    rebuildsTables: true,
+    sql: `
+      -- Adds the base_intrusion kind; SQLite can't change a CHECK in place.
+      CREATE TABLE player_signals_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        player_name TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('movement', 'level', 'shared_ip', 'base_intrusion')),
+        summary TEXT NOT NULL,
+        dedupe_key TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        dismissed_at TEXT,
+        dismissed_by TEXT
+      );
+      INSERT INTO player_signals_new SELECT * FROM player_signals;
+      DROP TABLE player_signals;
+      ALTER TABLE player_signals_new RENAME TO player_signals;
+      CREATE INDEX player_signals_open ON player_signals(server_id, dismissed_at, id);
+      CREATE INDEX player_signals_player ON player_signals(server_id, user_id, id);
+      CREATE INDEX player_signals_dedupe ON player_signals(server_id, dedupe_key, created_at);
+    `,
+  },
+  {
+    id: 9,
+    name: 'paldefender',
+    sql: `
+      -- The optional PalDefender plugin integration (one row). Off unless an
+      -- owner enables it. The API token is encrypted at rest.
+      CREATE TABLE paldefender (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        host TEXT NOT NULL DEFAULT '127.0.0.1',
+        port INTEGER NOT NULL DEFAULT 17993,
+        use_tls INTEGER NOT NULL DEFAULT 0,
+        token_encrypted TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
+  {
+    id: 10,
+    name: 'console',
+    sql: `
+      -- What the Console page shows: lines tailed from log files plus events the
+      -- panel knows about. Kept for a week and capped, so it can't grow forever.
+      CREATE TABLE console_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        level TEXT NOT NULL DEFAULT 'info',
+        message TEXT NOT NULL
+      );
+      CREATE INDEX console_lines_at ON console_lines(at);
+
+      -- How far into each tailed file the panel has read, so a restart neither
+      -- repeats nor skips lines.
+      CREATE TABLE console_offsets (
+        path TEXT PRIMARY KEY,
+        offset INTEGER NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+
+      -- Where to find the log files (one row). Off until an owner sets it up.
+      CREATE TABLE console_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        tail_enabled INTEGER NOT NULL DEFAULT 0,
+        game_log_path TEXT,
+        paldefender_log_path TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
+  {
+    id: 11,
+    name: 'console_logger_socket',
+    sql: `
+      -- Optional: the PalServerLogger websocket, for the game's real console stream.
+      -- The token is encrypted at rest.
+      ALTER TABLE console_settings ADD COLUMN logger_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE console_settings ADD COLUMN logger_host TEXT NOT NULL DEFAULT '127.0.0.1';
+      ALTER TABLE console_settings ADD COLUMN logger_port INTEGER NOT NULL DEFAULT 8765;
+      ALTER TABLE console_settings ADD COLUMN logger_tls INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE console_settings ADD COLUMN logger_token_encrypted TEXT;
+    `,
+  },
+  {
+    id: 12,
+    name: 'discord_bot',
+    sql: `
+      -- The optional Discord bot (one row). It receives slash commands as signed HTTPS
+      -- requests from Discord and posts events to channels. The bot token is encrypted at rest.
+      CREATE TABLE discord_bot (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        application_id TEXT,
+        public_key TEXT,
+        bot_token_encrypted TEXT,
+        guild_id TEXT,
+        public_info INTEGER NOT NULL DEFAULT 0,
+        events_channel_id TEXT,
+        log_channel_id TEXT,
+        log_min_level TEXT NOT NULL DEFAULT 'error',
+        notify_bans INTEGER NOT NULL DEFAULT 1,
+        notify_signals INTEGER NOT NULL DEFAULT 1,
+        notify_server INTEGER NOT NULL DEFAULT 1,
+        notify_joins INTEGER NOT NULL DEFAULT 0,
+        commands_registered_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
+  {
+    id: 13,
+    name: 'discord_bot_gateway',
+    sql: `
+      -- The bot's live connection: presence (player count, do not disturb) and, later, chat relay.
+      ALTER TABLE discord_bot ADD COLUMN gateway_enabled INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE discord_bot ADD COLUMN presence_enabled INTEGER NOT NULL DEFAULT 1;
+      -- A channel whose name shows the server status, e.g. "🟢 5/32 online".
+      ALTER TABLE discord_bot ADD COLUMN status_channel_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN status_channel_name TEXT;
+      ALTER TABLE discord_bot ADD COLUMN status_channel_changed_at TEXT;
+    `,
+  },
+  {
+    id: 14,
+    name: 'verified_links_roles_and_ban_sync',
+    sql: `
+      -- A character link is a claim until it is verified: by an in-game code, or by staff.
+      -- Only verified links are ever used for Discord roles or bans.
+      ALTER TABLE site_accounts ADD COLUMN verified_at TEXT;
+      ALTER TABLE site_accounts ADD COLUMN verified_by TEXT;
+      ALTER TABLE site_accounts ADD COLUMN verification_requested_at TEXT;
+      -- The player chooses whether their Discord name is shown on their public profile.
+      ALTER TABLE site_accounts ADD COLUMN show_discord INTEGER NOT NULL DEFAULT 0;
+
+      -- One pending in-game code per account, kept as a hash, expiring and attempt-limited.
+      CREATE TABLE link_codes (
+        account_id INTEGER PRIMARY KEY REFERENCES site_accounts(id) ON DELETE CASCADE,
+        player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        code_hash TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        sent_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      -- The bot: put people in the Discord server on sign-in, give roles, and keep bans in step.
+      ALTER TABLE discord_bot ADD COLUMN join_on_login INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE discord_bot ADD COLUMN verified_role_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN role_owner_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN role_admin_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN role_moderator_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN sync_nicknames INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE discord_bot ADD COLUMN sync_bans INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    id: 15,
+    name: 'discord_chat_relay',
+    sql: `
+      -- Chat between the game and a Discord channel. Game chat is read from console lines
+      -- with a pattern (Palworld's REST API has no chat), so the pattern is configurable.
+      ALTER TABLE discord_bot ADD COLUMN relay_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE discord_bot ADD COLUMN relay_channel_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN relay_to_discord INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE discord_bot ADD COLUMN relay_to_game INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE discord_bot ADD COLUMN relay_pattern TEXT;
+      ALTER TABLE discord_bot ADD COLUMN relay_sources TEXT NOT NULL DEFAULT 'game';
+      ALTER TABLE discord_bot ADD COLUMN relay_prefix TEXT NOT NULL DEFAULT 'Discord';
+    `,
+  },
+  {
+    id: 16,
+    name: 'player_sessions',
+    sql: `
+      -- One row per visit to the server, so playtime can be shown. Open while the player is online.
+      -- Resolution is the online-list check (about a minute), and a server restart ends every open visit.
+      CREATE TABLE player_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT
+      );
+      CREATE INDEX player_sessions_player ON player_sessions(server_id, user_id, id);
+      CREATE INDEX player_sessions_open ON player_sessions(server_id, ended_at);
+    `,
+  },
 ];

@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, createTestApp, loginAs } from './helpers.js';
 
 let ctx: Awaited<ReturnType<typeof createTestApp>>;
 const ANUBIS = 'steam_76561190000000002';
+const LAMBALL = 'steam_76561190000000001';
+const CATTIVA = 'epic_0f3a9c2b1d';
 
 beforeEach(async () => {
   ctx = await createTestApp();

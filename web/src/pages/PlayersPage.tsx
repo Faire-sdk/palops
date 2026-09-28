@@ -7,6 +7,8 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
+import MenuItem from '@mui/material/MenuItem';
+import Tooltip from '@mui/material/Tooltip';
 import Pagination from '@mui/material/Pagination';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
@@ -16,14 +18,17 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage } from '../api/client';
-import type { IpBan, KnownPlayer, ModerationRecord, Player, PlayerSignal } from '../api/types';
+import type { IpBan, KnownPlayer, LinkRequest, ModerationRecord, PalDefenderBan, PalDefenderResult, PalDefenderStatus, Player, PlayerSignal } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { DataTable } from '../components/DataTable';
-import { ModerationDialog, PlayerProfileDialog } from '../components/PlayerActions';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ModerationDialog, PlayerProfileDialog, warnIfPalDefenderFailed } from '../components/PlayerActions';
 import { useToast } from '../components/Toast';
 import { SignalChip } from '../components/world';
-import { formatDateTime } from '../format';
+import { formatDateTime, formatDuration } from '../format';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import LinkIcon from '@mui/icons-material/Link';
 import { refreshAll, useApi } from '../hooks/useApi';
 
 const TABS = [
@@ -31,6 +36,7 @@ const TABS = [
   { id: 'all', label: 'All players' },
   { id: 'bans', label: 'Bans' },
   { id: 'signals', label: 'Signals' },
+  { id: 'links', label: 'Link requests' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -39,7 +45,7 @@ type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string; 
 export function PlayersPage() {
   const { can } = useAuth();
   const [params, setParams] = useSearchParams();
-  const tabs = TABS.filter((t) => t.id !== 'signals' || can('world.view'));
+  const tabs = TABS.filter((t) => (t.id !== 'signals' || can('world.view')) && (t.id !== 'links' || can('players.ban')));
   const tab: TabId = tabs.find((t) => t.id === params.get('tab'))?.id ?? 'online';
   const [profile, setProfile] = useState<string | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
@@ -56,6 +62,7 @@ export function PlayersPage() {
       {tab === 'all' && <AllPlayers onOpen={setProfile} />}
       {tab === 'bans' && <Bans onOpen={setProfile} onAction={setTarget} />}
       {tab === 'signals' && <Signals onOpen={setProfile} />}
+      {tab === 'links' && <LinkRequests onOpen={setProfile} />}
       <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} onOpen={setProfile} />
       <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} ip={target?.ip} onClose={() => setTarget(null)} />
     </>
@@ -67,6 +74,16 @@ function PlayerName({ name, userId, onOpen }: { name: string; userId: string; on
     <Link component="button" underline="hover" onClick={() => onOpen(userId)} sx={{ fontWeight: 600, textAlign: 'left' }}>
       {name}
     </Link>
+  );
+}
+
+/** A small mark for players with a website account: verified (proven) or claimed (not yet). */
+function LinkBadge({ link }: { link: 'verified' | 'claimed' | null | undefined }) {
+  if (!link) return null;
+  return (
+    <Tooltip title={link === 'verified' ? 'Discord account linked and verified' : 'Discord account linked but not verified'}>
+      {link === 'verified' ? <VerifiedIcon color="primary" sx={{ fontSize: 16 }} /> : <LinkIcon color="disabled" sx={{ fontSize: 16 }} />}
+    </Tooltip>
   );
 }
 
@@ -121,9 +138,19 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
         rowKey={(p) => p.userId || p.playerId}
         empty={<EmptyState icon={PeopleOutlinedIcon} title={query ? 'No matching players' : 'Nobody is online right now'} />}
         columns={[
-          { key: 'name', header: 'Player', render: (p) => <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} /> },
+          {
+            key: 'name',
+            header: 'Player',
+            render: (p) => (
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} />
+                <LinkBadge link={p.link} />
+              </Stack>
+            ),
+          },
           { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
           { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
+          { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : '—') },
           { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
           ...(can('players.ip') ? [{ key: 'ip', header: 'IP address', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : '—') }] : []),
           { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
@@ -164,8 +191,10 @@ const PAGE_SIZE = 50;
 function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<'recent' | 'name' | 'playtime' | 'level'>('recent');
+  const [filter, setFilter] = useState<'all' | 'online' | 'banned' | 'linked' | 'verified' | 'unverified'>('all');
   const search = query.trim();
-  const path = `/players/known?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+  const path = `/players/known?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&sort=${sort}&filter=${filter}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
   const { data, error, loading, reload } = useApi<{ players: KnownPlayer[]; total: number }>(path);
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
@@ -190,6 +219,7 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
               render: (p) => (
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} />
+                  <LinkBadge link={p.link} />
                   {p.online && <Chip label="Online" color="success" variant="outlined" />}
                   {p.banned && <Chip label="Banned" color="error" variant="outlined" />}
                 </Stack>
@@ -197,6 +227,7 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
             },
             { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
             { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
+            { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : '—') },
             { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
             { key: 'lastSeen', header: 'Last seen', nowrap: true, render: (p) => formatDateTime(p.lastSeenAt) },
           ]}
@@ -225,6 +256,28 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
         />
       }
     >
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ p: 2, borderBottom: 1, borderColor: 'divider', alignItems: { sm: 'center' } }}>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', flexGrow: 1 }}>
+          {(
+            [
+              ['all', 'Everyone'],
+              ['online', 'Online'],
+              ['banned', 'Banned'],
+              ['linked', 'Has a Discord link'],
+              ['verified', 'Verified'],
+              ['unverified', 'Not verified'],
+            ] as const
+          ).map(([id, label]) => (
+            <Chip key={id} label={label} color={filter === id ? 'primary' : 'default'} variant={filter === id ? 'filled' : 'outlined'} onClick={() => (setFilter(id), setPage(0))} />
+          ))}
+        </Stack>
+        <TextField select label="Sort by" value={sort} onChange={(e) => (setSort(e.target.value as typeof sort), setPage(0))} sx={{ minWidth: 170 }}>
+          <MenuItem value="recent">Recently seen</MenuItem>
+          <MenuItem value="playtime">Most playtime</MenuItem>
+          <MenuItem value="level">Highest level</MenuItem>
+          <MenuItem value="name">Name</MenuItem>
+        </TextField>
+      </Stack>
       {body}
     </Section>
   );
@@ -242,8 +295,9 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
   const banIp = async () => {
     setBusy(true);
     try {
-      const { ipBan } = await api.post<{ ipBan: IpBan }>('/players/ip-bans', { ip, reason: ipReason });
+      const { ipBan, paldefender } = await api.post<{ ipBan: IpBan; paldefender?: PalDefenderResult }>('/players/ip-bans', { ip, reason: ipReason });
       notify(`${ipBan.ip} is banned`, 'success');
+      warnIfPalDefenderFailed(notify, paldefender);
       setIp('');
       setIpReason('');
       refreshAll();
@@ -256,8 +310,9 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
 
   const liftIpBan = async (ban: IpBan) => {
     try {
-      await api.delete(`/players/ip-bans/${ban.id}`);
+      const res = await api.delete<{ paldefender?: PalDefenderResult }>(`/players/ip-bans/${ban.id}`);
       notify(`${ban.ip} is no longer banned`, 'success');
+      warnIfPalDefenderFailed(notify, res?.paldefender);
       refreshAll();
     } catch (err) {
       notify(errorMessage(err), 'error');
@@ -339,6 +394,7 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
           )}
         </Section>
       )}
+      {can('players.ip') && <PalDefenderBans onOpen={onOpen} />}
       {can('players.ban') && can('players.ip') && (
         <Section title="Ban an address">
           <Stack
@@ -395,6 +451,140 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         </Section>
       )}
     </Stack>
+  );
+}
+
+/** Website accounts that asked staff to confirm the character they linked is theirs. */
+function LinkRequests({ onOpen }: { onOpen: (userId: string) => void }) {
+  const notify = useToast();
+  const { data, error, loading, reload } = useApi<{ requests: LinkRequest[] }>('/players/link-requests', { pollMs: 30000 });
+
+  const decide = async (r: LinkRequest, decision: 'approve' | 'reject') => {
+    try {
+      await api.post(`/players/link-requests/${r.accountId}/${decision}`);
+      notify(decision === 'approve' ? `${r.player.name} is now verified for ${r.discord.username ?? r.discord.id}` : 'Link rejected', 'success');
+      await reload();
+      refreshAll();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    }
+  };
+
+  let body;
+  if (loading && !data) body = <Loading />;
+  else if (error && !data) body = <ErrorState error={error} onRetry={reload} />;
+  else {
+    body = (
+      <DataTable
+        rows={data?.requests ?? []}
+        rowKey={(r) => r.accountId}
+        empty={<EmptyState icon={PeopleOutlinedIcon} title="No link requests">Players who ask staff to verify their character show up here.</EmptyState>}
+        columns={[
+          { key: 'discord', header: 'Discord account', render: (r) => r.discord.username ?? r.discord.id },
+          { key: 'player', header: 'Says they are', render: (r) => <PlayerName name={r.player.name} userId={r.player.userId} onOpen={onOpen} /> },
+          { key: 'level', header: 'Level', render: (r) => r.player.level ?? '—' },
+          { key: 'at', header: 'Asked', nowrap: true, render: (r) => (r.requestedAt ? formatDateTime(r.requestedAt) : '—') },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            render: (r) => (
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                <Button size="small" variant="contained" onClick={() => decide(r, 'approve')}>
+                  Approve
+                </Button>
+                <Button size="small" variant="outlined" color="error" onClick={() => decide(r, 'reject')}>
+                  Reject
+                </Button>
+              </Stack>
+            ),
+          },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <Section title={data ? `Link requests (${data.requests.length})` : 'Link requests'} disablePadding>
+      <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+        Only approve someone you can tell is really that player (ask in Discord or the game). An approved link gives them their Discord roles, and it’s what lets a ban on either side reach the
+        other. Open the player to see their history first.
+      </Typography>
+      {body}
+    </Section>
+  );
+}
+
+/**
+ * PalDefender's own ban list, when that optional integration is on. It includes
+ * bans made in-game, by its anti-cheat and by other tools, which the official
+ * REST API can't list.
+ */
+function PalDefenderBans({ onOpen }: { onOpen: (userId: string) => void }) {
+  const { can } = useAuth();
+  const notify = useToast();
+  const { data: status } = useApi<PalDefenderStatus>('/paldefender/status');
+  const enabled = !!status?.enabled;
+  const { data, error, loading, reload } = useApi<{ bans: PalDefenderBan[] }>('/paldefender/banlist', { enabled });
+  const [lift, setLift] = useState<PalDefenderBan | null>(null);
+
+  if (!enabled) return null;
+
+  let body;
+  if (loading && !data) body = <Loading />;
+  else if (error && !data) body = <ErrorState error={error} onRetry={reload} />;
+  else {
+    body = (
+      <DataTable
+        rows={data?.bans ?? []}
+        rowKey={(b) => `${b.kind}:${b.id}`}
+        empty={<EmptyState icon={PeopleOutlinedIcon} title="No active bans in PalDefender" />}
+        columns={[
+          { key: 'kind', header: 'Type', render: (b) => <Chip label={b.kind === 'ip' ? 'Address' : 'Player'} variant="outlined" /> },
+          { key: 'id', header: 'Who', render: (b) => (b.kind === 'user' ? <PlayerName name={b.id} userId={b.id} onOpen={onOpen} /> : <Mono>{b.id}</Mono>) },
+          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
+          { key: 'by', header: 'Banned by', render: (b) => (b.bannedBy ? `${b.bannedBy}${b.bannedVia ? ` (${b.bannedVia})` : ''}` : (b.bannedVia ?? '—')) },
+          { key: 'at', header: 'When', nowrap: true, render: (b) => (b.bannedAt ? formatDateTime(b.bannedAt) : '—') },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            render: (b) =>
+              can('players.ban') && (
+                <Button size="small" variant="outlined" onClick={() => setLift(b)}>
+                  Unban
+                </Button>
+              ),
+          },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <Section title={data ? `PalDefender ban list (${data.bans.length})` : 'PalDefender ban list'} disablePadding>
+      <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+        Straight from PalDefender, so it includes bans made in-game, by its anti-cheat and by other tools. Unbanning here only changes PalDefender’s list; to fully
+        unban someone banned from PalOps, use Unban in the first list above.
+      </Typography>
+      {body}
+      <ConfirmDialog
+        open={!!lift}
+        title={`Unban ${lift?.id ?? ''} in PalDefender?`}
+        message={lift?.kind === 'ip' ? 'Accounts on this address can connect again unless PalOps also bans it.' : 'They can connect again unless the game’s own ban list or a PalOps address ban still stops them.'}
+        confirmLabel="Unban"
+        onClose={() => setLift(null)}
+        onConfirm={async () => {
+          try {
+            await api.post(lift!.kind === 'ip' ? '/paldefender/unbanip' : '/paldefender/unban', lift!.kind === 'ip' ? { ip: lift!.id } : { userId: lift!.id });
+            notify(`${lift!.id} was unbanned in PalDefender`, 'success');
+            reload();
+          } catch (err) {
+            notify(errorMessage(err), 'error');
+          }
+        }}
+      />
+    </Section>
   );
 }
 

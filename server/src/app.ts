@@ -6,10 +6,13 @@ import { resolve } from 'node:path';
 import v1 from './api/v1/index.js';
 import { registerSecurity } from './middleware/security.js';
 import type { Services } from './services/index.js';
+import { DiscordApiError } from './services/discord/discord-api.js';
+import { PalDefenderError } from './services/paldefender/paldefender-client.js';
 import { PalworldError } from './services/palworld/index.js';
 import { HttpError } from './utils/errors.js';
 
 const PALWORLD_STATUS: Record<string, number> = { not_configured: 409, unreachable: 503 };
+const PALDEFENDER_STATUS: Record<string, number> = { not_configured: 409, unreachable: 503, not_found: 404, rejected: 422 };
 
 export async function buildApp(services: Services): Promise<FastifyInstance> {
   const { config } = services;
@@ -36,6 +39,12 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
       return reply
         .code(PALWORLD_STATUS[error.code] ?? 502)
         .send({ error: { code: `palworld_${error.code}`, message: error.message } });
+    }
+    if (error instanceof PalDefenderError) {
+      return reply.code(PALDEFENDER_STATUS[error.code] ?? 502).send({ error: { code: `paldefender_${error.code}`, message: error.message } });
+    }
+    if (error instanceof DiscordApiError) {
+      return reply.code(502).send({ error: { code: 'discord_error', message: error.message } });
     }
     const status = (error as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) {

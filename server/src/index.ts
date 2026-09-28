@@ -23,6 +23,8 @@ const pruneTimer = setInterval(() => {
   services.sessions.pruneExpired();
   services.siteAccounts.pruneExpired();
   services.world.prune();
+  services.console.prune();
+  services.players.pruneSessions();
 }, 60 * 60 * 1000);
 pruneTimer.unref();
 
@@ -34,6 +36,20 @@ const playerTimer = setInterval(() => {
   services.players.refreshOnline().catch(() => services.players.markAllOffline());
 }, 20 * 1000);
 playerTimer.unref();
+
+// Console: follow the game and PalDefender log files, if an owner has set them up.
+services.console.restartTail();
+
+// Discord bot (optional): tells the events channel when the server goes down or comes back.
+services.discordBot.start();
+
+// PalDefender (optional): keep player addresses current, including offline players.
+// Does nothing unless an owner has switched the integration on.
+const paldefenderTimer = setInterval(() => {
+  if (!services.servers.getPrimary() || !services.paldefender.enabled()) return;
+  services.paldefender.syncPlayers().catch((err) => app.log.debug({ err }, 'PalDefender sync failed'));
+}, 60 * 1000);
+paldefenderTimer.unref();
 
 // World snapshot: guilds, bases, the live map, cheat signals and lag hotspots.
 if (config.worldPollSeconds > 0) {
@@ -56,6 +72,9 @@ if (setupToken) {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
+    services.discordBot.stop();
+    services.console.stopTail();
+    services.console.flush();
     await app.close();
     db.close();
     process.exit(0);

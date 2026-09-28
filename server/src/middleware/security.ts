@@ -3,6 +3,8 @@ import { forbidden } from '../utils/errors.js';
 
 export const CSRF_HEADER = 'x-palops-csrf';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** Discord calls this itself, so it can't send our CSRF header. It's authenticated by Discord's request signature instead. */
+const DISCORD_INTERACTIONS_PATH = '/api/v1/discord/interactions';
 
 /**
  * CSRF defence in depth on top of SameSite=Strict cookies: state-changing API
@@ -13,6 +15,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export function registerSecurity(app: FastifyInstance) {
   app.addHook('onRequest', async (request) => {
     if (!request.url.startsWith('/api/') || SAFE_METHODS.has(request.method)) return;
+    if (request.method === 'POST' && request.url.split('?')[0] === DISCORD_INTERACTIONS_PATH) return;
     if (request.headers[CSRF_HEADER] !== '1') throw forbidden('Missing CSRF header');
     const origin = request.headers.origin;
     if (origin) {

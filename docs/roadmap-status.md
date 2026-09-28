@@ -7,11 +7,11 @@ Tracks progress against the development priority order in the project roadmap.
 | 1 | Project foundation | Done: monorepo, Fastify API, SQLite + migrations, React dashboard shell, shared UI components |
 | 2 | Authentication & roles | Done: Discord OAuth2 as main sign-in (owners add users by Discord ID), optional password sign-in, first-run owner setup, sessions, owner-issued reset links, 4 roles enforced server-side, user management |
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
-| 4 | Dashboard | Basic: status, info, player count, FPS/frame time, broadcast. Host CPU/RAM pending |
-| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Bans made outside PalOps can't be listed through the API |
-| 6 | Console | Blocked on the REST API (no console). Needs RCON or PalOps on the game machine |
+| 4 | Dashboard | Status, info, player count, FPS/frame time, broadcast, and the server FPS graph with average and lowest (from world snapshots, staff only). Host CPU/RAM pending |
+| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every address a player has connected from is recorded (staff with `players.ip` only), shown on profiles with the other accounts that share it, and can be banned, alone or as a CIDR range. The game only bans accounts, so PalOps enforces address bans itself: anyone connecting from one is kicked at the next check (about 20 seconds). Bans made outside PalOps can't be listed through the API |
+| 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. Optionally the PalServerLogger websocket for the game's real console output |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
-| 8 | Logs | Started: audit log with category filter and pagination |
+| 8 | Logs | Audit log with category filter and pagination; the Console page covers the game and PalDefender log files |
 | 9 | Server controls | Save, shutdown with countdown and message, force stop. Start/restart needs a process manager integration |
 | 10 | Backups | Not started |
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
@@ -22,29 +22,35 @@ Tracks progress against the development priority order in the project roadmap.
 ## Public website (extra)
 
 Public server site at `/` with Discord player sign-in and character profiles (level, guild, first/last seen).
-Character links are unverified for now; verification needs staff review or an in-game code via a server plugin.
+Character links are verified by an in-game code (sent through PalDefender) or by an admin, and only verified links earn roles or carry bans. The site has a player directory and
+profile pages with playtime, pals and guild, and the panel's player views show playtime, filters and the Discord link. See [player-accounts.md](player-accounts.md).
 
 ## World data (extra)
 
 From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 seconds:
 
 - Guilds with members and bases, also filling in guilds on player lists, profiles and the public site.
-- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
+- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, with names on players, bases, pals and NPCs (labels thin out when crowded, and details show on hover), over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
 - Bases with their worker pals, levels and HP, and injured workers flagged.
 - Pals seen with each player, kept for 30 days.
-- Cheat signals: unusual movement, level jumps and players sharing an address, with dismissal recorded in the audit log.
+- Cheat signals: unusual movement, level jumps, players sharing an address and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.
 - Lag hotspots: FPS over time and the busiest 500 m areas, kept for 7 days.
 
-Planned next: base intrusion alerts in the panel (for PvP servers).
+## PalDefender (optional)
 
-## Discord bot (planned)
+An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin for Windows servers, off unless an owner turns it on
+in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, player addresses synced from it, and a PalDefender page
+and player panel for inventories, pals, technologies, progression, guilds and bases, giving, summoning, base deletion, config reload and messages. See [paldefender.md](paldefender.md).
 
-Panel users are linked to Discord ids, so a bot in `server/src/services/discord/` can resolve the Discord user
-behind a command to a panel user and reuse the same permission checks. It will need `DISCORD_BOT_TOKEN`
-and a guild id; nothing bot-related runs yet.
+## Discord bot (optional)
+
+Slash commands that map each Discord user to a panel user by Discord ID and enforce that user's role (including `/ban @member`), notifications to an events channel, log
+forwarding, a live connection that shows the player count (Do Not Disturb when the server is offline or restarting) and can rename a status channel, roles and nicknames from
+verified links and panel roles, joining the Discord server on website sign-in, bans kept in step both ways for verified links, and a chat relay between the game and a channel.
+Off unless an owner enables it; see [discord-bot.md](discord-bot.md).
 
 ## Known limitations
 
-- The official REST API has no console/RCON command channel and no way to *start* a stopped server.
-  Console and start/restart will need an additional adapter (RCON and/or a process manager such as Docker or systemd).
+- The official REST API has no console and no way to *start* a stopped server. Palworld has deprecated RCON, so PalOps doesn't use it: the console is view-only,
+  and start/restart will need a process manager integration (Docker or systemd).
 - Rate limiting is in memory, which is fine for a single panel process.

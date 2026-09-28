@@ -14,7 +14,7 @@ Use another host only when you can't run anything next to the game server, and r
 | REST API port `8212` | Stays on `127.0.0.1`, never reachable from outside | Must be reached over a tunnel (Tailscale, WireGuard, Cloudflare Tunnel) or an IP allowlist |
 | Status, players, kick, ban, announce, public website | Yes | Yes, while the tunnel is up |
 | Start, stop and crash restart (planned) | Yes | No, the REST API can't start a stopped server |
-| Server console and log files (planned) | Yes | No, the REST API has no logs |
+| Server console and log files | Yes | Panel events only, the REST API has no logs |
 | Backups of the save folder (planned) | Yes | No, the saves are on another machine |
 | Guilds and base data read from save files (planned) | Yes | No, the REST API doesn't report guilds |
 | Editing `PalWorldSettings.ini` (planned) | Yes | No |

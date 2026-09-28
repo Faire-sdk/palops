@@ -7,6 +7,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import TuneIcon from '@mui/icons-material/Tune';
 import AppBar from '@mui/material/AppBar';
 import Avatar from '@mui/material/Avatar';
@@ -27,15 +28,17 @@ import type { Permission, ServerStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { discordAvatarUrl } from '../auth/discord';
 import { useApi } from '../hooks/useApi';
+import { usePalDefender } from '../hooks/usePalDefender';
 import { Brand } from './Brand';
 import { ServerStateChip, type IconComponent } from './common';
 
 const DRAWER_WIDTH = 248;
 
-const NAV: Array<{ to: string; label: string; icon: IconComponent; permission?: Permission }> = [
+const NAV: Array<{ to: string; label: string; icon: IconComponent; permission?: Permission; /** Only shown when the optional PalDefender integration is on. */ paldefender?: boolean }> = [
   { to: '/', label: 'Dashboard', icon: DashboardOutlinedIcon, permission: 'server.view' },
   { to: '/players', label: 'Players', icon: PeopleOutlinedIcon, permission: 'players.view' },
   { to: '/world', label: 'World', icon: MapOutlinedIcon, permission: 'players.view' },
+  { to: '/paldefender', label: 'PalDefender', icon: ShieldOutlinedIcon, permission: 'world.view', paldefender: true },
   { to: '/console', label: 'Console', icon: TerminalIcon, permission: 'console.view' },
   { to: '/server', label: 'Server', icon: DnsOutlinedIcon, permission: 'server.control' },
   { to: '/configuration', label: 'Configuration', icon: TuneIcon, permission: 'config.view' },
@@ -50,6 +53,7 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: status } = useApi<ServerStatus>('/server/status', { pollMs: 15000 });
+  const paldefender = usePalDefender();
   const current = NAV.find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)));
   const user = session?.user;
   const avatar = user?.discord ? discordAvatarUrl(user.discord) : null;
@@ -65,7 +69,7 @@ export function Layout() {
         <Brand />
       </Toolbar>
       <List sx={{ px: 1.5 }}>
-        {NAV.filter((n) => !n.permission || can(n.permission)).map((n) => (
+        {NAV.filter((n) => (!n.permission || can(n.permission)) && (!n.paldefender || paldefender)).map((n) => (
           <ListItemButton
             key={n.to}
             component={NavLink}

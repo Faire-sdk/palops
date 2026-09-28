@@ -58,7 +58,19 @@ export interface NewUser {
 }
 
 export class UserService {
+  private discordListeners: Array<(discordIds: string[]) => void> = [];
+
   constructor(private readonly db: DB) {}
+
+  /** Runs with the Discord IDs whose panel role may have changed (created, re-linked, role or status changed). */
+  onDiscordChange(listener: (discordIds: string[]) => void): void {
+    this.discordListeners.push(listener);
+  }
+
+  private changed(...ids: Array<string | null | undefined>): void {
+    const list = [...new Set(ids.filter((i): i is string => !!i))];
+    if (list.length) for (const listener of this.discordListeners) listener(list);
+  }
 
   count(): number {
     return (this.db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
@@ -110,6 +122,7 @@ export class UserService {
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(input.username, hash, input.role, input.discord?.id ?? null, input.discord?.username ?? null, input.discord?.avatar ?? null);
+    this.changed(input.discord?.id);
     return this.get(Number(lastInsertRowid))!;
   }
 
@@ -134,11 +147,13 @@ export class UserService {
 
   /** Links (or with null, unlinks) a Discord account. */
   setDiscord(id: number, discord: DiscordAccount | null): User {
-    if (!this.get(id)) throw notFound('User not found');
+    const before = this.get(id);
+    if (!before) throw notFound('User not found');
     if (discord) this.assertDiscordFree(discord.id, id);
     this.db
       .prepare(`UPDATE users SET discord_id = ?, discord_username = ?, discord_avatar = ?, ${touch} WHERE id = ?`)
       .run(discord?.id ?? null, discord?.username ?? null, discord?.avatar ?? null, id);
+    if (before.discord?.id !== discord?.id) this.changed(before.discord?.id, discord?.id);
     return this.get(id)!;
   }
 
@@ -152,6 +167,7 @@ export class UserService {
       throw badRequest('The panel must keep at least one active owner', 'last_owner');
     }
     this.db.prepare(`UPDATE users SET role = ?, disabled = ?, ${touch} WHERE id = ?`).run(role, disabled ? 1 : 0, id);
+    if (role !== user.role || disabled !== user.disabled) this.changed(user.discord?.id);
     return this.get(id)!;
   }
 
