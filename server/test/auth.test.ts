@@ -20,6 +20,19 @@ describe('first-run setup', () => {
     expect(ctx.services.users.count()).toBe(0);
   });
 
+  it('asks for the setup token when it is left blank', async () => {
+    for (const setupToken of [undefined, '', '  ']) {
+      const res = await api(ctx.app, {
+        method: 'POST',
+        url: '/api/v1/auth/setup',
+        payload: { setupToken, username: 'owner', password: PASSWORD },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toMatchObject({ code: 'setup_token_missing', message: 'Enter the setup token printed in the server log' });
+    }
+    expect(ctx.services.users.count()).toBe(0);
+  });
+
   it('creates the owner once and signs them in', async () => {
     const res = await api(ctx.app, {
       method: 'POST',
