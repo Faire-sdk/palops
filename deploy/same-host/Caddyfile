@@ -1,0 +1,6 @@
+# Caddy gets and renews the HTTPS certificate for your domain automatically.
+# The domain's DNS A/AAAA record must point at this machine, and ports 80 and 443 must be open.
+{$PALOPS_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}

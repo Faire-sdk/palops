@@ -1,0 +1,39 @@
+# PalOps on the same machine as the Palworld server (the recommended setup).
+# See docs/deploy-same-host.md. Quick start:
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d --build
+#
+# Both services use host networking, so the panel reaches the Palworld REST API
+# at http://127.0.0.1:8212 and the REST API port never leaves the machine.
+services:
+  palops:
+    build: ../..
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - palops-data:/data
+    env_file: .env
+    environment:
+      # Only Caddy (on this machine) talks to the app.
+      HOST: 127.0.0.1
+      PORT: "8080"
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      PALOPS_DOMAIN: ${PALOPS_DOMAIN}
+    depends_on:
+      - palops
+
+volumes:
+  palops-data:
+  caddy-data:
+  caddy-config:
