@@ -13,9 +13,9 @@ export class MockAdapter implements PalworldAdapter {
   private readonly banned = new Set<string>();
   readonly announcements: string[] = [];
   private players: PalworldPlayer[] = [
-    mockPlayer('Lamball Enjoyer', 'steam_76561190000000001', 32),
-    mockPlayer('Anubis', 'steam_76561190000000002', 47),
-    mockPlayer('CattivaFan', 'epic_0f3a9c2b1d', 12),
+    mockPlayer('Lamball Enjoyer', 'steam_76561190000000001', 32, 'Wool Gatherers'),
+    mockPlayer('Anubis', 'steam_76561190000000002', 47, 'Desert Kings'),
+    mockPlayer('CattivaFan', 'epic_0f3a9c2b1d', 12, null),
   ];
 
   async getInfo(): Promise<PalworldServerInfo> {
@@ -91,7 +91,7 @@ export class MockAdapter implements PalworldAdapter {
   }
 }
 
-function mockPlayer(name: string, userId: string, level: number): PalworldPlayer {
+function mockPlayer(name: string, userId: string, level: number, guild: string | null): PalworldPlayer {
   return {
     name,
     accountName: name.toLowerCase().replace(/\s+/g, ''),
@@ -102,5 +102,6 @@ function mockPlayer(name: string, userId: string, level: number): PalworldPlayer
     level,
     location: { x: 1000 * level, y: -500 * level },
     buildingCount: level * 3,
+    guild,
   };
 }

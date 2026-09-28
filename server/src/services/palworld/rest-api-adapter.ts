@@ -76,6 +76,7 @@ export class RestApiAdapter implements PalworldAdapter {
         level: num(raw.level),
         location: x !== null && y !== null ? { x, y } : null,
         buildingCount: num(raw.building_count),
+        guild: null,
       };
     });
   }

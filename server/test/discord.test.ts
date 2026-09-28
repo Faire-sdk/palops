@@ -80,7 +80,7 @@ describe('Discord OAuth2 flow', () => {
 
     const res = await discordFlow(ctx.app, { intent: 'setup', setupToken: 'test-setup-token-123' });
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toBe('/');
+    expect(res.headers.location).toBe('/panel');
     const me = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/me', cookie: sessionCookie(res) });
     expect(me.json().user).toMatchObject({ username: 'alice', role: 'owner', hasPassword: false, discord: { id: ALICE.id } });
     expect(ctx.services.setup.required).toBe(false);
@@ -89,7 +89,7 @@ describe('Discord OAuth2 flow', () => {
   it('signs in a user whose Discord account was added by an owner', async () => {
     await ctx.services.users.create({ username: 'alice_panel', role: 'moderator', discord: { id: ALICE.id, username: null, avatar: null } });
     const res = await discordFlow(ctx.app, { intent: 'login' });
-    expect(res.headers.location).toBe('/');
+    expect(res.headers.location).toBe('/panel');
     const me = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/me', cookie: sessionCookie(res) });
     // Name and avatar are refreshed from Discord on sign-in.
     expect(me.json().user).toMatchObject({ username: 'alice_panel', role: 'moderator', discord: { username: 'alice', avatar: 'abc' } });
@@ -97,7 +97,7 @@ describe('Discord OAuth2 flow', () => {
 
   it('refuses unknown Discord accounts and tells them their id', async () => {
     const res = await discordFlow(ctx.app, { intent: 'login' });
-    expect(res.headers.location).toBe(`/?auth_error=not_authorized&discord_id=${ALICE.id}`);
+    expect(res.headers.location).toBe(`/panel?auth_error=not_authorized&discord_id=${ALICE.id}`);
     expect(res.cookies.find((c) => c.name === 'palops_session')).toBeUndefined();
     expect(ctx.services.audit.list({ limit: 1, offset: 0 }).entries[0]).toMatchObject({ action: 'login_failed' });
   });
@@ -107,7 +107,7 @@ describe('Discord OAuth2 flow', () => {
     await ctx.services.users.create({ username: 'other_owner', role: 'owner', discord: { ...ALICE, id: '222222222222222222' } });
     ctx.services.users.update(user.id, { disabled: true });
     const res = await discordFlow(ctx.app, { intent: 'login' });
-    expect(res.headers.location).toBe('/?auth_error=not_authorized');
+    expect(res.headers.location).toBe('/panel?auth_error=not_authorized');
   });
 
   it('rejects a callback without the matching state cookie, and state is single-use', async () => {
@@ -116,14 +116,14 @@ describe('Discord OAuth2 flow', () => {
     const state = new URL(start.json().url).searchParams.get('state')!;
 
     const noCookie = await ctx.app.inject({ method: 'GET', url: `/api/v1/auth/discord/callback?code=good-code&state=${state}` });
-    expect(noCookie.headers.location).toBe('/?auth_error=invalid_state');
+    expect(noCookie.headers.location).toBe('/panel?auth_error=invalid_state');
 
     const forged = await ctx.app.inject({
       method: 'GET',
-      url: '/api/v1/auth/discord/callback?code=good-code&state=forged',
-      headers: { cookie: 'palops_oauth_state=forged' },
+      url: '/api/v1/auth/discord/callback?code=good-code&state=a.forged',
+      headers: { cookie: 'palops_oauth_state=a.forged' },
     });
-    expect(forged.headers.location).toBe('/?auth_error=invalid_state');
+    expect(forged.headers.location).toBe('/panel?auth_error=invalid_state');
 
     const again = await api(ctx.app, { method: 'POST', url: '/api/v1/auth/discord/authorize', payload: { intent: 'login' } });
     const goodState = new URL(again.json().url).searchParams.get('state')!;
@@ -133,9 +133,9 @@ describe('Discord OAuth2 flow', () => {
         url: `/api/v1/auth/discord/callback?code=good-code&state=${goodState}`,
         headers: { cookie: `palops_oauth_state=${goodState}` },
       });
-    expect((await callback()).headers.location).toBe('/');
+    expect((await callback()).headers.location).toBe('/panel');
     const replay = await callback();
-    expect(replay.headers.location).toBe('/?auth_error=invalid_state');
+    expect(replay.headers.location).toBe('/panel?auth_error=invalid_state');
   });
 
   it('handles the user cancelling on Discord and failed exchanges', async () => {
@@ -146,9 +146,9 @@ describe('Discord OAuth2 flow', () => {
       url: `/api/v1/auth/discord/callback?error=access_denied&state=${state}`,
       headers: { cookie: `palops_oauth_state=${state}` },
     });
-    expect(cancelled.headers.location).toBe('/?auth_error=cancelled');
+    expect(cancelled.headers.location).toBe('/panel?auth_error=cancelled');
     const badCode = await discordFlow(ctx.app, { intent: 'login' }, { code: 'bad' });
-    expect(badCode.headers.location).toBe('/?auth_error=discord_error');
+    expect(badCode.headers.location).toBe('/panel?auth_error=discord_error');
   });
 });
 
@@ -160,7 +160,7 @@ describe('linking Discord to an existing account', () => {
     expect((await api(ctx.app, { method: 'POST', url: '/api/v1/auth/discord/authorize', payload: { intent: 'link' } })).statusCode).toBe(401);
 
     const res = await discordFlow(ctx.app, { intent: 'link' }, { cookie });
-    expect(res.headers.location).toBe('/settings?tab=account&discord=linked');
+    expect(res.headers.location).toBe('/panel/settings?tab=account&discord=linked');
     expect(ctx.services.users.findForLogin('pat')!.discord?.id).toBe(ALICE.id);
 
     const unlink = await api(ctx.app, { method: 'POST', url: '/api/v1/auth/discord/unlink', cookie });
@@ -172,7 +172,7 @@ describe('linking Discord to an existing account', () => {
     await ctx.services.users.create({ username: 'alice_panel', role: 'viewer', discord: ALICE });
     const cookie = await loginAs(ctx.app, ctx.services, 'admin', 'pat');
     const res = await discordFlow(ctx.app, { intent: 'link' }, { cookie });
-    expect(res.headers.location).toBe('/settings?tab=account&auth_error=discord_in_use');
+    expect(res.headers.location).toBe('/panel/settings?tab=account&auth_error=discord_in_use');
   });
 
   it('refuses to unlink a Discord-only user', async () => {

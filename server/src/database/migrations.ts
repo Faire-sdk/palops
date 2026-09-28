@@ -108,4 +108,47 @@ export const migrations: Migration[] = [
       ALTER TABLE users_new RENAME TO users;
     `,
   },
+  {
+    id: 3,
+    name: 'players_and_site_accounts',
+    sql: `
+      -- Players the panel has seen on each server, recorded from the online
+      -- player list. Only what the panel needs, not a copy of the save file.
+      CREATE TABLE players (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        player_id TEXT,
+        name TEXT NOT NULL,
+        account_name TEXT,
+        level INTEGER,
+        guild TEXT,
+        first_seen_at TEXT NOT NULL DEFAULT ${now},
+        last_seen_at TEXT NOT NULL DEFAULT ${now},
+        UNIQUE (server_id, user_id)
+      );
+      CREATE INDEX players_name ON players(server_id, name COLLATE NOCASE);
+
+      -- Accounts for players on the public website (Discord sign-in). Kept
+      -- apart from panel users so a player login can never reach the panel.
+      CREATE TABLE site_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        discord_id TEXT NOT NULL UNIQUE,
+        discord_username TEXT,
+        discord_avatar TEXT,
+        player_id INTEGER UNIQUE REFERENCES players(id) ON DELETE SET NULL,
+        player_verified INTEGER NOT NULL DEFAULT 0,
+        linked_at TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        last_login_at TEXT
+      );
+
+      CREATE TABLE site_sessions (
+        id TEXT PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES site_accounts(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        expires_at TEXT NOT NULL
+      );
+    `,
+  },
 ];

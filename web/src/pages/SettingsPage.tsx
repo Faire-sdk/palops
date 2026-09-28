@@ -321,7 +321,7 @@ function UserSettings() {
   const issueReset = async (user: User) => {
     try {
       const { token } = await api.post<{ token: string }>(`/users/${user.id}/password-reset`);
-      setResetLink(`${window.location.origin}/reset-password?token=${encodeURIComponent(token)}`);
+      setResetLink(`${window.location.origin}/panel/reset-password?token=${encodeURIComponent(token)}`);
     } catch (err) {
       notify(errorMessage(err), 'error');
     }

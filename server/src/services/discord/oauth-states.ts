@@ -6,7 +6,9 @@ const TTL_MS = 10 * 60 * 1000;
 export type OAuthIntent =
   | { kind: 'login' }
   | { kind: 'setup'; setupToken: string }
-  | { kind: 'link'; userId: number };
+  | { kind: 'link'; userId: number }
+  /** A player signing in to the public website, not the panel. */
+  | { kind: 'player' };
 
 /**
  * Single-use OAuth `state` values, kept server side so the callback can only
@@ -18,7 +20,8 @@ export class OAuthStateStore {
   create(intent: OAuthIntent): string {
     const now = Date.now();
     for (const [key, entry] of this.states) if (entry.expiresAt <= now) this.states.delete(key);
-    const state = randomToken();
+    // The prefix only picks where to send an error before the state is verified.
+    const state = `${intent.kind === 'player' ? 'p' : 'a'}.${randomToken()}`;
     this.states.set(state, { intent, expiresAt: now + TTL_MS });
     return state;
   }

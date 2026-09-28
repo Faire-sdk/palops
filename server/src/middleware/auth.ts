@@ -6,6 +6,8 @@ import type { SessionUser } from '../services/authentication/sessions.js';
 import { forbidden, unauthorized } from '../utils/errors.js';
 
 export const SESSION_COOKIE = 'palops_session';
+/** Public-website player session. Separate from panel sessions by design. */
+export const PLAYER_COOKIE = 'palops_player';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -18,6 +20,16 @@ export function setSessionCookie(reply: FastifyReply, services: Services, token:
     path: '/',
     httpOnly: true,
     sameSite: 'strict',
+    secure: services.config.cookieSecure,
+    maxAge: Math.floor(services.config.sessionMaxMs / 1000),
+  });
+}
+
+export function setPlayerCookie(reply: FastifyReply, services: Services, token: string) {
+  reply.setCookie(PLAYER_COOKIE, token, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
     secure: services.config.cookieSecure,
     maxAge: Math.floor(services.config.sessionMaxMs / 1000),
   });

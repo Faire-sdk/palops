@@ -14,8 +14,19 @@ const db = openDatabase(config.databasePath);
 const services = createServices(config, db);
 const app = await buildApp(services);
 
-const pruneTimer = setInterval(() => services.sessions.pruneExpired(), 60 * 60 * 1000);
+const pruneTimer = setInterval(() => {
+  services.sessions.pruneExpired();
+  services.siteAccounts.pruneExpired();
+}, 60 * 60 * 1000);
 pruneTimer.unref();
+
+// Record who is online once a minute so known players, first/last seen and
+// levels stay current even when nobody has the panel open.
+const playerTimer = setInterval(() => {
+  if (!services.servers.getPrimary()) return;
+  services.players.refreshOnline().catch(() => services.players.markAllOffline());
+}, 60 * 1000);
+playerTimer.unref();
 
 await app.listen({ host: config.host, port: config.port });
 

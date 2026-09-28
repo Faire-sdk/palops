@@ -32,6 +32,8 @@ export interface PalworldPlayer {
   level: number | null;
   location: { x: number; y: number } | null;
   buildingCount: number | null;
+  /** Guild name, when the connection method reports it (the official REST API does not). */
+  guild: string | null;
 }
 
 export type PalworldSettings = Record<string, string | number | boolean>;

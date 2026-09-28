@@ -18,3 +18,15 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production image (same one Railway builds)
+        run: docker build -t palops .
+      - name: Start it and check health
+        run: |
+          docker run -d --name palops -p 8080:8080 -e PANEL_SECRET=$(openssl rand -hex 32) palops
+          for i in $(seq 1 30); do curl -fsS localhost:8080/api/health && exit 0; sleep 1; done
+          docker logs palops; exit 1

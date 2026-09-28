@@ -1,21 +1,22 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import type { Permission } from './api/types';
-import { useAuth } from './auth/AuthContext';
-import { Layout } from './components/Layout';
-import { EmptyState, Loading } from './components/ui';
-import { LoginPage, ResetPasswordPage, SetupPage } from './pages/AuthPages';
-import { ComingSoonPage } from './pages/ComingSoonPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { LogsPage } from './pages/LogsPage';
-import { PlayersPage } from './pages/PlayersPage';
-import { SettingsPage } from './pages/SettingsPage';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import type { Permission } from '../api/types';
+import { AuthProvider, useAuth } from '../auth/AuthContext';
+import { ToastProvider } from '../components/Toast';
+import { Layout } from '../components/Layout';
+import { EmptyState, Loading } from '../components/ui';
+import { LoginPage, ResetPasswordPage, SetupPage } from '../pages/AuthPages';
+import { ComingSoonPage } from '../pages/ComingSoonPage';
+import { DashboardPage } from '../pages/DashboardPage';
+import { LogsPage } from '../pages/LogsPage';
+import { PlayersPage } from '../pages/PlayersPage';
+import { SettingsPage } from '../pages/SettingsPage';
 
 function Guard({ permission, children }: { permission: Permission; children: React.ReactNode }) {
   const { can } = useAuth();
   return can(permission) ? <>{children}</> : <EmptyState icon="alert" title="You don’t have access to this page" />;
 }
 
-export function App() {
+function PanelRoutes() {
   const { session, loading, options } = useAuth();
 
   if (loading) return <Loading label="Starting PalOps…" />;
@@ -51,5 +52,18 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+  );
+}
+
+/** The staff panel, served under /panel. */
+export default function PanelApp() {
+  return (
+    <BrowserRouter basename="/panel">
+      <ToastProvider>
+        <AuthProvider>
+          <PanelRoutes />
+        </AuthProvider>
+      </ToastProvider>
+    </BrowserRouter>
   );
 }

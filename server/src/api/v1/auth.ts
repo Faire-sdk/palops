@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { actorOf, authenticate, clearSessionCookie, SESSION_COOKIE, setSessionCookie } from '../../middleware/auth.js';
+import { actorOf, authenticate, clearSessionCookie, SESSION_COOKIE, setPlayerCookie, setSessionCookie } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
 import { getDummyHash, passwordProblem, verifyPassword } from '../../services/authentication/passwords.js';
 import { permissionsFor } from '../../services/authentication/permissions.js';
@@ -13,6 +13,9 @@ import { RateLimiter } from '../../utils/rate-limiter.js';
 import { parse } from '../../utils/validation.js';
 
 const OAUTH_COOKIE = 'palops_oauth_state';
+/** Where the admin panel and the public site's account page live in the web app. */
+const PANEL = '/panel';
+const SITE_ACCOUNT = '/account';
 const OAUTH_COOKIE_PATH = '/api/v1/auth/discord';
 
 const credentials = z.object({
@@ -165,7 +168,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
     if (!discord) throw forbidden('Discord sign-in is not configured on this panel');
     if (!perIp.consume(`discord:${request.ip}`)) throw tooManyRequests();
     const body = parse(
-      z.object({ intent: z.enum(['login', 'setup', 'link']), setupToken: z.string().min(1).max(256).optional() }),
+      z.object({ intent: z.enum(['login', 'setup', 'link', 'player']), setupToken: z.string().min(1).max(256).optional() }),
       request.body,
     );
 
@@ -176,6 +179,8 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
     } else if (body.intent === 'link') {
       await authenticate(services).call(app, request, reply);
       intent = { kind: 'link', userId: request.user!.userId };
+    } else if (body.intent === 'player') {
+      intent = { kind: 'player' };
     } else {
       intent = { kind: 'login' };
     }
@@ -200,13 +205,13 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
     const cookieState = request.cookies[OAUTH_COOKIE];
     reply.clearCookie(OAUTH_COOKIE, { path: OAUTH_COOKIE_PATH });
 
-    const fail = (code: string, where = '/', extra: Record<string, string> = {}) =>
+    const fail = (code: string, where = PANEL, extra: Record<string, string> = {}) =>
       reply.redirect(`${where}${where.includes('?') ? '&' : '?'}${new URLSearchParams({ auth_error: code, ...extra })}`);
 
     const intent =
       query.state && cookieState && safeEqual(query.state, cookieState) ? services.oauthStates.consume(query.state) : undefined;
-    if (!intent || !services.discordOAuth) return fail('invalid_state');
-    const back = intent.kind === 'link' ? '/settings?tab=account' : '/';
+    if (!intent || !services.discordOAuth) return fail('invalid_state', query.state?.startsWith('p.') ? SITE_ACCOUNT : PANEL);
+    const back = intent.kind === 'link' ? `${PANEL}/settings?tab=account` : intent.kind === 'player' ? SITE_ACCOUNT : PANEL;
     if (query.error || !query.code) return fail(query.error === 'access_denied' ? 'cancelled' : 'discord_error', back);
 
     let account: DiscordAccount;
@@ -227,11 +232,11 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
               { category: 'auth', action: 'login_failed', target: account.username ?? account.id, details: { method: 'discord', discordId: account.id } },
             );
             // The Discord id is shown so the person can send it to an owner to be added.
-            return fail('not_authorized', '/', user ? {} : { discord_id: account.id });
+            return fail('not_authorized', PANEL, user ? {} : { discord_id: account.id });
           }
           const refreshed = services.users.setDiscord(user.id, account);
           startSession(request, reply, refreshed, 'discord');
-          return reply.redirect('/');
+          return reply.redirect(PANEL);
         }
         case 'setup': {
           const pending = services.setup.pendingToken;
@@ -247,7 +252,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
             { category: 'auth', action: 'setup_completed', target: user.username, details: { method: 'discord' } },
           );
           startSession(request, reply, user, 'discord');
-          return reply.redirect('/');
+          return reply.redirect(PANEL);
         }
         case 'link': {
           const user = services.users.get(intent.userId);
@@ -258,6 +263,11 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
             { category: 'auth', action: 'discord_linked', details: { discordId: account.id, discordUsername: account.username } },
           );
           return reply.redirect(`${back}&discord=linked`);
+        }
+        case 'player': {
+          const player = services.siteAccounts.signIn(account);
+          setPlayerCookie(reply, services, services.siteAccounts.createSession(player.id));
+          return reply.redirect(SITE_ACCOUNT);
         }
       }
     } catch (err) {

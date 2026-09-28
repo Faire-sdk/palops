@@ -8,7 +8,7 @@ Tracks progress against the development priority order in the project roadmap.
 | 2 | Authentication & roles | Done: Discord OAuth2 as main sign-in (owners add users by Discord ID), optional password sign-in, first-run owner setup, sessions, owner-issued reset links, 4 roles enforced server-side, user management |
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
 | 4 | Dashboard | Basic: status, info, player count, FPS/frame time, broadcast. Host CPU/RAM pending |
-| 5 | Player management | Started: online player list with search. Known-player history, profiles, kick/ban UI and moderation records next |
+| 5 | Player management | Started: online player list with search, known players recorded with first/last seen, level and guild. Profiles, kick/ban UI and moderation records next |
 | 6 | Console | Not started |
 | 7 | Configuration | Not started |
 | 8 | Logs | Started: audit log with category filter and pagination |
@@ -17,7 +17,12 @@ Tracks progress against the development priority order in the project roadmap.
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
 | 12 | Security hardening | Baseline in place (see README) |
 | 13 | Testing | Server tests for auth, permissions, CSRF, validation and the Palworld adapter |
-| 14 | Deployment | Single-process production build and health check. Docker next |
+| 14 | Deployment | Dockerfile, Railway config and guide ([deploy-railway.md](deploy-railway.md)), health check |
+
+## Public website (extra)
+
+Public server site at `/` with Discord player sign-in and character profiles (level, guild, first/last seen).
+Character links are unverified for now; verification needs staff review or an in-game code via a server plugin.
 
 ## Discord bot (planned)
 

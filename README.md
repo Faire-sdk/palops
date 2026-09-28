@@ -1,6 +1,13 @@
 # PalOps
 
-A simple, secure web panel for managing a Palworld dedicated server from the browser.
+A simple, secure web panel for managing a Palworld dedicated server from the browser, plus a public website for
+the server where players sign in with Discord and see their character.
+
+| Path | What |
+| --- | --- |
+| `/` | Public server website: status, how to join, who's online, player sign-in and profile |
+| `/panel` | Staff panel (Discord sign-in, roles) |
+| `/api/v1` | JSON API. `/api/v1/public/*` is open (CORS) for embedding status on an existing site |
 
 > **Status:** early MVP. Foundation, authentication/roles and the server connection layer are in place.
 > Player moderation, console, configuration editing, lifecycle controls and backups are next.
@@ -27,7 +34,7 @@ npm install
 npm run dev
 ```
 
-- Web UI: http://localhost:5173 (proxies `/api` to the server)
+- Website: http://localhost:5173, staff panel: http://localhost:5173/panel (Vite proxies `/api` to the server)
 - API: http://localhost:8080
 
 On first start the server logs a **setup token**. Open the UI, enter the token and create the owner account
@@ -36,6 +43,17 @@ Then go to **Settings → Server connection** and either point it at your Palwor
 **Mock server** to explore the panel without one.
 
 ## Production
+
+**Railway:** see [docs/deploy-railway.md](docs/deploy-railway.md). The repo includes a `Dockerfile` and `railway.json`.
+
+**Docker anywhere:**
+
+```bash
+docker build -t palops .
+docker run -d -p 8080:8080 -v palops-data:/data -e PANEL_SECRET=$(openssl rand -hex 32) -e TRUST_PROXY=true -e COOKIE_SECURE=true palops
+```
+
+**Plain Node:**
 
 ```bash
 npm ci
@@ -67,6 +85,23 @@ second option (useful as a fallback if Discord is down).
 
 Linking panel users to Discord ids is also the groundwork for a Discord bot: bot commands can map the Discord user
 to a panel user and check the same role permissions. Discord code lives in `server/src/services/discord/`.
+
+## Public website
+
+The website at `/` is meant to be the server's main site. It shows server status, the join address, who's online
+(name, level and guild) and the rules. Players sign in with Discord and link their character by in-game name or
+platform ID to see their level, guild, first/last seen and online status.
+
+- Player accounts are separate from staff accounts: signing in on the website never grants panel access, and any
+  Discord user can create one.
+- Character links are self-service and marked **unverified** for now. Staff verification, or an in-game code through
+  a server plugin, can be added later.
+- The panel records every player it sees online once a minute (`players` table), so profiles keep working when the
+  player is offline. The official REST API doesn't report guilds; guild names show up once a connection method that
+  provides them is added (the mock server includes them).
+- Edit the rules and texts in `web/src/site/HomePage.tsx`. Configure the join address, Discord invite and player list
+  with the `SITE_*` variables in `.env.example`.
+- To show live status on a different website, fetch `GET /api/v1/public/server` and `GET /api/v1/public/players`.
 
 ## Connecting to Palworld
 
@@ -101,6 +136,8 @@ server/
       servers/         Stored server connections (credentials encrypted at rest)
       authentication/  Users, sessions, passwords, roles & permissions, password resets
       discord/         Discord OAuth2 (and later the Discord bot)
+      players/         Players seen on the server (first/last seen, level, guild)
+      site/            Public-website player accounts and sessions
       audit/           Append-only audit log
     database/          SQLite connection and migrations
     middleware/        Authentication, permission checks, CSRF and security headers
@@ -111,7 +148,9 @@ web/
     api/               Typed API client
     auth/              Session context
     components/        Layout, cards, tables, modals, toasts, form fields
-    pages/
+    panel/             Staff panel app (served at /panel)
+    site/              Public website app (served at /)
+    pages/             Panel pages
 docs/
 ```
 
@@ -143,6 +182,9 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/server/connection/test` | `server.connection` |
 | GET | `/players` | `players.view` (online players) |
 | GET | `/logs/audit` | `audit.view` |
+| GET | `/public/server`, `/public/players` | public, CORS open, no IPs or platform IDs |
+| GET | `/site/me` | player signed in on the website |
+| POST | `/site/link`, `/site/unlink`, `/site/logout` | player signed in on the website |
 | GET | `/api/health` | public (unversioned) |
 
 ## Security notes

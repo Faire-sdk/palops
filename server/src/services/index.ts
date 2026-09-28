@@ -8,6 +8,8 @@ import { UserService } from './authentication/users.js';
 import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
 import { PalworldService } from './palworld/index.js';
+import { PlayerDirectory } from './players/player-directory.js';
+import { SiteAccountService } from './site/site-accounts.js';
 import { ServerRegistry } from './servers/server-registry.js';
 
 export interface Services {
@@ -23,6 +25,8 @@ export interface Services {
   /** Null when Discord sign-in isn't configured. */
   discordOAuth: DiscordOAuthProvider | null;
   oauthStates: OAuthStateStore;
+  players: PlayerDirectory;
+  siteAccounts: SiteAccountService;
 }
 
 /**
@@ -57,6 +61,7 @@ export class SetupGate {
 export function createServices(config: Config, db: DB): Services {
   const users = new UserService(db);
   const servers = new ServerRegistry(db, new SecretBox(config.secret, 'server-credentials'));
+  const palworld = new PalworldService(servers);
   return {
     config,
     db,
@@ -65,9 +70,11 @@ export function createServices(config: Config, db: DB): Services {
     passwordResets: new PasswordResetService(db),
     audit: new AuditLog(db),
     servers,
-    palworld: new PalworldService(servers),
+    palworld,
     setup: new SetupGate(users, config.setupToken),
     discordOAuth: config.discord ? new DiscordOAuthClient(config.discord) : null,
     oauthStates: new OAuthStateStore(),
+    players: new PlayerDirectory(db, palworld, servers),
+    siteAccounts: new SiteAccountService(db, config.sessionMaxMs),
   };
 }

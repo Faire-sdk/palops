@@ -23,6 +23,9 @@ const envSchema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   DISCORD_REDIRECT_URI: z.url().optional(),
   AUTH_PASSWORD_LOGIN: booleanString.optional(),
+  SITE_JOIN_ADDRESS: z.string().max(200).optional(),
+  SITE_DISCORD_INVITE: z.url().optional(),
+  SITE_SHOW_ONLINE_PLAYERS: booleanString.default(true),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -44,6 +47,8 @@ export interface Config {
   discord: { clientId: string; clientSecret: string; redirectUri: string } | null;
   /** Whether username/password sign-in is offered. */
   passwordLogin: boolean;
+  /** Public website settings. */
+  site: { joinAddress: string | null; discordInvite: string | null; showOnlinePlayers: boolean };
 }
 
 function resolveDiscord(env: z.infer<typeof envSchema>): Config['discord'] {
@@ -101,5 +106,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     logLevel: env.LOG_LEVEL,
     discord,
     passwordLogin,
+    site: {
+      joinAddress: env.SITE_JOIN_ADDRESS ?? null,
+      discordInvite: env.SITE_DISCORD_INVITE ?? null,
+      showOnlinePlayers: env.SITE_SHOW_ONLINE_PLAYERS,
+    },
   };
 }
