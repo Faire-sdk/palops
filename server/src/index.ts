@@ -22,6 +22,7 @@ if (config.devMockServer && !services.servers.getPrimary()) {
 const pruneTimer = setInterval(() => {
   services.sessions.pruneExpired();
   services.siteAccounts.pruneExpired();
+  services.world.prune();
 }, 60 * 60 * 1000);
 pruneTimer.unref();
 
@@ -32,6 +33,14 @@ const playerTimer = setInterval(() => {
   services.players.refreshOnline().catch(() => services.players.markAllOffline());
 }, 60 * 1000);
 playerTimer.unref();
+
+// World snapshot: guilds, bases, the live map, cheat signals and lag hotspots.
+if (config.worldPollSeconds > 0) {
+  const worldTimer = setInterval(() => {
+    if (services.servers.getPrimary()) services.world.poll().catch((err) => app.log.warn({ err }, 'World snapshot failed'));
+  }, config.worldPollSeconds * 1000);
+  worldTimer.unref();
+}
 
 await app.listen({ host: config.host, port: config.port });
 

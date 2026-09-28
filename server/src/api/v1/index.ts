@@ -8,6 +8,7 @@ import publicRoutes from './public.js';
 import serverRoutes from './server.js';
 import siteRoutes from './site.js';
 import userRoutes from './users.js';
+import worldRoutes from './world.js';
 
 export default async function v1(app: FastifyInstance, opts: { services: Services }) {
   await app.register(authRoutes, { ...opts, prefix: '/auth' });
@@ -15,6 +16,7 @@ export default async function v1(app: FastifyInstance, opts: { services: Service
   await app.register(serverRoutes, { ...opts, prefix: '/server' });
   await app.register(playerRoutes, { ...opts, prefix: '/players' });
   await app.register(configRoutes, { ...opts, prefix: '/config' });
+  await app.register(worldRoutes, { ...opts, prefix: '/world' });
   await app.register(logRoutes, { ...opts, prefix: '/logs' });
   await app.register(publicRoutes, { ...opts, prefix: '/public' });
   await app.register(siteRoutes, { ...opts, prefix: '/site' });

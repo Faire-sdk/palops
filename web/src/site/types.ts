@@ -19,6 +19,13 @@ export interface PublicPlayer {
   guild: string | null;
 }
 
+export interface PublicGuild {
+  name: string;
+  members: number;
+  online: number;
+  bases: number;
+}
+
 export interface Character {
   name: string;
   level: number | null;

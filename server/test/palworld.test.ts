@@ -9,6 +9,7 @@ import { api, createTestApp, loginAs } from './helpers.js';
 let fake: Server;
 let port: number;
 const received: Array<{ url: string; body: string }> = [];
+let gameDataEnabled = true;
 
 beforeAll(async () => {
   fake = createServer((req, res) => {
@@ -33,6 +34,20 @@ beforeAll(async () => {
               { name: 'Zoe', accountName: 'zoe', playerId: 'P1', userId: 'steam_1', ip: '10.0.0.2', ping: 30.5, location_x: 1, location_y: 2, level: 9, building_count: 4 },
             ],
           });
+        case '/v1/api/game-data':
+          if (!gameDataEnabled) return res.writeHead(404).end();
+          return json({
+            Time: '2026-09-28 12:00:00',
+            FPS: 55.5,
+            AverageFPS: 57,
+            ActorData: [
+              { Type: 'Character', InstanceID: 'A1', UnitType: 'Player', NickName: 'Zoe', userid: 'steam_1', ip: '10.0.0.2', level: 9, HP: 400, MaxHP: 500, GuildID: 'G1', GuildName: 'Zoe Co', LocationX: 10, LocationY: 20, LocationZ: 30 },
+              { Type: 'Character', InstanceID: 'A2', UnitType: 'OtomoPal', NickName: '', TrainerInstanceID: 'A1', Class: 'PinkCat', level: 5, LocationX: 11, LocationY: 21, LocationZ: 30 },
+              { Type: 'Character', InstanceID: 'A3', UnitType: 'Mystery', LocationX: 0, LocationY: 0, LocationZ: 0 },
+              { Type: 'Character', InstanceID: 'A4', UnitType: 'WildPal' },
+              { Type: 'PalBox', GuildID: 'G1', GuildName: 'Zoe Co', LocationX: 100, LocationY: 200, LocationZ: 0 },
+            ],
+          });
         default:
           return res.writeHead(200).end('OK');
       }
@@ -53,6 +68,19 @@ describe('RestApiAdapter', () => {
     expect(metrics).toMatchObject({ fps: 60, currentPlayers: 1, maxPlayers: 32, uptimeSeconds: 120, inGameDays: 3, baseCampCount: null });
     const [player] = await adapter().getPlayers();
     expect(player).toMatchObject({ name: 'Zoe', userId: 'steam_1', level: 9, location: { x: 1, y: 2 } });
+  });
+
+  it('reads the world snapshot, skipping actors without a position', async () => {
+    const world = await adapter().getWorld();
+    expect(world).toMatchObject({ serverTime: '2026-09-28 12:00:00', fps: 55.5, averageFps: 57 });
+    expect(world.characters.map((c) => c.unitType)).toEqual(['Player', 'OtomoPal', 'Other']);
+    expect(world.characters[0]).toMatchObject({ userId: 'steam_1', guildId: 'G1', guildName: 'Zoe Co', location: { x: 10, y: 20, z: 30 } });
+    expect(world.characters[1]).toMatchObject({ trainerInstanceId: 'A1', className: 'PinkCat', guildId: null });
+    expect(world.palBoxes).toEqual([{ guildId: 'G1', guildName: 'Zoe Co', location: { x: 100, y: 200, z: 0 } }]);
+
+    gameDataEnabled = false;
+    await expect(adapter().getWorld()).rejects.toMatchObject({ code: 'unsupported' });
+    gameDataEnabled = true;
   });
 
   it('sends actions as JSON and accepts plain-text replies', async () => {

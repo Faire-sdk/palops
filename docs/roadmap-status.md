@@ -16,13 +16,26 @@ Tracks progress against the development priority order in the project roadmap.
 | 10 | Backups | Not started |
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
 | 12 | Security hardening | Baseline in place (see README) |
-| 13 | Testing | Server tests for auth, permissions, CSRF, validation and the Palworld adapter |
+| 13 | Testing | Server tests for auth, permissions, CSRF, validation, moderation, world data and the Palworld adapter |
 | 14 | Deployment | Dockerfile, same-machine Compose + Caddy setup ([deploy-same-host.md](deploy-same-host.md), recommended), Railway config and guide ([deploy-railway.md](deploy-railway.md)), comparison ([deployment.md](deployment.md)), health check |
 
 ## Public website (extra)
 
 Public server site at `/` with Discord player sign-in and character profiles (level, guild, first/last seen).
 Character links are unverified for now; verification needs staff review or an in-game code via a server plugin.
+
+## World data (extra)
+
+From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 seconds:
+
+- Guilds with members and bases, also filling in guilds on player lists, profiles and the public site.
+- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates. There's no terrain image, since the game's map art isn't ours to ship.
+- Bases with their worker pals, levels and HP, and injured workers flagged.
+- Pals seen with each player, kept for 30 days.
+- Cheat signals: unusual movement, level jumps and players sharing an address, with dismissal recorded in the audit log.
+- Lag hotspots: FPS over time and the busiest 500 m areas, kept for 7 days.
+
+Planned next: base intrusion alerts in the panel (for PvP servers).
 
 ## Discord bot (planned)
 

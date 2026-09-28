@@ -171,4 +171,80 @@ export const migrations: Migration[] = [
       CREATE INDEX moderation_player ON moderation_actions(server_id, player_user_id, id);
     `,
   },
+  {
+    id: 5,
+    name: 'world_data',
+    sql: `
+      -- Filled from the REST API's world snapshot (game-data endpoint).
+      ALTER TABLE players ADD COLUMN guild_id TEXT;
+
+      CREATE TABLE guilds (
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        guild_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL DEFAULT ${now},
+        last_seen_at TEXT NOT NULL DEFAULT ${now},
+        PRIMARY KEY (server_id, guild_id)
+      );
+
+      -- Pal Boxes. The cell (position rounded to 5 m) keeps small float
+      -- differences between snapshots from creating duplicates.
+      CREATE TABLE bases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        guild_id TEXT NOT NULL,
+        cell TEXT NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        z REAL NOT NULL,
+        first_seen_at TEXT NOT NULL DEFAULT ${now},
+        last_seen_at TEXT NOT NULL DEFAULT ${now},
+        UNIQUE (server_id, guild_id, cell)
+      );
+
+      -- Pals seen with an owner, so a profile can list them while the player is offline.
+      CREATE TABLE world_pals (
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        instance_id TEXT NOT NULL,
+        owner_user_id TEXT NOT NULL,
+        class_name TEXT,
+        nickname TEXT,
+        level INTEGER,
+        unit_type TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL DEFAULT ${now},
+        PRIMARY KEY (server_id, instance_id)
+      );
+      CREATE INDEX world_pals_owner ON world_pals(server_id, owner_user_id);
+
+      -- Things worth a staff member's look: unusual movement, level jumps, shared addresses.
+      CREATE TABLE player_signals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        player_name TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('movement', 'level', 'shared_ip')),
+        summary TEXT NOT NULL,
+        dedupe_key TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        dismissed_at TEXT,
+        dismissed_by TEXT
+      );
+      CREATE INDEX player_signals_open ON player_signals(server_id, dismissed_at, id);
+      CREATE INDEX player_signals_player ON player_signals(server_id, user_id, id);
+      CREATE INDEX player_signals_dedupe ON player_signals(server_id, dedupe_key, created_at);
+
+      -- One row per snapshot: server FPS and the busiest map areas at that moment.
+      CREATE TABLE world_perf (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        taken_at TEXT NOT NULL,
+        fps REAL,
+        actors INTEGER NOT NULL,
+        players INTEGER NOT NULL,
+        cells TEXT NOT NULL
+      );
+      CREATE INDEX world_perf_time ON world_perf(server_id, taken_at);
+    `,
+  },
 ];

@@ -14,6 +14,7 @@ import { LogsPage } from '../pages/LogsPage';
 import { PlayersPage } from '../pages/PlayersPage';
 import { ServerPage } from '../pages/ServerPage';
 import { SettingsPage } from '../pages/SettingsPage';
+import { WorldPage } from '../pages/WorldPage';
 
 function Guard({ permission, children }: { permission: Permission; children: React.ReactNode }) {
   const { can } = useAuth();
@@ -39,6 +40,7 @@ function PanelRoutes() {
       <Route element={<Layout />}>
         <Route index element={<Guard permission="server.view"><DashboardPage /></Guard>} />
         <Route path="players" element={<Guard permission="players.view"><PlayersPage /></Guard>} />
+        <Route path="world" element={<Guard permission="players.view"><WorldPage /></Guard>} />
         <Route
           path="console"
           element={<Guard permission="console.view"><ComingSoonPage title="Console" icon={TerminalIcon} description="The Palworld REST API has no console. Commands will come with RCON support or PalOps running on the game machine." /></Guard>}

@@ -1,7 +1,7 @@
 import type { AdapterKind, ServerConnection, ServerRegistry } from '../servers/server-registry.js';
 import { MockAdapter } from './mock-adapter.js';
 import { RestApiAdapter } from './rest-api-adapter.js';
-import type { PalworldAdapter, PalworldMetrics, PalworldPlayer, PalworldServerInfo, PalworldSettings } from './types.js';
+import type { PalworldAdapter, PalworldMetrics, PalworldPlayer, PalworldServerInfo, PalworldSettings, WorldSnapshot } from './types.js';
 import { PalworldError } from './types.js';
 
 export type ServerState = 'online' | 'offline' | 'error' | 'unconfigured';
@@ -85,6 +85,12 @@ export class PalworldService {
 
   async getPlayers(): Promise<PalworldPlayer[]> {
     return this.adapter().getPlayers();
+  }
+
+  async getWorld(): Promise<WorldSnapshot> {
+    const adapter = this.adapter();
+    if (!adapter.getWorld) throw new PalworldError('unsupported', 'This connection method has no world data');
+    return adapter.getWorld();
   }
 
   async announce(message: string): Promise<void> {

@@ -204,6 +204,22 @@ Sign in as the owner or an admin, open **Settings → Server connection** and fi
 Click **Test connection**, then **Save**. The header badge turns green and the dashboard, players page and public website start showing live data.
 The password is stored encrypted with `PANEL_SECRET`; if you change that secret, enter the password again.
 
+### 4. Turn on world data (optional)
+
+Guilds, bases, the live map, pals, cheat signals and lag hotspots come from the REST API's world snapshot
+(`GET /v1/api/game-data`). The server only offers it when started with the `-enable-gamedata-api` launch flag:
+
+- **Linux:** `./PalServer.sh -enable-gamedata-api`. With systemd, add the flag to the `ExecStart=` line, then run
+  `sudo systemctl daemon-reload && sudo systemctl restart palworld`.
+- **Windows:** add `-enable-gamedata-api` to the `PalServer.exe` launch arguments: in the Steam client under
+  Properties → Launch options, or at the end of the shortcut's Target, or in your start script.
+
+PalOps reads a snapshot every 20 seconds (`WORLD_POLL_SECONDS`, `0` turns it off). Without the flag everything else
+keeps working, and the **World** page explains how to switch it on.
+
+Positions and IP addresses from the snapshot are staff-only. The public website shows guild names with member and base
+counts, and only when `SITE_SHOW_ONLINE_PLAYERS` is on.
+
 ### What PalOps uses the API for
 
 | Endpoint | Used for |
@@ -215,8 +231,8 @@ The password is stored encrypted with `PANEL_SECRET`; if you change that secret,
 | `POST /v1/api/kick`, `/ban`, `/unban` | Moderation on the **Players** page, with the reason shown to the player and kept in their history |
 | `POST /v1/api/save`, `/shutdown`, `/stop` | **Server** page: save now, shutdown with a countdown and message, force stop |
 | `GET /v1/api/settings` | **Configuration** page (read-only view of the running settings) |
+| `GET /v1/api/game-data` | **World** page and profiles: guilds, bases and their worker pals, each player's pals, the live map, cheat signals and lag hotspots (needs `-enable-gamedata-api`) |
 
-`GET /v1/api/game-data` (the world actor snapshot, which needs the `-enable-gamedata-api` launch flag) isn't used yet.
 The REST API can't start a stopped server, change settings, list bans made elsewhere, or give console or log access; those need PalOps on the game machine
 (see [docs/deployment.md](docs/deployment.md)).
 
@@ -235,6 +251,7 @@ The REST API can't start a stopped server, change settings, list bans made elsew
 | Could not reach the server | `RESTAPIEnabled=True`, the server restarted after the edit, the host and port are right, and the firewall allows PalOps' machine |
 | The server did not respond in time | The server is still starting, or a firewall is silently dropping the port (5 second timeout) |
 | The server rejected the admin credentials | The password doesn't match `AdminPassword`, or the username isn't `admin` |
+| World page says world data is switched off | Start the server with `-enable-gamedata-api` (see step 4) |
 | The server returned HTTP 404 | The port belongs to something else, or the Palworld server is too old to have the REST API (update it) |
 
 To try the panel without a server, choose **Mock server** as the connection type (or run `npm run dev`, which connects it for you).
@@ -244,7 +261,9 @@ To try the panel without a server, choose **Mock server** as the connection type
 | Permission | Owner | Admin | Moderator | Viewer |
 | --- | :-: | :-: | :-: | :-: |
 | View dashboard, server info, online players | ✓ | ✓ | ✓ | ✓ |
+| Guilds and their members | ✓ | ✓ | ✓ | ✓ |
 | Kick players, add moderation notes | ✓ | ✓ | ✓ | |
+| World map, bases, performance, cheat signals | ✓ | ✓ | ✓ | |
 | Ban/unban, console, broadcast, server control, config, logs, backups | ✓ | ✓ | | |
 | Server connection settings, manage panel users | ✓ | | | |
 
@@ -314,8 +333,12 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/players/:userId/notes` | `players.note` |
 | POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
 | GET | `/config` | `config.view` (live settings from the REST API) |
+| GET | `/world/status`, `/world/guilds`, `/world/guilds/:guildId` | `players.view` (world data state, guilds and their members) |
+| GET | `/world/map`, `/world/bases`, `/world/signals`, `/world/performance` | `world.view` (positions, bases, cheat signals, FPS and hotspots) |
+| POST | `/world/refresh` | `world.view` (read a snapshot now) |
+| POST | `/world/signals/:id/dismiss` | `players.note` |
 | GET | `/logs/audit` | `audit.view` |
-| GET | `/public/server`, `/public/players` | public, CORS open, no IPs or platform IDs |
+| GET | `/public/server`, `/public/players`, `/public/guilds` | public, CORS open, no IPs, platform IDs or positions |
 | GET | `/site/me` | player signed in on the website |
 | POST | `/site/link`, `/site/unlink`, `/site/logout` | player signed in on the website |
 | GET | `/api/health` | public (unversioned) |

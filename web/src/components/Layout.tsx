@@ -2,6 +2,7 @@ import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -34,6 +35,7 @@ const DRAWER_WIDTH = 248;
 const NAV: Array<{ to: string; label: string; icon: IconComponent; permission?: Permission }> = [
   { to: '/', label: 'Dashboard', icon: DashboardOutlinedIcon, permission: 'server.view' },
   { to: '/players', label: 'Players', icon: PeopleOutlinedIcon, permission: 'players.view' },
+  { to: '/world', label: 'World', icon: MapOutlinedIcon, permission: 'players.view' },
   { to: '/console', label: 'Console', icon: TerminalIcon, permission: 'console.view' },
   { to: '/server', label: 'Server', icon: DnsOutlinedIcon, permission: 'server.control' },
   { to: '/configuration', label: 'Configuration', icon: TuneIcon, permission: 'config.view' },
