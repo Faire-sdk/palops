@@ -14,6 +14,11 @@ const db = openDatabase(config.databasePath);
 const services = createServices(config, db);
 const app = await buildApp(services);
 
+if (config.devMockServer && !services.servers.getPrimary()) {
+  services.servers.savePrimary({ name: 'Local mock server', adapter: 'mock', host: '', port: 8212, username: 'admin' });
+  app.log.info('DEV_MOCK_SERVER: connected the mock Palworld server');
+}
+
 const pruneTimer = setInterval(() => {
   services.sessions.pruneExpired();
   services.siteAccounts.pruneExpired();
@@ -29,6 +34,10 @@ const playerTimer = setInterval(() => {
 playerTimer.unref();
 
 await app.listen({ host: config.host, port: config.port });
+
+if (config.devDiscordLogin) {
+  app.log.warn('DEV_DISCORD_LOGIN is on: Discord sign-in uses a local stand-in page. Development only.');
+}
 
 const setupToken = services.setup.pendingToken;
 if (setupToken) {

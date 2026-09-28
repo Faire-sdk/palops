@@ -25,22 +25,20 @@ the server where players sign in with Discord and see their character.
 
 The whole panel runs as **one process**: the API serves the built frontend, so there is only one port to put behind a reverse proxy.
 
-## Quick start (development)
+## Quick start (local)
 
 Requires Node.js 20.12+.
 
 ```bash
-npm install
+npm run setup   # install + write server/.env with local defaults
 npm run dev
 ```
 
-- Website: http://localhost:5173, staff panel: http://localhost:5173/panel (Vite proxies `/api` to the server)
-- API: http://localhost:8080
+- Website: http://localhost:5173, staff panel: http://localhost:5173/panel (setup token `local-setup-token`)
+- Discord sign-in uses a local stand-in page, and a mock Palworld server is connected, so nothing external is needed.
 
-On first start the server logs a **setup token**. Open the UI, enter the token and create the owner account
-with Discord (or with a password if Discord isn't configured yet).
-Then go to **Settings → Server connection** and either point it at your Palworld server or pick
-**Mock server** to explore the panel without one.
+See **[docs/local-setup.md](docs/local-setup.md)** for walkthroughs of each flow, using a real Discord app or game
+server locally, tests, and running the production image with `docker compose`.
 
 ## Production
 
@@ -203,6 +201,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 
 | Command | What it does |
 | --- | --- |
+| `npm run setup` | Install dependencies and write `server/.env` for local development |
+| `npm run reset:local` | Delete the local database to start from first-run setup |
 | `npm run dev` | Server (watch mode) + Vite dev server |
 | `npm run build` | Build frontend and server |
 | `npm start` | Run the built server |

@@ -6,6 +6,7 @@ import { PasswordResetService } from './authentication/password-resets.js';
 import { SessionService } from './authentication/sessions.js';
 import { UserService } from './authentication/users.js';
 import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
+import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
 import { PalworldService } from './palworld/index.js';
 import { PlayerDirectory } from './players/player-directory.js';
@@ -72,7 +73,11 @@ export function createServices(config: Config, db: DB): Services {
     servers,
     palworld,
     setup: new SetupGate(users, config.setupToken),
-    discordOAuth: config.discord ? new DiscordOAuthClient(config.discord) : null,
+    discordOAuth: config.devDiscordLogin
+      ? new DevDiscordOAuth()
+      : config.discord
+        ? new DiscordOAuthClient(config.discord)
+        : null,
     oauthStates: new OAuthStateStore(),
     players: new PlayerDirectory(db, palworld, servers),
     siteAccounts: new SiteAccountService(db, config.sessionMaxMs),

@@ -23,6 +23,8 @@ const envSchema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   DISCORD_REDIRECT_URI: z.url().optional(),
   AUTH_PASSWORD_LOGIN: booleanString.optional(),
+  DEV_DISCORD_LOGIN: booleanString.default(false),
+  DEV_MOCK_SERVER: booleanString.default(false),
   SITE_JOIN_ADDRESS: z.string().max(200).optional(),
   SITE_DISCORD_INVITE: z.url().optional(),
   SITE_SHOW_ONLINE_PLAYERS: booleanString.default(true),
@@ -47,6 +49,10 @@ export interface Config {
   discord: { clientId: string; clientSecret: string; redirectUri: string } | null;
   /** Whether username/password sign-in is offered. */
   passwordLogin: boolean;
+  /** Development only: a local stand-in for Discord so sign-in can be tested without a Discord app. */
+  devDiscordLogin: boolean;
+  /** Development only: connect the mock Palworld server on start if none is configured. */
+  devMockServer: boolean;
   /** Public website settings. */
   site: { joinAddress: string | null; discordInvite: string | null; showOnlinePlayers: boolean };
 }
@@ -86,9 +92,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
   }
   const env = parsed.data;
   const discord = resolveDiscord(env);
+  if ((env.DEV_DISCORD_LOGIN || env.DEV_MOCK_SERVER) && env.NODE_ENV !== 'development') {
+    throw new Error('DEV_DISCORD_LOGIN and DEV_MOCK_SERVER only work with NODE_ENV=development.');
+  }
   // Discord is the primary sign-in; passwords are on by default only when Discord isn't set up.
-  const passwordLogin = env.AUTH_PASSWORD_LOGIN ?? !discord;
-  if (!discord && !passwordLogin) {
+  const passwordLogin = env.AUTH_PASSWORD_LOGIN ?? !(discord || env.DEV_DISCORD_LOGIN);
+  if (!discord && !env.DEV_DISCORD_LOGIN && !passwordLogin) {
     throw new Error('AUTH_PASSWORD_LOGIN=false requires Discord sign-in to be configured, or nobody could sign in.');
   }
   return {
@@ -106,6 +115,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     logLevel: env.LOG_LEVEL,
     discord,
     passwordLogin,
+    devDiscordLogin: env.DEV_DISCORD_LOGIN,
+    devMockServer: env.DEV_MOCK_SERVER,
     site: {
       joinAddress: env.SITE_JOIN_ADDRESS ?? null,
       discordInvite: env.SITE_DISCORD_INVITE ?? null,

@@ -5,6 +5,7 @@ import type { Services } from '../../services/index.js';
 import { getDummyHash, passwordProblem, verifyPassword } from '../../services/authentication/passwords.js';
 import { permissionsFor } from '../../services/authentication/permissions.js';
 import type { DiscordAccount, User } from '../../services/authentication/users.js';
+import { DevDiscordOAuth, devDiscordPage } from '../../services/discord/dev-oauth.js';
 import { DiscordOAuthError } from '../../services/discord/oauth.js';
 import { OAUTH_STATE_TTL_MS, type OAuthIntent } from '../../services/discord/oauth-states.js';
 import { safeEqual } from '../../utils/crypto.js';
@@ -275,6 +276,19 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
       throw err;
     }
   });
+
+  if (config.devDiscordLogin) {
+    // Development-only fake Discord consent page (see services/discord/dev-oauth.ts).
+    app.get('/dev-discord', async (request, reply) => {
+      const { state } = parse(z.object({ state: z.string().max(256) }), request.query);
+      return reply.type('text/html').send(devDiscordPage(state));
+    });
+    app.get('/dev-discord/approve', async (request, reply) => {
+      const q = parse(z.object({ state: z.string().max(256), id: z.string().max(32), username: z.string().max(32) }), request.query);
+      const code = DevDiscordOAuth.encode(q.id, q.username);
+      return reply.redirect(`/api/v1/auth/discord/callback?${new URLSearchParams({ code, state: q.state })}`);
+    });
+  }
 
   app.post('/discord/unlink', { preHandler: authenticate(services) }, async (request) => {
     const user = services.users.get(request.user!.userId);

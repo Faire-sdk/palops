@@ -1,0 +1,23 @@
+# Runs the production image locally, for checking a deploy before Railway.
+#   docker compose up --build   then open http://localhost:8080
+# Uses password sign-in with the setup token below. For day-to-day development use `npm run dev`.
+services:
+  palops:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - palops-data:/data
+    environment:
+      PANEL_SECRET: ${PANEL_SECRET:-local-compose-secret-change-me-0123456789abcdef}
+      PANEL_SETUP_TOKEN: local-setup-token
+      AUTH_PASSWORD_LOGIN: "true"
+      # Plain http on localhost.
+      COOKIE_SECURE: "false"
+      SITE_JOIN_ADDRESS: localhost:8211
+      # Uncomment to test real Discord sign-in against the container:
+      # DISCORD_CLIENT_ID: ""
+      # DISCORD_CLIENT_SECRET: ""
+      # DISCORD_REDIRECT_URI: http://localhost:8080/api/v1/auth/discord/callback
+volumes:
+  palops-data:
