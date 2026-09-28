@@ -42,7 +42,13 @@ server locally, tests, and running the production image with `docker compose`.
 
 ## Production
 
-**Railway:** see [docs/deploy-railway.md](docs/deploy-railway.md). The repo includes a `Dockerfile` and `railway.json`.
+**Run PalOps on the same machine as your Palworld server.** It's the best choice for all the features:
+the REST API stays on `127.0.0.1`, and planned features such as start/restart, logs, backups and guilds need the game machine.
+[docs/deployment.md](docs/deployment.md) compares the options.
+
+**Same machine (recommended):** see [docs/deploy-same-host.md](docs/deploy-same-host.md), which uses [`deploy/same-host/`](deploy/same-host) (Docker Compose with Caddy for HTTPS).
+
+**Railway:** see [docs/deploy-railway.md](docs/deploy-railway.md), for when you can't run anything next to the game server. The repo includes a `Dockerfile` and `railway.json`.
 
 **Docker anywhere:**
 
@@ -149,6 +155,7 @@ web/
     panel/             Staff panel app (served at /panel)
     site/              Public website app (served at /)
     pages/             Panel pages
+deploy/same-host/      Compose + Caddy for running next to the Palworld server
 docs/
 ```
 

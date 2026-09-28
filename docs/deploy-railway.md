@@ -4,6 +4,10 @@ PalOps runs as one service: the public server website at `/`, the staff panel at
 It stores everything in SQLite on a Railway volume, so there is no separate database service.
 A small server fits in Railway's Hobby plan.
 
+> **Prefer the same machine as your Palworld server when you can.** That's the best choice for all the features;
+> on Railway the panel only has the REST API, so planned features like start/restart, logs, backups and guilds won't work.
+> See [deployment.md](deployment.md) for the comparison and [deploy-same-host.md](deploy-same-host.md) for that setup.
+
 ## 1. Create the service
 
 1. In Railway, click **New Project → Deploy from GitHub repo** and pick this repository.

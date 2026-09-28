@@ -17,7 +17,7 @@ Tracks progress against the development priority order in the project roadmap.
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
 | 12 | Security hardening | Baseline in place (see README) |
 | 13 | Testing | Server tests for auth, permissions, CSRF, validation and the Palworld adapter |
-| 14 | Deployment | Dockerfile, Railway config and guide ([deploy-railway.md](deploy-railway.md)), health check |
+| 14 | Deployment | Dockerfile, same-machine Compose + Caddy setup ([deploy-same-host.md](deploy-same-host.md), recommended), Railway config and guide ([deploy-railway.md](deploy-railway.md)), comparison ([deployment.md](deployment.md)), health check |
 
 ## Public website (extra)
 

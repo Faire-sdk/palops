@@ -23,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate the same-machine Compose file
+        working-directory: deploy/same-host
+        run: cp .env.example .env && PALOPS_DOMAIN=ci.example.com docker compose config -q
       - name: Build the production image (same one Railway builds)
         run: docker build -t palops .
       - name: Start it and check health
