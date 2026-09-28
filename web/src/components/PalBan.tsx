@@ -193,6 +193,7 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
             { key: 'player', header: 'Player', render: (b) => (b.active || b.inGame ? <PlayerName name={b.playerName ?? b.gameId} userId={b.gameId} onOpen={onOpen} /> : (b.playerName ?? '—')) },
             { key: 'id', header: 'Game ID', render: (b) => <Mono>{b.gameId}</Mono> },
             { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
+            { key: 'category', header: 'Category', render: (b) => (b.category ? b.category.charAt(0) + b.category.slice(1).toLowerCase().replace(/_/g, ' ') : '—') },
             { key: 'status', header: 'On PalBan', render: (b) => <Chip label={b.status.toLowerCase()} color={b.active ? 'error' : 'default'} variant="outlined" /> },
             {
               key: 'game',

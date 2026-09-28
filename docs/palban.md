@@ -36,6 +36,12 @@ The key is stored encrypted and never returned or written to the audit log. Redi
 | Read now, Ban in game, export | `players.ban` (admin and up); addresses in the export also need `players.ip` |
 | Player lookup on a profile | `world.view` (moderator and up) |
 
+## Alternative: the banlist link
+
+PalBan Network can also serve a private `banlist.txt` link (Settings on your PalBan server) that Palworld itself reads through `BanListURL` in `PalWorldSettings.ini`.
+That needs no PalOps at all and keeps the game server in step with your PalBan banlist. Use the integration here when you also want the comparison, the profile lookups
+and joins and bans reported back, or use both.
+
 ## Limits
 
 - PalBan's API has no call to add or remove a ban, so PalOps can't push bans; use the export and PalBan's CSV import.
