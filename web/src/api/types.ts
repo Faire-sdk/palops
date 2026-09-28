@@ -68,6 +68,9 @@ export interface Player {
   location: { x: number; y: number } | null;
   buildingCount: number | null;
   guild: string | null;
+  playtimeSeconds?: number;
+  /** Whether a website account is linked to this character, and whether that link is proven. */
+  link?: 'verified' | 'claimed' | null;
 }
 
 export interface KnownPlayer {
@@ -83,6 +86,8 @@ export interface KnownPlayer {
   lastSeenAt: string;
   online: boolean;
   banned?: boolean;
+  playtimeSeconds?: number;
+  link?: 'verified' | 'claimed' | null;
 }
 
 export type ModerationAction = 'kick' | 'ban' | 'unban' | 'note';
@@ -115,8 +120,17 @@ export interface LinkRequest {
   linkedAt: string | null;
 }
 
+export interface PlayerActivity {
+  seconds: number;
+  sessions: number;
+  longestSeconds: number;
+  averageSeconds: number;
+  recent: Array<{ startedAt: string; endedAt: string | null; seconds: number }>;
+}
+
 export interface PlayerProfile {
   userId: string;
+  activity: PlayerActivity;
   link: CharacterLink | null;
   player: KnownPlayer | null;
   banned: boolean;

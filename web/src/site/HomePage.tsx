@@ -124,7 +124,12 @@ export function HomePage({ server, session }: Props) {
 
         {s?.showOnlinePlayers && (
           <Box component="section" id="players" sx={{ mb: 6, scrollMarginTop: 80 }}>
-            <SectionTitle>Online now</SectionTitle>
+            <Stack direction="row" sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <SectionTitle>Online now</SectionTitle>
+              <Button component={RouterLink} to="/players" size="small">
+                All players
+              </Button>
+            </Stack>
             {players.loading && !players.data ? (
               <CircularProgress size={28} />
             ) : players.data && players.data.players.length > 0 ? (
@@ -132,7 +137,7 @@ export function HomePage({ server, session }: Props) {
                 {players.data.players.map((p) => (
                   <Grid key={p.name} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
                     <Card>
-                      <CardContent sx={{ display: 'flex', gap: 1.5, alignItems: 'center', '&:last-child': { pb: 2 } }}>
+                      <CardContent {...(p.id ? { component: RouterLink, to: `/players/${p.id}` } : {})} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', color: 'inherit', textDecoration: 'none', '&:last-child': { pb: 2 } }}>
                         <Avatar sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>{p.name.slice(0, 1).toUpperCase()}</Avatar>
                         <Box sx={{ minWidth: 0 }}>
                           <Typography noWrap sx={{ fontWeight: 600 }}>

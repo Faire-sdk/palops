@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { IpBan, ModerationAction, PalDefenderResult, PlayerProfile } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { formatDateTime } from '../format';
+import { formatDateTime, formatDuration } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
@@ -241,6 +241,41 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
           ]}
         />
         {!player && <Alert severity="info">PalOps hasn’t seen this player online yet.</Alert>}
+
+        {data.activity.sessions > 0 && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+              Activity
+            </Typography>
+            <Stack direction="row" spacing={3} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              {(
+                [
+                  ['Playtime', formatDuration(data.activity.seconds)],
+                  ['Visits', data.activity.sessions],
+                  ['Average visit', formatDuration(data.activity.averageSeconds)],
+                  ['Longest visit', formatDuration(data.activity.longestSeconds)],
+                ] as const
+              ).map(([label, value]) => (
+                <Box key={label}>
+                  <Typography variant="h6" component="div">
+                    {value}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {label}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              Recent visits:{' '}
+              {data.activity.recent
+                .slice(0, 5)
+                .map((v) => `${formatDateTime(v.startedAt)} (${v.endedAt ? formatDuration(v.seconds) : 'now'})`)
+                .join(' · ')}
+            </Typography>
+          </>
+        )}
 
         {data.link && (
           <>

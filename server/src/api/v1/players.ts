@@ -20,28 +20,56 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
     const staff = hasPermission(request.user!.role, 'world.view');
     return {
       // The online list has no guilds; the world snapshot fills them in on the known player.
-      players: (await players.refreshOnline()).map((p) => ({
-        ...p,
-        ip: staff ? p.ip : null,
-        location: staff ? p.location : null,
-        guild: p.guild ?? players.byUserId(p.userId)?.guild ?? null,
-      })),
+      players: await (async () => {
+        const online = await players.refreshOnline();
+        const playtime = players.playtimeOf(online.map((p) => p.userId));
+        return online.map((p) => {
+          const link = services.siteAccounts.byPlayerUserId(p.userId, false);
+          return {
+            ...p,
+            ip: staff ? p.ip : null,
+            location: staff ? p.location : null,
+            guild: p.guild ?? players.byUserId(p.userId)?.guild ?? null,
+            playtimeSeconds: playtime.get(p.userId) ?? 0,
+            link: link ? (link.playerVerified ? 'verified' : 'claimed') : null,
+          };
+        });
+      })(),
     };
   });
 
-  /** Every player the panel has seen, with ban state. */
+  /** Every player the panel has seen, with ban state, playtime and whether they've linked a website account. */
   app.get('/known', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
     const query = parse(
       z.object({
         search: z.string().max(80).optional(),
         limit: z.coerce.number().int().min(1).max(100).default(50),
         offset: z.coerce.number().int().min(0).default(0),
+        sort: z.enum(['recent', 'name', 'playtime', 'level']).default('recent'),
+        filter: z.enum(['all', 'online', 'banned', 'linked', 'verified', 'unverified']).default('all'),
       }),
       request.query,
     );
     const banned = new Set(moderation.activeBans().map((b) => b.playerUserId));
-    const { players: list, total } = players.list(query);
-    return { players: list.map((p) => ({ ...p, banned: banned.has(p.userId) })), total };
+    let only: string[] | undefined;
+    if (query.filter === 'banned') only = [...banned];
+    if (query.filter === 'online') only = (await players.refreshOnline().catch(() => [])).map((p) => p.userId);
+    const { players: list, total } = players.list({
+      search: query.search,
+      limit: query.limit,
+      offset: query.offset,
+      sort: query.sort,
+      only,
+      linked: query.filter === 'linked' ? 'any' : query.filter === 'verified' ? 'verified' : query.filter === 'unverified' ? 'unverified' : undefined,
+    });
+    const playtime = players.playtimeOf(list.map((p) => p.userId));
+    return {
+      players: list.map((p) => {
+        const link = services.siteAccounts.byPlayerUserId(p.userId, false);
+        return { ...p, banned: banned.has(p.userId), playtimeSeconds: playtime.get(p.userId) ?? 0, link: link ? (link.playerVerified ? 'verified' : 'claimed') : null };
+      }),
+      total,
+    };
   });
 
   /** Players banned through the panel. The REST API can't list bans made elsewhere. */
@@ -113,6 +141,8 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
       banned: moderation.isBanned(userId),
       history: moderation.history(userId),
       pals: world.palsOf(userId),
+      /** Time on the server, from the visits the panel has recorded. */
+      activity: players.playtime(userId),
       /** The website account linked to this character, and whether the link is proven. */
       link: (() => {
         const a = services.siteAccounts.byPlayerUserId(userId, false);

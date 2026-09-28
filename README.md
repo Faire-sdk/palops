@@ -243,7 +243,8 @@ The REST API can't start a stopped server, change settings, list bans made elsew
 
 ### Optional: Discord bot
 
-Slash commands and channel notifications for staff, using each person's panel role. Off by default and PalOps doesn't need it. See [docs/discord-bot.md](docs/discord-bot.md).
+Slash commands, a live status showing the player count, roles and joining the server for verified players, bans kept in step, a chat relay and channel notifications, using each
+person's panel role. Off by default and PalOps doesn't need it. See [docs/discord-bot.md](docs/discord-bot.md) and [docs/player-accounts.md](docs/player-accounts.md).
 
 ### Optional: PalDefender
 
@@ -341,7 +342,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET/PUT | `/server/connection` | `server.connection` |
 | POST | `/server/connection/test` | `server.connection` |
 | GET | `/players` | `players.view` (online players) |
-| GET | `/players/known`, `/players/bans`, `/players/:userId` | `players.view` (everyone seen, panel bans, a player's profile and history) |
+| GET | `/players/known` (`sort`, `filter`), `/players/bans`, `/players/:userId` | `players.view` (everyone seen with playtime and Discord link, panel bans, a player's profile, activity and history) |
+| GET/POST | `/players/link-requests`, `/players/link-requests/:accountId/approve` or `reject`; POST `/players/:userId/link/verify`, DELETE `/players/:userId/link` | `players.ban` (verify players' Discord links) |
 | POST | `/players/:userId/kick` | `players.kick` |
 | POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` |
 | POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (ban and unban an address; listed with `/players/bans` for `world.view`) |
@@ -368,9 +370,10 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/console/lines`, `/console/stream` | `console.view` (view-only console: history and a live server-sent event stream) |
 | GET/PUT | `/console/settings`, POST `/console/settings/test` | `server.connection` (where the game and PalDefender log files are, and the PalServerLogger websocket) |
 | POST | `/discord/interactions` | public, but every request must carry Discord's signature (slash commands arrive here) |
-| GET/PUT | `/discord-bot/settings`; POST `/discord-bot/test`, `/register-commands`, `/send-test` | `server.connection` (the optional Discord bot; the token is never returned) |
-| GET | `/public/server`, `/public/players`, `/public/guilds` | public, CORS open, no IPs, platform IDs or positions |
+| GET/PUT | `/discord-bot/settings`; POST `/discord-bot/test`, `/register-commands`, `/send-test`, `/sync-roles`, `/relay/test` | `server.connection` (the optional Discord bot; the token is never returned) |
+| GET | `/public/server`, `/public/players`, `/public/guilds`, `/public/players/known`, `/public/players/:id` | public, CORS open, no IPs, platform IDs or positions (the directory and profiles follow the player-list switch) |
 | GET | `/site/me` | player signed in on the website |
+| POST | `/site/verify/code`, `/site/verify/confirm`, `/site/verify/request`, `/site/privacy` | player signed in (prove a character link with an in-game code or ask staff; choose whether the Discord name is public) |
 | POST | `/site/link`, `/site/unlink`, `/site/logout` | player signed in on the website |
 | GET | `/api/health` | public (unversioned) |
 

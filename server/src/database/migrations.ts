@@ -477,4 +477,21 @@ export const migrations: Migration[] = [
       ALTER TABLE discord_bot ADD COLUMN relay_prefix TEXT NOT NULL DEFAULT 'Discord';
     `,
   },
+  {
+    id: 16,
+    name: 'player_sessions',
+    sql: `
+      -- One row per visit to the server, so playtime can be shown. Open while the player is online.
+      -- Resolution is the online-list check (about a minute), and a server restart ends every open visit.
+      CREATE TABLE player_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT
+      );
+      CREATE INDEX player_sessions_player ON player_sessions(server_id, user_id, id);
+      CREATE INDEX player_sessions_open ON player_sessions(server_id, ended_at);
+    `,
+  },
 ];

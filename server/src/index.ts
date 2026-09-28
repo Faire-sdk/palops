@@ -24,6 +24,7 @@ const pruneTimer = setInterval(() => {
   services.siteAccounts.pruneExpired();
   services.world.prune();
   services.console.prune();
+  services.players.pruneSessions();
 }, 60 * 60 * 1000);
 pruneTimer.unref();
 

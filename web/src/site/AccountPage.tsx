@@ -18,7 +18,8 @@ import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { authErrorMessage, DiscordButton, DiscordLogo, discordAvatarUrl } from '../auth/discord';
 import { KeyValue, Loading, Mono } from '../components/common';
-import { formatDateTime } from '../format';
+import { formatDateTime, formatDuration } from '../format';
+import { Link as RouterLink } from 'react-router-dom';
 import type { PlayerSession } from './SiteApp';
 import type { PlayerProfile } from './types';
 
@@ -112,6 +113,8 @@ function CharacterCard({ session }: { session: PlayerSession }) {
             {[
               ['Level', c.level ?? '—'],
               ['Guild', c.guild ?? '—'],
+              ['Time played', formatDuration(c.playtimeSeconds)],
+              ['Visits', c.sessions],
             ].map(([label, value]) => (
               <Grid key={label as string} size={6}>
                 <Card sx={{ bgcolor: 'action.hover', border: 0 }}>
@@ -157,7 +160,10 @@ function CharacterCard({ session }: { session: PlayerSession }) {
             label="Show my Discord name on my public profile"
           />
           <Divider />
-          <div>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <Button variant="outlined" component={RouterLink} to={`/players/${c.profileId}`}>
+              View my public profile
+            </Button>
             <Button
               loading={busy}
               onClick={async () => {
@@ -171,7 +177,7 @@ function CharacterCard({ session }: { session: PlayerSession }) {
             >
               Not you? Unlink this character
             </Button>
-          </div>
+          </Stack>
         </Stack>
       </CardContent>
     </Card>

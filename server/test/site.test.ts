@@ -54,7 +54,7 @@ describe('public server info', () => {
     const res = await api(ctx.app, { method: 'GET', url: '/api/v1/public/players' });
     const players = res.json().players;
     expect(players).toHaveLength(3);
-    expect(Object.keys(players[0]).sort()).toEqual(['guild', 'level', 'name']);
+    expect(Object.keys(players[0]).sort()).toEqual(['guild', 'id', 'level', 'name']);
     expect(res.body).not.toMatch(/steam_|127\.0\.0\.1/);
     expect(ctx.services.players.count()).toBe(3);
   });

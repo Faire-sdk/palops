@@ -35,6 +35,10 @@ export default async function siteRoutes(app: FastifyInstance, { services }: { s
             lastSeenAt: player.lastSeenAt,
             // Shown only to the account holder, to confirm the right character.
             platformId: player.userId,
+            /** For the public profile page. */
+            profileId: player.id,
+            playtimeSeconds: services.players.playtime(player.userId).seconds,
+            sessions: services.players.playtime(player.userId).sessions,
             verified: account.playerVerified,
             verifiedBy: account.verifiedBy === 'code' ? 'in-game code' : account.verifiedBy ? 'staff' : null,
             verifiedAt: account.verifiedAt,

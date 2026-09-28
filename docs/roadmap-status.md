@@ -22,7 +22,8 @@ Tracks progress against the development priority order in the project roadmap.
 ## Public website (extra)
 
 Public server site at `/` with Discord player sign-in and character profiles (level, guild, first/last seen).
-Character links are unverified for now; verification needs staff review or an in-game code via a server plugin.
+Character links are verified by an in-game code (sent through PalDefender) or by an admin, and only verified links earn roles or carry bans. The site has a player directory and
+profile pages with playtime, pals and guild, and the panel's player views show playtime, filters and the Discord link. See [player-accounts.md](player-accounts.md).
 
 ## World data (extra)
 
@@ -43,9 +44,10 @@ and player panel for inventories, pals, technologies, progression, guilds and ba
 
 ## Discord bot (optional)
 
-Slash commands (`/status`, `/players`, `/player`, `/kick`, `/ban`, `/unban`, `/announce`, `/save`) that map each Discord user to a panel user by Discord ID and
-enforce that user's role, plus notifications to an events channel and forwarding of log warnings to a log channel. Discord calls PalOps over signed HTTPS, so there's no
-gateway connection to run. Off unless an owner enables it; see [discord-bot.md](discord-bot.md).
+Slash commands that map each Discord user to a panel user by Discord ID and enforce that user's role (including `/ban @member`), notifications to an events channel, log
+forwarding, a live connection that shows the player count (Do Not Disturb when the server is offline or restarting) and can rename a status channel, roles and nicknames from
+verified links and panel roles, joining the Discord server on website sign-in, bans kept in step both ways for verified links, and a chat relay between the game and a channel.
+Off unless an owner enables it; see [discord-bot.md](discord-bot.md).
 
 ## Known limitations
 

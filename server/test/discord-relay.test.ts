@@ -93,7 +93,7 @@ async function enable(over: Record<string, unknown> = {}) {
   return owner;
 }
 const relayPosts = () => rest.calls.filter((c) => c.method === 'POST' && c.path === `/channels/${RELAY}/messages`).map((c) => c.body as { content: string; allowed_mentions: unknown });
-const chat = (source: 'game' | 'paldefender', line: string) => {
+const chat = (source: 'game' | 'paldefender' | 'panel', line: string) => {
   ctx.services.console.add(source, line);
   ctx.services.console.flush();
 };

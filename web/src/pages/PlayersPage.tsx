@@ -7,6 +7,8 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
+import MenuItem from '@mui/material/MenuItem';
+import Tooltip from '@mui/material/Tooltip';
 import Pagination from '@mui/material/Pagination';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
@@ -24,7 +26,9 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { IpBanDialog, ModerationDialog, PlayerProfileDialog, warnIfPalDefenderFailed } from '../components/PlayerActions';
 import { useToast } from '../components/Toast';
 import { SignalChip } from '../components/world';
-import { formatDateTime } from '../format';
+import { formatDateTime, formatDuration } from '../format';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import LinkIcon from '@mui/icons-material/Link';
 import { refreshAll, useApi } from '../hooks/useApi';
 
 const TABS = [
@@ -70,6 +74,16 @@ function PlayerName({ name, userId, onOpen }: { name: string; userId: string; on
     <Link component="button" underline="hover" onClick={() => onOpen(userId)} sx={{ fontWeight: 600, textAlign: 'left' }}>
       {name}
     </Link>
+  );
+}
+
+/** A small mark for players with a website account: verified (proven) or claimed (not yet). */
+function LinkBadge({ link }: { link: 'verified' | 'claimed' | null | undefined }) {
+  if (!link) return null;
+  return (
+    <Tooltip title={link === 'verified' ? 'Discord account linked and verified' : 'Discord account linked but not verified'}>
+      {link === 'verified' ? <VerifiedIcon color="primary" sx={{ fontSize: 16 }} /> : <LinkIcon color="disabled" sx={{ fontSize: 16 }} />}
+    </Tooltip>
   );
 }
 
@@ -124,9 +138,19 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
         rowKey={(p) => p.userId || p.playerId}
         empty={<EmptyState icon={PeopleOutlinedIcon} title={query ? 'No matching players' : 'Nobody is online right now'} />}
         columns={[
-          { key: 'name', header: 'Player', render: (p) => <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} /> },
+          {
+            key: 'name',
+            header: 'Player',
+            render: (p) => (
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} />
+                <LinkBadge link={p.link} />
+              </Stack>
+            ),
+          },
           { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
           { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
+          { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : '—') },
           { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
           ...(can('world.view') ? [{ key: 'ip', header: 'Address', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : '—') }] : []),
           { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
@@ -167,8 +191,10 @@ const PAGE_SIZE = 50;
 function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<'recent' | 'name' | 'playtime' | 'level'>('recent');
+  const [filter, setFilter] = useState<'all' | 'online' | 'banned' | 'linked' | 'verified' | 'unverified'>('all');
   const search = query.trim();
-  const path = `/players/known?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+  const path = `/players/known?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&sort=${sort}&filter=${filter}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
   const { data, error, loading, reload } = useApi<{ players: KnownPlayer[]; total: number }>(path);
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
@@ -193,6 +219,7 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
               render: (p) => (
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <PlayerName name={p.name} userId={p.userId} onOpen={onOpen} />
+                  <LinkBadge link={p.link} />
                   {p.online && <Chip label="Online" color="success" variant="outlined" />}
                   {p.banned && <Chip label="Banned" color="error" variant="outlined" />}
                 </Stack>
@@ -200,6 +227,7 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
             },
             { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
             { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
+            { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : '—') },
             { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
             { key: 'lastSeen', header: 'Last seen', nowrap: true, render: (p) => formatDateTime(p.lastSeenAt) },
           ]}
@@ -228,6 +256,28 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
         />
       }
     >
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ p: 2, borderBottom: 1, borderColor: 'divider', alignItems: { sm: 'center' } }}>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', flexGrow: 1 }}>
+          {(
+            [
+              ['all', 'Everyone'],
+              ['online', 'Online'],
+              ['banned', 'Banned'],
+              ['linked', 'Has a Discord link'],
+              ['verified', 'Verified'],
+              ['unverified', 'Not verified'],
+            ] as const
+          ).map(([id, label]) => (
+            <Chip key={id} label={label} color={filter === id ? 'primary' : 'default'} variant={filter === id ? 'filled' : 'outlined'} onClick={() => (setFilter(id), setPage(0))} />
+          ))}
+        </Stack>
+        <TextField select label="Sort by" value={sort} onChange={(e) => (setSort(e.target.value as typeof sort), setPage(0))} sx={{ minWidth: 170 }}>
+          <MenuItem value="recent">Recently seen</MenuItem>
+          <MenuItem value="playtime">Most playtime</MenuItem>
+          <MenuItem value="level">Highest level</MenuItem>
+          <MenuItem value="name">Name</MenuItem>
+        </TextField>
+      </Stack>
       {body}
     </Section>
   );
