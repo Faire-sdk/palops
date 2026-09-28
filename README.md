@@ -30,7 +30,8 @@ npm run dev
 - Web UI: http://localhost:5173 (proxies `/api` to the server)
 - API: http://localhost:8080
 
-On first start the server logs a **setup token**. Open the UI, enter the token and create the owner account.
+On first start the server logs a **setup token**. Open the UI, enter the token and create the owner account
+with Discord (or with a password if Discord isn't configured yet).
 Then go to **Settings → Server connection** and either point it at your Palworld server or pick
 **Mock server** to explore the panel without one.
 
@@ -46,6 +47,26 @@ PANEL_SECRET=$(openssl rand -hex 32) NODE_ENV=production COOKIE_SECURE=true TRUS
 Keep `PANEL_SECRET` stable (store it in your secrets manager or `.env`): it encrypts the saved Palworld admin password.
 Put the panel behind a reverse proxy that terminates HTTPS. `GET /api/health` is a health check.
 All variables are documented in [`.env.example`](.env.example).
+
+## Signing in
+
+**Discord OAuth2 is the main sign-in.** Username/password is optional.
+
+1. Create an application at <https://discord.com/developers/applications>.
+2. Under **OAuth2**, copy the Client ID and Client Secret and add a redirect:
+   `https://<your panel>/api/v1/auth/discord/callback` (locally: `http://localhost:5173/api/v1/auth/discord/callback`).
+3. Set `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `DISCORD_REDIRECT_URI`.
+
+The panel only asks Discord for the `identify` scope (id, username, avatar). Signing in with Discord does not create
+an account by itself: an owner adds people under **Settings → Users** by their Discord user ID and picks their role.
+Someone who isn't added yet is shown their Discord ID after trying to sign in, so they can send it to an owner.
+Existing password users can link Discord under **Settings → Account**.
+
+Password sign-in is off by default once Discord is configured. Set `AUTH_PASSWORD_LOGIN=true` to keep it as a
+second option (useful as a fallback if Discord is down).
+
+Linking panel users to Discord ids is also the groundwork for a Discord bot: bot commands can map the Discord user
+to a panel user and check the same role permissions. Discord code lives in `server/src/services/discord/`.
 
 ## Connecting to Palworld
 
@@ -79,6 +100,7 @@ server/
       palworld/        Palworld integration: adapter interface, REST API adapter, mock adapter
       servers/         Stored server connections (credentials encrypted at rest)
       authentication/  Users, sessions, passwords, roles & permissions, password resets
+      discord/         Discord OAuth2 (and later the Discord bot)
       audit/           Append-only audit log
     database/          SQLite connection and migrations
     middleware/        Authentication, permission checks, CSRF and security headers
@@ -102,9 +124,13 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 
 | Method | Path | Permission |
 | --- | --- | --- |
-| GET | `/auth/setup` | public: is first-run setup pending? |
-| POST | `/auth/setup` | public, requires setup token |
-| POST | `/auth/login`, `/auth/logout` | public |
+| GET | `/auth/options` | public: setup pending? which sign-in methods are on |
+| POST | `/auth/discord/authorize` | public (`intent`: login, setup with token, or link when signed in) |
+| GET | `/auth/discord/callback` | Discord redirect target |
+| POST | `/auth/discord/unlink` | signed in, only if a password remains usable |
+| POST | `/auth/setup` | public, requires setup token (password sign-in) |
+| POST | `/auth/login` | public (password sign-in) |
+| POST | `/auth/logout` | signed in |
 | GET | `/auth/me` | signed in |
 | POST | `/auth/password` | signed in (requires current password) |
 | POST | `/auth/reset` | public, requires one-time reset token |
@@ -121,7 +147,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 
 ## Security notes
 
-- Passwords are hashed with scrypt; login timing is equalised for unknown users.
+- Discord OAuth2 uses a single-use, server-side `state` bound to the browser by a cookie; only the `identify` scope is requested and Discord tokens are not stored.
+- Passwords (when enabled) are hashed with scrypt; login timing is equalised for unknown users.
 - Sessions are random tokens in `HttpOnly`, `SameSite=Strict` cookies; only a SHA-256 of the token is stored.
   Sessions expire after inactivity and at an absolute maximum; changing a password signs out other sessions.
 - CSRF: `SameSite=Strict` plus a required custom header and an `Origin` check on state-changing requests.

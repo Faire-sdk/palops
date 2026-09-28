@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { ROLES, type AdapterKind, type Role, type ServerConnection, type ServerStatus, type User } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { authErrorMessage, DiscordLogo, discordAvatarUrl } from '../auth/discord';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { ServerStateBadge } from '../components/ServerStateBadge';
 import { Table } from '../components/Table';
@@ -38,8 +39,98 @@ export function SettingsPage() {
   );
 }
 
+function DiscordIdentity({ discord }: { discord: NonNullable<User['discord']> }) {
+  const avatar = discordAvatarUrl(discord);
+  return (
+    <span className="discord-user">
+      {avatar ? <img src={avatar} alt="" /> : <span className="avatar"><DiscordLogo size={16} /></span>}
+      <span>
+        <strong>{discord.username ?? 'Not signed in yet'}</strong>
+        <br />
+        <span className="muted mono">{discord.id}</span>
+      </span>
+    </span>
+  );
+}
+
 function AccountSettings() {
-  const { session } = useAuth();
+  const { session, options, startDiscord, refresh } = useAuth();
+  const notify = useToast();
+  const [params, setParams] = useSearchParams();
+  const [notice] = useState(() =>
+    params.get('discord') === 'linked'
+      ? { tone: 'success' as const, text: 'Discord account linked.' }
+      : params.get('auth_error')
+        ? { tone: 'error' as const, text: authErrorMessage(params.get('auth_error')) ?? '' }
+        : null,
+  );
+  useEffect(() => {
+    if (params.has('discord') || params.has('auth_error')) setParams({ tab: 'account' }, { replace: true });
+  }, [params, setParams]);
+
+  const user = session?.user;
+  const canUnlink = !!user?.hasPassword && options.providers.password;
+
+  const unlink = async () => {
+    try {
+      await api.post('/auth/discord/unlink');
+      await refresh();
+      notify('Discord account unlinked', 'success');
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    }
+  };
+
+  return (
+    <>
+      {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
+      <div className="grid grid-2">
+        <Card title="Profile">
+          <dl className="kv">
+            <dt>Username</dt>
+            <dd>{user?.username}</dd>
+            <dt>Role</dt>
+            <dd>
+              <Badge tone="accent">{user?.role}</Badge>
+            </dd>
+            <dt>Last sign-in</dt>
+            <dd>{formatDateTime(user?.lastLoginAt ?? null)}</dd>
+          </dl>
+        </Card>
+        {(options.providers.discord || user?.discord) && (
+          <Card title="Discord">
+            {user?.discord ? (
+              <div className="form">
+                <DiscordIdentity discord={user.discord} />
+                {canUnlink ? (
+                  <div>
+                    <Button variant="danger" onClick={unlink}>
+                      Unlink Discord
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="muted small">Discord is how you sign in, so it can’t be unlinked.</p>
+                )}
+              </div>
+            ) : (
+              <div className="form">
+                <p className="muted">Link your Discord account to sign in with Discord.</p>
+                <div>
+                  <button className="btn btn-discord-inline" onClick={() => startDiscord('link').catch((e) => notify(errorMessage(e), 'error'))}>
+                    <DiscordLogo /> Link Discord
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+        {options.providers.password && user?.hasPassword && <ChangePassword />}
+      </div>
+    </>
+  );
+}
+
+function ChangePassword() {
   const notify = useToast();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -66,39 +157,25 @@ function AccountSettings() {
   };
 
   return (
-    <div className="grid grid-2">
-      <Card title="Profile">
-        <dl className="kv">
-          <dt>Username</dt>
-          <dd>{session?.user.username}</dd>
-          <dt>Role</dt>
-          <dd>
-            <Badge tone="accent">{session?.user.role}</Badge>
-          </dd>
-          <dt>Last sign-in</dt>
-          <dd>{formatDateTime(session?.user.lastLoginAt ?? null)}</dd>
-        </dl>
-      </Card>
-      <Card title="Change password">
-        <form className="form" onSubmit={submit}>
-          {error && <Alert tone="error">{error}</Alert>}
-          <Field label="Current password">
-            <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-          </Field>
-          <Field label="New password" hint="At least 10 characters">
-            <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
-          </Field>
-          <Field label="Confirm new password">
-            <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
-          </Field>
-          <div>
-            <Button variant="primary" type="submit" loading={busy}>
-              Update password
-            </Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+    <Card title="Change password">
+      <form className="form" onSubmit={submit}>
+        {error && <Alert tone="error">{error}</Alert>}
+        <Field label="Current password">
+          <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+        </Field>
+        <Field label="New password" hint="At least 10 characters">
+          <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+        </Field>
+        <Field label="Confirm new password">
+          <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        </Field>
+        <div>
+          <Button variant="primary" type="submit" loading={busy}>
+            Update password
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -221,7 +298,7 @@ function ConnectionSettings() {
 }
 
 function UserSettings() {
-  const { session } = useAuth();
+  const { session, options } = useAuth();
   const notify = useToast();
   const { data, error, loading, reload } = useApi<{ users: User[] }>('/users');
   const [creating, setCreating] = useState(false);
@@ -258,6 +335,11 @@ function UserSettings() {
         columns={[
           { key: 'username', header: 'Username', render: (u) => <strong>{u.username}</strong> },
           {
+            key: 'discord',
+            header: 'Discord',
+            render: (u) => (u.discord ? <DiscordIdentity discord={u.discord} /> : <span className="muted">Not linked</span>),
+          },
+          {
             key: 'role',
             header: 'Role',
             render: (u) => (
@@ -278,7 +360,7 @@ function UserSettings() {
             className: 'actions-cell',
             render: (u) => (
               <div className="button-row">
-                <Button onClick={() => issueReset(u)}>Reset link</Button>
+                {options.providers.password && <Button onClick={() => issueReset(u)}>Reset link</Button>}
                 {u.id !== session?.user.id &&
                   (u.disabled ? (
                     <Button onClick={() => update(u, { disabled: false })}>Enable</Button>
@@ -311,8 +393,10 @@ function UserSettings() {
 }
 
 function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const { options } = useAuth();
   const notify = useToast();
   const [username, setUsername] = useState('');
+  const [discordId, setDiscordId] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('viewer');
   const [error, setError] = useState<string>();
@@ -323,9 +407,15 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
     setBusy(true);
     setError(undefined);
     try {
-      await api.post('/users', { username, password, role });
+      await api.post('/users', {
+        username,
+        role,
+        discordId: discordId.trim() || undefined,
+        password: password || undefined,
+      });
       notify(`Created ${username}`, 'success');
       setUsername('');
+      setDiscordId('');
       setPassword('');
       onCreated();
       onClose();
@@ -340,12 +430,20 @@ function CreateUserModal({ open, onClose, onCreated }: { open: boolean; onClose:
     <Modal open={open} title="Add user" onClose={onClose}>
       <form className="form" onSubmit={submit}>
         {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Username">
+        <Field label="Username" hint="Their name inside the panel">
           <Input value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
         </Field>
-        <Field label="Temporary password" hint="At least 10 characters. Ask them to change it after signing in.">
-          <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <Field
+          label="Discord user ID"
+          hint="In Discord, enable Developer Mode, right-click the user and choose Copy User ID. They can also try signing in; the panel will show them their ID."
+        >
+          <Input inputMode="numeric" value={discordId} onChange={(e) => setDiscordId(e.target.value)} placeholder="e.g. 80351110224678912" />
         </Field>
+        {options.providers.password && (
+          <Field label="Temporary password" hint="Optional. At least 10 characters; ask them to change it after signing in.">
+            <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+        )}
         <Field label="Role">
           <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ROLES.map((r) => (

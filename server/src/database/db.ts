@@ -26,9 +26,18 @@ export function migrate(db: DB): void {
   );
   for (const m of migrations) {
     if (applied.has(m.id)) continue;
-    db.transaction(() => {
-      db.exec(m.sql);
-      db.prepare('INSERT INTO schema_migrations (id, name) VALUES (?, ?)').run(m.id, m.name);
-    })();
+    // Foreign keys can only be toggled outside a transaction. With them off, a
+    // table rebuild doesn't cascade-delete rows that reference the old table.
+    if (m.rebuildsTables) db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(m.sql);
+        const broken = db.pragma('foreign_key_check') as unknown[];
+        if (broken.length > 0) throw new Error(`Migration ${m.id} left ${broken.length} broken foreign keys`);
+        db.prepare('INSERT INTO schema_migrations (id, name) VALUES (?, ?)').run(m.id, m.name);
+      })();
+    } finally {
+      if (m.rebuildsTables) db.pragma('foreign_keys = ON');
+    }
   }
 }

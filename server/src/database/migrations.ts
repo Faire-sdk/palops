@@ -6,6 +6,8 @@ export interface Migration {
   id: number;
   name: string;
   sql: string;
+  /** Run with foreign keys off, for SQLite table rebuilds (checked afterwards). */
+  rebuildsTables?: boolean;
 }
 
 const now = `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
@@ -78,6 +80,32 @@ export const migrations: Migration[] = [
         created_at TEXT NOT NULL DEFAULT ${now},
         updated_at TEXT NOT NULL DEFAULT ${now}
       );
+    `,
+  },
+  {
+    id: 2,
+    name: 'discord_accounts',
+    rebuildsTables: true,
+    // Discord becomes the primary sign-in: link users to a Discord account and
+    // make the password optional. SQLite needs a table rebuild to drop NOT NULL.
+    sql: `
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash TEXT,
+        role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator', 'viewer')),
+        disabled INTEGER NOT NULL DEFAULT 0,
+        discord_id TEXT UNIQUE,
+        discord_username TEXT,
+        discord_avatar TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        updated_at TEXT NOT NULL DEFAULT ${now},
+        last_login_at TEXT
+      );
+      INSERT INTO users_new (id, username, password_hash, role, disabled, created_at, updated_at, last_login_at)
+        SELECT id, username, password_hash, role, disabled, created_at, updated_at, last_login_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
     `,
   },
 ];

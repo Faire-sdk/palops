@@ -5,6 +5,8 @@ import { AuditLog } from './audit/audit-log.js';
 import { PasswordResetService } from './authentication/password-resets.js';
 import { SessionService } from './authentication/sessions.js';
 import { UserService } from './authentication/users.js';
+import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
+import { OAuthStateStore } from './discord/oauth-states.js';
 import { PalworldService } from './palworld/index.js';
 import { ServerRegistry } from './servers/server-registry.js';
 
@@ -18,6 +20,9 @@ export interface Services {
   servers: ServerRegistry;
   palworld: PalworldService;
   setup: SetupGate;
+  /** Null when Discord sign-in isn't configured. */
+  discordOAuth: DiscordOAuthProvider | null;
+  oauthStates: OAuthStateStore;
 }
 
 /**
@@ -62,5 +67,7 @@ export function createServices(config: Config, db: DB): Services {
     servers,
     palworld: new PalworldService(servers),
     setup: new SetupGate(users, config.setupToken),
+    discordOAuth: config.discord ? new DiscordOAuthClient(config.discord) : null,
+    oauthStates: new OAuthStateStore(),
   };
 }

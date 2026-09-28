@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { Permission, ServerStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { discordAvatarUrl } from '../auth/discord';
 import { useApi } from '../hooks/useApi';
 import { Icon, type IconName } from './icons';
 import { ServerStateBadge } from './ServerStateBadge';
@@ -58,7 +59,11 @@ export function Layout() {
               <ServerStateBadge state={status?.state} />
             </div>
             <div className="user-chip">
-              <span className="avatar">{session?.user.username.slice(0, 1).toUpperCase()}</span>
+              {session?.user.discord && discordAvatarUrl(session.user.discord) ? (
+                <img className="avatar-img" src={discordAvatarUrl(session.user.discord)!} alt="" />
+              ) : (
+                <span className="avatar">{session?.user.username.slice(0, 1).toUpperCase()}</span>
+              )}
               <span className="user-meta">
                 <strong>{session?.user.username}</strong>
                 <span className="muted">{session?.user.role}</span>

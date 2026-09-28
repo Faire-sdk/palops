@@ -16,7 +16,7 @@ function Guard({ permission, children }: { permission: Permission; children: Rea
 }
 
 export function App() {
-  const { session, loading, setupRequired } = useAuth();
+  const { session, loading, options } = useAuth();
 
   if (loading) return <Loading label="Starting PalOps…" />;
 
@@ -24,7 +24,7 @@ export function App() {
     return (
       <Routes>
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="*" element={setupRequired ? <SetupPage /> : <LoginPage />} />
+        <Route path="*" element={options.setupRequired ? <SetupPage /> : <LoginPage />} />
       </Routes>
     );
   }

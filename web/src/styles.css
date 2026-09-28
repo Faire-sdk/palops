@@ -221,3 +221,17 @@ select.input { padding-right: 28px; }
 .auth-card h1 { font-size: 20px; text-align: center; }
 .auth-card > .muted { text-align: center; margin: 6px 0 20px; }
 .auth-card .form { margin-top: 20px; }
+
+/* Discord */
+.btn-discord { background: #5865f2; border-color: #5865f2; color: #fff; height: 40px; width: 100%; }
+.btn-discord:hover:not(:disabled) { background: #4752c4; }
+.divider { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12.5px; }
+.divider::before, .divider::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
+.auth-card .form + .form { margin-top: 14px; }
+.center { text-align: center; }
+.auth-card > p.small { margin: 18px 0 0; }
+.discord-user { display: flex; align-items: center; gap: 10px; }
+.discord-user img, .discord-user .avatar { width: 32px; height: 32px; border-radius: 50%; }
+.avatar-img { width: 30px; height: 30px; border-radius: 50%; }
+.btn-discord-inline { background: #5865f2; border-color: #5865f2; color: #fff; }
+.btn-discord-inline:hover { background: #4752c4; }

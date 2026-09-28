@@ -5,7 +5,7 @@ Tracks progress against the development priority order in the project roadmap.
 | # | Phase | Status |
 | --- | --- | --- |
 | 1 | Project foundation | Done: monorepo, Fastify API, SQLite + migrations, React dashboard shell, shared UI components |
-| 2 | Authentication & roles | Done: first-run owner setup, login/logout, sessions, password change, owner-issued reset links, 4 roles enforced server-side, user management |
+| 2 | Authentication & roles | Done: Discord OAuth2 as main sign-in (owners add users by Discord ID), optional password sign-in, first-run owner setup, sessions, owner-issued reset links, 4 roles enforced server-side, user management |
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
 | 4 | Dashboard | Basic: status, info, player count, FPS/frame time, broadcast. Host CPU/RAM pending |
 | 5 | Player management | Started: online player list with search. Known-player history, profiles, kick/ban UI and moderation records next |
@@ -18,6 +18,12 @@ Tracks progress against the development priority order in the project roadmap.
 | 12 | Security hardening | Baseline in place (see README) |
 | 13 | Testing | Server tests for auth, permissions, CSRF, validation and the Palworld adapter |
 | 14 | Deployment | Single-process production build and health check. Docker next |
+
+## Discord bot (planned)
+
+Panel users are linked to Discord ids, so a bot in `server/src/services/discord/` can resolve the Discord user
+behind a command to a panel user and reuse the same permission checks. It will need `DISCORD_BOT_TOKEN`
+and a guild id; nothing bot-related runs yet.
 
 ## Known limitations
 

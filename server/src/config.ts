@@ -19,6 +19,10 @@ const envSchema = z.object({
   COOKIE_SECURE: z.enum(['auto', 'true', 'false']).default('auto'),
   TRUST_PROXY: booleanString.default(false),
   WEB_DIST_PATH: z.string().default('../web/dist'),
+  DISCORD_CLIENT_ID: z.string().regex(/^\d{15,25}$/, 'must be the numeric application ID').optional(),
+  DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
+  DISCORD_REDIRECT_URI: z.url().optional(),
+  AUTH_PASSWORD_LOGIN: booleanString.optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -36,6 +40,19 @@ export interface Config {
   trustProxy: boolean;
   webDistPath: string;
   logLevel: string;
+  /** Discord OAuth2 settings; null when Discord sign-in is not configured. */
+  discord: { clientId: string; clientSecret: string; redirectUri: string } | null;
+  /** Whether username/password sign-in is offered. */
+  passwordLogin: boolean;
+}
+
+function resolveDiscord(env: z.infer<typeof envSchema>): Config['discord'] {
+  const values = [env.DISCORD_CLIENT_ID, env.DISCORD_CLIENT_SECRET, env.DISCORD_REDIRECT_URI];
+  if (values.every((v) => !v)) return null;
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.DISCORD_REDIRECT_URI) {
+    throw new Error('Discord sign-in needs DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI together.');
+  }
+  return { clientId: env.DISCORD_CLIENT_ID, clientSecret: env.DISCORD_CLIENT_SECRET, redirectUri: env.DISCORD_REDIRECT_URI };
 }
 
 /**
@@ -63,6 +80,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     throw new Error(`Invalid environment configuration:\n${problems}`);
   }
   const env = parsed.data;
+  const discord = resolveDiscord(env);
+  // Discord is the primary sign-in; passwords are on by default only when Discord isn't set up.
+  const passwordLogin = env.AUTH_PASSWORD_LOGIN ?? !discord;
+  if (!discord && !passwordLogin) {
+    throw new Error('AUTH_PASSWORD_LOGIN=false requires Discord sign-in to be configured, or nobody could sign in.');
+  }
   return {
     env: env.NODE_ENV,
     host: env.HOST,
@@ -76,5 +99,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     trustProxy: env.TRUST_PROXY,
     webDistPath: env.WEB_DIST_PATH,
     logLevel: env.LOG_LEVEL,
+    discord,
+    passwordLogin,
   };
 }

@@ -25,6 +25,8 @@ export interface User {
   username: string;
   role: Role;
   disabled: boolean;
+  hasPassword: boolean;
+  discord: { id: string; username: string | null; avatar: string | null } | null;
   createdAt: string;
   lastLoginAt: string | null;
 }
@@ -87,4 +89,9 @@ export interface AuditEntry {
   target: string | null;
   details: Record<string, unknown> | null;
   ip: string | null;
+}
+
+export interface AuthOptions {
+  setupRequired: boolean;
+  providers: { discord: boolean; password: boolean };
 }

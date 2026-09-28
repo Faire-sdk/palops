@@ -8,8 +8,8 @@ beforeEach(async () => {
 
 describe('first-run setup', () => {
   it('reports setup as required and rejects a wrong token', async () => {
-    const status = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/setup' });
-    expect(status.json()).toEqual({ setupRequired: true });
+    const status = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/options' });
+    expect(status.json()).toEqual({ setupRequired: true, providers: { discord: false, password: true } });
 
     const res = await api(ctx.app, {
       method: 'POST',
@@ -42,7 +42,7 @@ describe('first-run setup', () => {
 
 describe('login and sessions', () => {
   beforeEach(async () => {
-    await ctx.services.users.create('alice', PASSWORD, 'admin');
+    await ctx.services.users.create({ username: 'alice', password: PASSWORD, role: 'admin' });
   });
 
   it('rejects invalid credentials with the same message for unknown users', async () => {
@@ -136,7 +136,7 @@ describe('password change and reset', () => {
 
   it('lets an owner issue a one-time reset token', async () => {
     const owner = await loginAs(ctx.app, ctx.services, 'owner');
-    const target = await ctx.services.users.create('forgetful', PASSWORD, 'moderator');
+    const target = await ctx.services.users.create({ username: 'forgetful', password: PASSWORD, role: 'moderator' });
     const issued = await api(ctx.app, { method: 'POST', url: `/api/v1/users/${target.id}/password-reset`, cookie: owner });
     const { token } = issued.json();
 
