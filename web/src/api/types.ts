@@ -11,6 +11,7 @@ export type Permission =
   | 'players.kick'
   | 'players.ban'
   | 'players.note'
+  | 'players.ip'
   | 'world.view'
   | 'console.view'
   | 'console.execute'
@@ -74,6 +75,7 @@ export interface KnownPlayer {
   userId: string;
   playerId: string | null;
   name: string;
+  accountName: string | null;
   level: number | null;
   guild: string | null;
   guildId: string | null;
@@ -81,6 +83,17 @@ export interface KnownPlayer {
   lastSeenAt: string;
   online: boolean;
   banned?: boolean;
+}
+
+/** An address the panel enforces a ban on: one IP or a CIDR range. */
+export interface IpBan {
+  id: number;
+  ip: string;
+  reason: string | null;
+  playerUserId: string | null;
+  playerName: string | null;
+  actorUsername: string | null;
+  createdAt: string;
 }
 
 export type ModerationAction = 'kick' | 'ban' | 'unban' | 'note';
@@ -98,7 +111,13 @@ export interface ModerationRecord {
 export interface PlayerProfile {
   userId: string;
   player: KnownPlayer | null;
+  /** Only while the player is online. ip is null without players.ip. */
+  live: { ping: number | null; location: { x: number; y: number } | null; buildingCount: number | null; ip: string | null } | null;
   banned: boolean;
+  /** Empty unless the viewer has players.ip. */
+  addresses: Array<{ ip: string; firstSeenAt: string; lastSeenAt: string; banned: boolean }>;
+  /** Other players seen on the same addresses. Empty unless the viewer has players.ip. */
+  linkedPlayers: Array<{ userId: string; name: string | null; ip: string; lastSeenAt: string }>;
   history: ModerationRecord[];
   pals: PlayerPal[];
   /** Empty unless the viewer has world.view. */

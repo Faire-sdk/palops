@@ -90,6 +90,11 @@ export class MockAdapter implements PalworldAdapter {
     return mockWorld(this.players, (Date.now() - this.startedAt) / 1000);
   }
 
+  /** Test/dev helper: someone connects. */
+  join(player: Pick<PalworldPlayer, 'name' | 'userId'> & Partial<PalworldPlayer>) {
+    this.players.push({ ...mockPlayer(player.name, player.userId, player.level ?? 1, null), ...player });
+  }
+
   /** Test/dev helper: bring the fake server back up. */
   start() {
     this.running = true;
@@ -107,7 +112,7 @@ function mockPlayer(name: string, userId: string, level: number, guild: string |
     accountName: name.toLowerCase().replace(/\s+/g, ''),
     playerId: createHash('md5').update(userId).digest('hex').toUpperCase(),
     userId,
-    ip: '127.0.0.1',
+    ip: MOCK_HOMES[name]?.ip ?? '127.0.0.1',
     ping: 20 + Math.round(Math.random() * 40),
     level,
     location: { x: 1000 * level, y: -500 * level },

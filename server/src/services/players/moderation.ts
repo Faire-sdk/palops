@@ -1,8 +1,10 @@
+import { BlockList, isIP } from 'node:net';
 import type { DB } from '../../database/db.js';
 import type { AuditActor, AuditLog } from '../audit/audit-log.js';
 import type { PalworldService } from '../palworld/index.js';
-import { PalworldError } from '../palworld/index.js';
+import { PalworldError, type PalworldPlayer } from '../palworld/index.js';
 import type { ServerRegistry } from '../servers/server-registry.js';
+import { badRequest, notFound } from '../../utils/errors.js';
 import type { PlayerDirectory } from './player-directory.js';
 
 export const MODERATION_ACTIONS = ['kick', 'ban', 'unban', 'note'] as const;
@@ -28,6 +30,62 @@ interface ModerationRow {
   created_at: string;
 }
 
+export interface IpBan {
+  id: number;
+  /** A single address, or a CIDR range such as 203.0.113.0/24. */
+  ip: string;
+  reason: string | null;
+  /** The player whose ban this came from, if any. */
+  playerUserId: string | null;
+  playerName: string | null;
+  actorUsername: string | null;
+  createdAt: string;
+}
+
+interface IpBanRow {
+  id: number;
+  ip: string;
+  reason: string | null;
+  player_user_id: string | null;
+  player_name: string | null;
+  actor_username: string | null;
+  created_at: string;
+}
+
+/** Shown to players kicked for connecting from a banned address. */
+const IP_BAN_MESSAGE = 'You are banned from this server';
+/** Someone retrying from a banned address is kicked every time, but their history gets one entry per window. */
+const ENFORCE_RECORD_MS = 10 * 60 * 1000;
+const SYSTEM_ACTOR: AuditActor = { userId: null, username: 'PalOps' };
+
+/** Parses "1.2.3.4", "2001:db8::1" or a CIDR range; returns the normalised form or null. */
+export function parseIpRule(value: string): string | null {
+  const [address = '', prefix, extra] = value.trim().split('/');
+  const family = isIP(address);
+  if (!family || extra !== undefined) return null;
+  if (prefix === undefined) return address.toLowerCase();
+  if (!/^\d{1,3}$/.test(prefix)) return null;
+  const bits = Number(prefix);
+  if (bits > (family === 4 ? 32 : 128) || bits < (family === 4 ? 8 : 16)) return null;
+  return `${address.toLowerCase()}/${bits}`;
+}
+
+function ruleMatcher(rules: string[]): (ip: string) => boolean {
+  const list = new BlockList();
+  for (const rule of rules) {
+    const [address, prefix] = rule.split('/') as [string, string | undefined];
+    const type = isIP(address) === 6 ? 'ipv6' : 'ipv4';
+    if (prefix === undefined) list.addAddress(address, type);
+    else list.addSubnet(address, Number(prefix), type);
+  }
+  return (ip) => {
+    // IPv4 clients can show up as IPv4-mapped IPv6 addresses.
+    const plain = ip.toLowerCase().replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/, '$1');
+    const family = isIP(plain);
+    return family !== 0 && list.check(plain, family === 6 ? 'ipv6' : 'ipv4');
+  };
+}
+
 /**
  * Kicks, bans and staff notes. Every action goes to the server through the
  * REST API and is kept here, because the API itself has no ban list or history.
@@ -39,7 +97,13 @@ export class ModerationService {
     private readonly players: PlayerDirectory,
     private readonly servers: ServerRegistry,
     private readonly audit: AuditLog,
-  ) {}
+  ) {
+    players.onRefresh((online) => {
+      this.enforceIpBans(online).catch(() => undefined);
+    });
+  }
+
+  private lastEnforced = new Map<string, number>();
 
   /** The reason is stored for staff and shown to the player as the kick message. */
   async kick(actor: AuditActor, userId: string, reason: string): Promise<ModerationRecord> {
@@ -48,15 +112,99 @@ export class ModerationService {
     return this.store(actor, userId, 'kick', reason);
   }
 
-  async ban(actor: AuditActor, userId: string, reason: string): Promise<ModerationRecord> {
+  /** With banAddress, the player's last known address is banned too, so a new account can't get back in from it. */
+  async ban(actor: AuditActor, userId: string, reason: string, options: { banAddress?: boolean } = {}): Promise<{ record: ModerationRecord; ipBan: IpBan | null }> {
+    const ip = options.banAddress ? this.players.lastAddress(userId) : null;
+    if (options.banAddress && !ip) throw badRequest('PalOps hasn’t seen an address for this player yet', 'no_address');
     await this.palworld.ban(userId, reason);
     this.players.markOffline(userId);
-    return this.store(actor, userId, 'ban', reason);
+    const record = this.store(actor, userId, 'ban', reason);
+    const ipBan = ip ? await this.banIp(actor, ip, reason, userId) : null;
+    return { record, ipBan };
   }
 
+  /** Also lifts the address bans that came with this player's ban. */
   async unban(actor: AuditActor, userId: string, reason: string): Promise<ModerationRecord> {
     await this.palworld.unban(userId);
+    for (const ban of this.ipBans().filter((b) => b.playerUserId === userId)) this.liftIpBan(actor, ban.id);
     return this.store(actor, userId, 'unban', reason);
+  }
+
+  // ---- Address bans ----
+
+  /** Bans an address or range, and kicks anyone online from it now. */
+  async banIp(actor: AuditActor, value: string, reason: string, playerUserId: string | null = null): Promise<IpBan> {
+    const ip = parseIpRule(value);
+    if (!ip) throw badRequest('Enter an IP address, or a range like 203.0.113.0/24', 'invalid_ip');
+    const serverId = this.serverId();
+    const existing = this.ipBans().find((b) => b.ip === ip);
+    if (existing) return existing;
+    const playerName = playerUserId ? (this.players.byUserId(playerUserId)?.name ?? null) : null;
+    const { lastInsertRowid } = this.db
+      .prepare(
+        `INSERT INTO ip_bans (server_id, ip, reason, player_user_id, player_name, actor_user_id, actor_username)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(serverId, ip, reason || null, playerUserId, playerName, actor.userId, actor.username);
+    this.audit.record(actor, {
+      category: 'players',
+      action: 'ip_ban',
+      target: ip,
+      details: { ...(reason ? { reason } : {}), ...(playerUserId ? { player: playerName ? `${playerName} (${playerUserId})` : playerUserId } : {}) },
+    });
+    try {
+      await this.enforceIpBans(await this.palworld.getPlayers());
+    } catch {
+      // Server offline: the ban applies as soon as the online list can be read again.
+    }
+    return toIpBan(this.db.prepare('SELECT * FROM ip_bans WHERE id = ?').get(lastInsertRowid) as IpBanRow);
+  }
+
+  liftIpBan(actor: AuditActor, id: number): void {
+    const server = this.servers.getPrimary();
+    const row = server && (this.db.prepare('SELECT * FROM ip_bans WHERE id = ? AND server_id = ? AND lifted_at IS NULL').get(id, server.id) as IpBanRow | undefined);
+    if (!row) throw notFound('Address ban not found');
+    this.db.prepare('UPDATE ip_bans SET lifted_at = ?, lifted_by = ? WHERE id = ?').run(new Date().toISOString(), actor.username, id);
+    this.audit.record(actor, { category: 'players', action: 'ip_unban', target: row.ip });
+  }
+
+  ipBans(): IpBan[] {
+    const serverId = this.servers.getPrimary()?.id;
+    if (serverId === undefined) return [];
+    const rows = this.db.prepare('SELECT * FROM ip_bans WHERE server_id = ? AND lifted_at IS NULL ORDER BY id DESC').all(serverId) as IpBanRow[];
+    return rows.map(toIpBan);
+  }
+
+  /** The active address bans that cover this address. */
+  ipBansMatching(ip: string): IpBan[] {
+    return this.ipBans().filter((b) => ruleMatcher([b.ip])(ip));
+  }
+
+  /**
+   * Kicks online players who connect from a banned address. The REST API has
+   * no address bans, so the panel checks each fresh online list itself.
+   */
+  async enforceIpBans(online: PalworldPlayer[]): Promise<string[]> {
+    const bans = this.ipBans();
+    if (bans.length === 0) return [];
+    const banned = ruleMatcher(bans.map((b) => b.ip));
+    const kicked: string[] = [];
+    for (const player of online) {
+      if (!player.userId || !player.ip || !banned(player.ip)) continue;
+      try {
+        await this.palworld.kick(player.userId, IP_BAN_MESSAGE);
+      } catch {
+        continue;
+      }
+      this.players.markOffline(player.userId);
+      kicked.push(player.userId);
+      const last = this.lastEnforced.get(player.userId) ?? 0;
+      if (Date.now() - last >= ENFORCE_RECORD_MS) {
+        this.lastEnforced.set(player.userId, Date.now());
+        this.store(SYSTEM_ACTOR, player.userId, 'kick', 'Connected from a banned address');
+      }
+    }
+    return kicked;
   }
 
   note(actor: AuditActor, userId: string, text: string): ModerationRecord {
@@ -123,6 +271,18 @@ export class ModerationService {
     if (!server) throw new PalworldError('not_configured', 'No Palworld server is configured');
     return server.id;
   }
+}
+
+function toIpBan(row: IpBanRow): IpBan {
+  return {
+    id: row.id,
+    ip: row.ip,
+    reason: row.reason,
+    playerUserId: row.player_user_id,
+    playerName: row.player_name,
+    actorUsername: row.actor_username,
+    createdAt: row.created_at,
+  };
 }
 
 function toRecord(row: ModerationRow): ModerationRecord {

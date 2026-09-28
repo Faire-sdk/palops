@@ -270,4 +270,38 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 7,
+    name: 'player_addresses_and_ip_bans',
+    sql: `
+      -- Addresses each player has connected from, for staff with players.ip.
+      CREATE TABLE player_ips (
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        ip TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL DEFAULT ${now},
+        last_seen_at TEXT NOT NULL DEFAULT ${now},
+        PRIMARY KEY (server_id, user_id, ip)
+      );
+      CREATE INDEX player_ips_ip ON player_ips(server_id, ip);
+
+      -- Address bans. The REST API only bans platform ids, so the panel
+      -- enforces these itself by kicking anyone who connects from one.
+      -- ip is a single address or a CIDR range.
+      CREATE TABLE ip_bans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        ip TEXT NOT NULL,
+        reason TEXT,
+        player_user_id TEXT,
+        player_name TEXT,
+        actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        actor_username TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        lifted_at TEXT,
+        lifted_by TEXT
+      );
+      CREATE INDEX ip_bans_active ON ip_bans(server_id, lifted_at);
+    `,
+  },
 ];
