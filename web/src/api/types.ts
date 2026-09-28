@@ -379,3 +379,38 @@ export const PD_MESSAGE_TYPES = [
   { id: 'PlayerLogImportant', label: 'Log line (important)' },
   { id: 'PlayerLogVeryImportant', label: 'Log line (very important)' },
 ] as const;
+
+// ---- Console ----
+
+export type ConsoleSource = 'panel' | 'game' | 'paldefender';
+export type ConsoleLevel = 'info' | 'warn' | 'error';
+
+export interface ConsoleLine {
+  id: number;
+  at: string;
+  source: ConsoleSource;
+  level: ConsoleLevel;
+  message: string;
+}
+
+export interface TailStatus {
+  source: ConsoleSource;
+  path: string;
+  state: 'watching' | 'missing';
+  files: number;
+  lastLineAt: string | null;
+}
+
+export interface ConsoleSettings {
+  tailEnabled: boolean;
+  gameLogPath: string | null;
+  paldefenderLogPath: string | null;
+  updatedAt: string | null;
+}
+
+export interface PathCheck {
+  source: 'game' | 'paldefender';
+  ok: boolean;
+  kind: 'file' | 'directory' | null;
+  message: string | null;
+}

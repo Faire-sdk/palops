@@ -9,9 +9,9 @@ Tracks progress against the development priority order in the project roadmap.
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
 | 4 | Dashboard | Status, info, player count, FPS/frame time, broadcast, and the server FPS graph with average and lowest (from world snapshots, staff only). Host CPU/RAM pending |
 | 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every address a player has connected from is recorded (staff only), shown on profiles with the other accounts that share it, and can be banned. The game only bans accounts, so PalOps enforces banned addresses itself: any account seen on one is banned and kicked at the next check (about 20 seconds). Bans made outside PalOps can't be listed through the API |
-| 6 | Console | Blocked on the REST API (no console). Needs RCON or PalOps on the game machine |
+| 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. A PalServerLogger websocket source is planned |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
-| 8 | Logs | Started: audit log with category filter and pagination |
+| 8 | Logs | Audit log with category filter and pagination; the Console page covers the game and PalDefender log files |
 | 9 | Server controls | Save, shutdown with countdown and message, force stop. Start/restart needs a process manager integration |
 | 10 | Backups | Not started |
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
@@ -49,6 +49,6 @@ and a guild id; nothing bot-related runs yet.
 
 ## Known limitations
 
-- The official REST API has no console/RCON command channel and no way to *start* a stopped server.
-  Console and start/restart will need an additional adapter (RCON and/or a process manager such as Docker or systemd).
+- The official REST API has no console and no way to *start* a stopped server. Palworld has deprecated RCON, so PalOps doesn't use it: the console is view-only,
+  and start/restart will need a process manager integration (Docker or systemd).
 - Rate limiting is in memory, which is fine for a single panel process.

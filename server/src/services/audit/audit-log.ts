@@ -35,7 +35,14 @@ interface AuditRow {
 
 /** Append-only record of administrative and security-relevant actions. */
 export class AuditLog {
+  private listeners: Array<(actor: AuditActor, entry: { category: AuditCategory; action: string; target?: string }) => void> = [];
+
   constructor(private readonly db: DB) {}
+
+  /** Runs after each entry is written, e.g. to mirror it into the console. */
+  onRecord(listener: (actor: AuditActor, entry: { category: AuditCategory; action: string; target?: string }) => void): void {
+    this.listeners.push(listener);
+  }
 
   record(
     actor: AuditActor,
@@ -55,6 +62,7 @@ export class AuditLog {
         entry.details ? JSON.stringify(entry.details) : null,
         actor.ip ?? null,
       );
+    for (const listener of this.listeners) listener(actor, { category: entry.category, action: entry.action, target: entry.target });
   }
 
   list(query: { category?: AuditCategory; limit: number; offset: number }): { entries: AuditEntry[]; total: number } {

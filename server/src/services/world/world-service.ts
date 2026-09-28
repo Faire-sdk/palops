@@ -149,6 +149,7 @@ export class WorldService {
   /** A slow server can take longer than the poll interval to answer; don't stack requests. */
   private polling = false;
   private tracked = new Map<string, Tracked>();
+  private signalListeners: Array<(signal: { playerName: string; kind: SignalKind; summary: string }) => void> = [];
 
   constructor(
     private readonly db: DB,
@@ -157,6 +158,11 @@ export class WorldService {
     private readonly servers: ServerRegistry,
     private readonly audit: AuditLog,
   ) {}
+
+  /** Runs when a new cheat signal is raised. */
+  onSignal(listener: (signal: { playerName: string; kind: SignalKind; summary: string }) => void): void {
+    this.signalListeners.push(listener);
+  }
 
   /** Called on a timer. Backs off while the endpoint is switched off on the server. */
   async poll(): Promise<void> {
@@ -436,6 +442,7 @@ export class WorldService {
           'INSERT INTO player_signals (server_id, user_id, player_name, kind, summary, dedupe_key, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         )
         .run(serverId, userId, name, kind, summary, dedupeKey, JSON.stringify(details), takenAt.toISOString());
+      for (const listener of this.signalListeners) listener({ playerName: name, kind, summary });
     };
 
     for (const p of players) {

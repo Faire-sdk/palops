@@ -345,4 +345,37 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 10,
+    name: 'console',
+    sql: `
+      -- What the Console page shows: lines tailed from log files plus events the
+      -- panel knows about. Kept for a week and capped, so it can't grow forever.
+      CREATE TABLE console_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        level TEXT NOT NULL DEFAULT 'info',
+        message TEXT NOT NULL
+      );
+      CREATE INDEX console_lines_at ON console_lines(at);
+
+      -- How far into each tailed file the panel has read, so a restart neither
+      -- repeats nor skips lines.
+      CREATE TABLE console_offsets (
+        path TEXT PRIMARY KEY,
+        offset INTEGER NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+
+      -- Where to find the log files (one row). Off until an owner sets it up.
+      CREATE TABLE console_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        tail_enabled INTEGER NOT NULL DEFAULT 0,
+        game_log_path TEXT,
+        paldefender_log_path TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
 ];

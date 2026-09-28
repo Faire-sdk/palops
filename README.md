@@ -10,7 +10,7 @@ the server where players sign in with Discord and see their character.
 | `/api/v1` | JSON API. `/api/v1/public/*` is open (CORS) for embedding status on an existing site |
 
 > **Status:** early MVP. Foundation, authentication/roles and the server connection layer are in place.
-> Player moderation, console, configuration editing, lifecycle controls and backups are next.
+> A view-only console, configuration editing, lifecycle controls and backups are next.
 > See [docs/roadmap-status.md](docs/roadmap-status.md).
 
 ## Stack
@@ -361,6 +361,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/world/map-image`, `/world/map-image/file` | `world.view` (the live map's background and its alignment) |
 | PUT/PATCH/DELETE | `/world/map-image` | `config.edit` (upload as a raw PNG/JPEG/WebP body up to 25 MB, align, remove) |
 | GET | `/logs/audit` | `audit.view` |
+| GET | `/console/lines`, `/console/stream` | `console.view` (view-only console: history and a live server-sent event stream) |
+| GET/PUT | `/console/settings`, POST `/console/settings/test` | `server.connection` (where the game and PalDefender log files are) |
 | GET | `/public/server`, `/public/players`, `/public/guilds` | public, CORS open, no IPs, platform IDs or positions |
 | GET | `/site/me` | player signed in on the website |
 | POST | `/site/link`, `/site/unlink`, `/site/logout` | player signed in on the website |

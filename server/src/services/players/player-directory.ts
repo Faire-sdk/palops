@@ -60,6 +60,10 @@ export class PlayerDirectory {
   private online = new Set<string>();
   private cache: { at: number; players: PalworldPlayer[] } | undefined;
   private seenListeners: Array<(seen: SeenPlayer[]) => void> = [];
+  private presenceListeners: Array<(change: { joined: string[]; left: string[] }) => void> = [];
+  private names = new Map<string, string>();
+  /** False until the first online list, so starting the panel doesn't announce everyone as joining. */
+  private presenceReady = false;
 
   constructor(
     private readonly db: DB,
@@ -80,6 +84,11 @@ export class PlayerDirectory {
   /** Runs after players are seen connected (online list or world snapshot), e.g. to enforce IP bans. */
   onSeen(listener: (seen: SeenPlayer[]) => void): void {
     this.seenListeners.push(listener);
+  }
+
+  /** Runs when players join or leave between two online lists, with their names. */
+  onPresence(listener: (change: { joined: string[]; left: string[] }) => void): void {
+    this.presenceListeners.push(listener);
   }
 
   /** The most recent online list, if it was fetched in the last minute or so. */
@@ -127,7 +136,15 @@ export class PlayerDirectory {
         });
       }
     })();
+    const before = this.online;
     this.online = new Set(players.map((p) => p.userId));
+    if (this.presenceReady) {
+      const joined = players.filter((p) => !before.has(p.userId)).map((p) => p.name);
+      const left = [...before].filter((id) => !this.online.has(id)).map((id) => this.names.get(id) ?? id);
+      if (joined.length || left.length) for (const listener of this.presenceListeners) listener({ joined, left });
+    }
+    this.presenceReady = true;
+    this.names = new Map(players.map((p) => [p.userId, p.name]));
     this.recordIps(
       serverId,
       players.map((p) => ({ userId: p.userId, name: p.name, ip: p.ip ?? '' })),

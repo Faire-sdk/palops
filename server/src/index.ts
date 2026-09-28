@@ -23,6 +23,7 @@ const pruneTimer = setInterval(() => {
   services.sessions.pruneExpired();
   services.siteAccounts.pruneExpired();
   services.world.prune();
+  services.console.prune();
 }, 60 * 60 * 1000);
 pruneTimer.unref();
 
@@ -33,6 +34,9 @@ const playerTimer = setInterval(() => {
   services.players.refreshOnline().catch(() => services.players.markAllOffline());
 }, 60 * 1000);
 playerTimer.unref();
+
+// Console: follow the game and PalDefender log files, if an owner has set them up.
+services.console.restartTail();
 
 // PalDefender (optional): keep player addresses current, including offline players.
 // Does nothing unless an owner has switched the integration on.
@@ -63,6 +67,8 @@ if (setupToken) {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
+    services.console.stopTail();
+    services.console.flush();
     await app.close();
     db.close();
     process.exit(0);

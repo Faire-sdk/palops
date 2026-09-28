@@ -1,3 +1,4 @@
+import { dirname, resolve } from 'node:path';
 import type { Config } from '../config.js';
 import type { DB } from '../database/db.js';
 import { randomToken, SecretBox } from '../utils/crypto.js';
@@ -10,6 +11,7 @@ import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
 import { PalDefenderService } from './paldefender/paldefender-service.js';
 import { PalworldService } from './palworld/index.js';
+import { ConsoleService } from './console/console-service.js';
 import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
 import { SiteAccountService } from './site/site-accounts.js';
@@ -34,6 +36,8 @@ export interface Services {
   moderation: ModerationService;
   /** Optional PalDefender plugin integration; does nothing until an owner enables it. */
   paldefender: PalDefenderService;
+  /** The view-only console: tailed log files plus events the panel knows about. */
+  console: ConsoleService;
   siteAccounts: SiteAccountService;
   world: WorldService;
   mapImage: MapImageService;
@@ -75,6 +79,18 @@ export function createServices(config: Config, db: DB): Services {
   const audit = new AuditLog(db);
   const players = new PlayerDirectory(db, palworld, servers);
   const paldefender = new PalDefenderService(db, new SecretBox(config.secret, 'paldefender-token'), players, servers);
+  const consoleLog = new ConsoleService(db, config.databasePath === ':memory:' ? [] : [dirname(resolve(config.databasePath))]);
+  const world = new WorldService(db, palworld, players, servers, audit);
+  // Mirror what the panel knows into the console, so it's useful even before any log file is set up.
+  audit.onRecord((actor, entry) => {
+    if (entry.category === 'auth') return;
+    consoleLog.add('panel', `${actor.username ?? 'system'}: ${entry.action.replace(/_/g, ' ')}${entry.target ? ` · ${entry.target}` : ''}`, 'info');
+  });
+  players.onPresence(({ joined, left }) => {
+    for (const name of joined) consoleLog.add('panel', `${name} joined`, 'info');
+    for (const name of left) consoleLog.add('panel', `${name} left`, 'info');
+  });
+  world.onSignal((s) => consoleLog.add('panel', `Signal for ${s.playerName}: ${s.summary}`, 'warn'));
   return {
     config,
     db,
@@ -95,7 +111,8 @@ export function createServices(config: Config, db: DB): Services {
     moderation: new ModerationService(db, palworld, players, servers, audit, paldefender),
     paldefender,
     siteAccounts: new SiteAccountService(db, config.sessionMaxMs),
-    world: new WorldService(db, palworld, players, servers, audit),
+    world,
+    console: consoleLog,
     mapImage: new MapImageService(db, config.databasePath, audit),
   };
 }
