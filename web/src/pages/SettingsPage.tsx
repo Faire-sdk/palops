@@ -24,8 +24,7 @@ import { authErrorMessage, DiscordButton, DiscordLogo, discordAvatarUrl } from '
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ConsoleSettingsTab } from '../components/ConsoleSettings';
 import { DiscordBotSettingsTab } from '../components/DiscordBotSettings';
-import { PalBanSettingsTab } from '../components/PalBan';
-import { PalDefenderSettingsTab } from '../components/PalDefenderSettings';
+import { IntegrationsSettingsTab } from '../components/IntegrationsSettings';
 import { ErrorState, KeyValue, Loading, Mono, PageHeader, Section, ServerStateChip } from '../components/common';
 import { DataTable } from '../components/DataTable';
 import { useToast } from '../components/Toast';
@@ -37,7 +36,7 @@ export function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const tabs = [
     { id: 'account', label: 'Account' },
-    ...(can('server.connection') ? [{ id: 'connection', label: 'Server connection' }, { id: 'console', label: 'Console logs' }, { id: 'paldefender', label: 'PalDefender' }, { id: 'palban', label: 'PalBan Network' }, { id: 'discord', label: 'Discord bot' }] : []),
+    ...(can('server.connection') ? [{ id: 'connection', label: 'Server connection' }, { id: 'console', label: 'Console logs' }, { id: 'integrations', label: 'Integrations' }, { id: 'discord', label: 'Discord bot' }] : []),
     ...(can('users.manage') ? [{ id: 'users', label: 'Users' }] : []),
   ];
   const tab = tabs.find((t) => t.id === params.get('tab'))?.id ?? 'account';
@@ -54,8 +53,7 @@ export function SettingsPage() {
       {tab === 'connection' && <ConnectionSettings />}
       {tab === 'console' && <ConsoleSettingsTab />}
       {tab === 'discord' && <DiscordBotSettingsTab />}
-      {tab === 'paldefender' && <PalDefenderSettingsTab />}
-      {tab === 'palban' && <PalBanSettingsTab />}
+      {tab === 'integrations' && <IntegrationsSettingsTab />}
       {tab === 'users' && <UserSettings />}
     </>
   );

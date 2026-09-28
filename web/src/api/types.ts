@@ -532,6 +532,8 @@ export interface PalBanSettings {
   hasKey: boolean;
   sendEvents: boolean;
   checkJoins: boolean;
+  sendLogs: boolean;
+  sendLogAddresses: boolean;
   serverName: string | null;
   updatedAt: string;
 }
@@ -544,6 +546,7 @@ export interface PalBanStatus {
   bans: { total: number; active: number };
   notInGame: number;
   queued: number;
+  logsQueued: number;
 }
 
 export interface PalBanBan {

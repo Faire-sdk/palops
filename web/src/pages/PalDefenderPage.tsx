@@ -44,19 +44,19 @@ export function PalDefenderPage() {
   if (!status?.enabled) {
     return (
       <>
-        <PageHeader title="PalDefender" />
+        <PageHeader title="Not available" />
         <Section>
-          <EmptyState title="PalDefender isn’t switched on">
+          <EmptyState title="This integration isn’t switched on">
             {can('server.connection') ? (
               <>
-                It’s an optional integration. Turn it on in{' '}
-                <Link component={RouterLink} to="/settings?tab=paldefender">
+                Optional integrations are turned on in{' '}
+                <Link component={RouterLink} to="/settings?tab=integrations">
                   Settings
                 </Link>
                 .
               </>
             ) : (
-              'An owner can switch on the optional PalDefender integration in Settings.'
+              'An owner can switch on optional integrations in Settings.'
             )}
           </EmptyState>
         </Section>

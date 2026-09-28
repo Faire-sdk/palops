@@ -190,6 +190,16 @@ export class PalBanClient {
     return { accepted: num(b.accepted), duplicates: num(b.duplicates), rejected: num(b.rejected) + num(b.failed) };
   }
 
+  /**
+   * Log lines from a server log, each with the time PalOps saw it (the lines
+   * carry a time but no date). Resending the same line with the same time is
+   * harmless: PalBan recognizes it.
+   */
+  async sendLogs(lines: Array<{ line: string; at: string }>): Promise<{ accepted: number; duplicates: number; skipped: number; rejected: number }> {
+    const b = obj(await this.request('POST', '/api/v1/integrations/logs', { lines, source: 'PalOps' }));
+    return { accepted: num(b.accepted), duplicates: num(b.duplicates), skipped: num(b.skipped), rejected: num(b.rejected) + num(b.failed) };
+  }
+
   async heartbeat(): Promise<void> {
     await this.request('POST', '/api/v1/integrations/heartbeat', {});
   }

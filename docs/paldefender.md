@@ -2,7 +2,7 @@
 
 [PalDefender](https://ultimeit.github.io/PalDefender/) is a Windows server plugin with anti-cheat, its own ban list and a REST API.
 PalOps works fully without it. This integration is **off by default**: nothing calls PalDefender, polls it or shows anything
-about it until an owner switches it on in **Settings → PalDefender**.
+about it until an owner switches it on in **Settings → Integrations → PalDefender**.
 
 ## What it adds
 
@@ -85,7 +85,7 @@ Give the token only what you use. The setup guide below has a starting point.
    }
    ```
 
-3. In PalOps, open **Settings → PalDefender** (owners only), enter the host, port and token, and press **Test connection**. It tries the reads
+3. In PalOps, open **Settings → Integrations → PalDefender** (owners only), enter the host, port and token, and press **Test connection**. It tries the reads
    the panel relies on and names any permission the token is missing. Then switch **Use PalDefender** on and save.
 
 ## Where the panel runs

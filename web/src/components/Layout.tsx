@@ -56,7 +56,7 @@ export function Layout() {
   const navigate = useNavigate();
   const { data: status } = useApi<ServerStatus>('/server/status', { pollMs: 15000 });
   const paldefender = usePalDefender();
-  const current = NAV.find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)));
+  const current = NAV.filter((n) => !n.paldefender || paldefender).find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)));
   const user = session?.user;
   const avatar = user?.discord ? discordAvatarUrl(user.discord) : null;
 

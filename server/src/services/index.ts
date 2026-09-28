@@ -98,7 +98,7 @@ export function createServices(config: Config, db: DB): Services {
   });
   world.onSignal((s) => consoleLog.add('panel', `Signal for ${s.playerName}: ${s.summary}`, 'warn'));
   const moderation = new ModerationService(db, palworld, players, servers, audit, paldefender);
-  const palban = new PalBanService(db, new SecretBox(config.secret, 'palban-key'), moderation, players, servers, audit);
+  const palban = new PalBanService(db, new SecretBox(config.secret, 'palban-key'), moderation, players, servers, audit, consoleLog);
   const siteAccounts = new SiteAccountService(db, config.sessionMaxMs);
   const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog, siteAccounts, paldefender, palban });
   return {

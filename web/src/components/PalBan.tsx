@@ -15,32 +15,27 @@ import type { PalBanBan, PalBanPlayer, PalBanSettings, PalBanStatus } from '../a
 import { useAuth } from '../auth/AuthContext';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
+import { usePalDefender } from '../hooks/usePalDefender';
 import { ConfirmDialog } from './ConfirmDialog';
 import { DataTable } from './DataTable';
 import { EmptyState, ErrorState, Loading, Mono, Section } from './common';
 import { ExportButton, PlayerName } from './PlayerBits';
 import { useToast } from './Toast';
 
-/** What a shared banlist gets wrong or can be used for; said wherever PalBan bans are shown. */
-function PalBanRisks({ compact = false }: { compact?: boolean }) {
+/** What PalBan Network and this integration are for; said wherever PalBan data is shown. */
+function PalBanPurpose({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
-      <Alert severity="warning" variant="outlined" sx={{ mx: 2, mt: 1.5 }}>
-        A shared banlist can be abused: a ban on it may be unfair, mistaken or copied from another server. Check the reason and the evidence before you ban anyone in the game.
+      <Alert severity="info" variant="outlined" sx={{ mx: 2, mt: 1.5 }}>
+        PalBan Network only shares information about cheaters, with proof. It never decides who plays on your server: that stays with your team.
       </Alert>
     );
   }
   return (
-    <Alert severity="warning" variant="outlined">
-      <AlertTitle>Know the risks of a shared banlist</AlertTitle>
-      <ul style={{ margin: 0, paddingLeft: 18 }}>
-        <li>It can be abused. Anyone with access to a team can add a ban that is unfair or built on false evidence, and if other teams copy it, that player can be locked out of servers that never looked into it.</li>
-        <li>
-          Whoever controls a shared list has power over it. A single party running one could lock a person out of many servers at will. That is why nothing here happens by itself: a ban on PalBan only becomes a ban in the game
-          when someone on your team confirms it.
-        </li>
-        <li>A ban or report from another server is a lead, never proof. Check the reason and the evidence, and hear the player out, before you act on it.</li>
-      </ul>
+    <Alert severity="info" variant="outlined">
+      <AlertTitle>What PalBan Network is for</AlertTitle>
+      PalBan Network shares information about cheaters, with proof, between servers. This integration is never meant to control another server’s banlist or its ban decisions, or to decide whether a
+      particular player can play on the servers that take part. Your team decides what happens on your server, and PalOps never bans or unbans because of PalBan by itself.
     </Alert>
   );
 }
@@ -51,19 +46,22 @@ interface Form {
   key: string;
   sendEvents: boolean;
   checkJoins: boolean;
+  sendLogs: boolean;
+  sendLogAddresses: boolean;
 }
 
 /** The optional PalBan Network integration: off until an owner switches it on. */
 export function PalBanSettingsTab() {
   const notify = useToast();
+  const pd = usePalDefender();
   const { data, error, loading, reload } = useApi<{ settings: PalBanSettings | null; status: PalBanStatus }>('/palban/settings');
-  const [form, setForm] = useState<Form>({ enabled: false, baseUrl: '', key: '', sendEvents: true, checkJoins: true });
+  const [form, setForm] = useState<Form>({ enabled: false, baseUrl: '', key: '', sendEvents: true, checkJoins: true, sendLogs: false, sendLogAddresses: false });
   const [busy, setBusy] = useState<'save' | 'test' | null>(null);
   const [test, setTest] = useState<{ serverName: string; integrationName: string; missingScopes: string[] }>();
 
   useEffect(() => {
     const s = data?.settings;
-    if (s) setForm({ enabled: s.enabled, baseUrl: s.baseUrl, key: '', sendEvents: s.sendEvents, checkJoins: s.checkJoins });
+    if (s) setForm({ enabled: s.enabled, baseUrl: s.baseUrl, key: '', sendEvents: s.sendEvents, checkJoins: s.checkJoins, sendLogs: s.sendLogs, sendLogAddresses: s.sendLogAddresses });
   }, [data]);
 
   if (loading && !data) return <Loading />;
@@ -106,7 +104,7 @@ export function PalBanSettingsTab() {
               PalBan Network is a shared banlist for Palworld servers. Switch this on to compare your server’s PalBan banlist with what is banned in the game, see what other servers
               found about a player, and let PalBan know about joins and bans made here. Nothing is banned because another server did: reports are leads for your team to review.
             </Typography>
-            <PalBanRisks />
+            <PalBanPurpose />
             <FormControlLabel control={<Switch checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />} label="Use PalBan Network" />
             <TextField label="PalBan Network address" placeholder="https://palban.net" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} required />
             <TextField
@@ -120,6 +118,29 @@ export function PalBanSettingsTab() {
             />
             <FormControlLabel control={<Switch checked={form.checkJoins} onChange={(e) => setForm({ ...form, checkJoins: e.target.checked })} />} label="Look players up on the network when they join" />
             <FormControlLabel control={<Switch checked={form.sendEvents} onChange={(e) => setForm({ ...form, sendEvents: e.target.checked })} />} label="Tell PalBan about joins, leaves and bans (never addresses)" />
+            {pd && (
+              <>
+                <FormControlLabel
+                  control={<Switch checked={form.sendLogs} onChange={(e) => setForm({ ...form, sendLogs: e.target.checked })} />}
+                  label={
+                    <>
+                      Send PalDefender’s cheater log lines to PalBan
+                      <Typography variant="body2" color="text.secondary">
+                        Only the lines it writes about suspected cheaters, for the Reports tab on PalBan Network. Chat and the rest of the log never leave the server. Needs the PalDefender log folder set in Console logs.
+                      </Typography>
+                    </>
+                  }
+                  sx={{ alignItems: 'flex-start', '& .MuiSwitch-root': { mt: 0.5 } }}
+                />
+                {form.sendLogs && (
+                  <FormControlLabel
+                    control={<Switch checked={form.sendLogAddresses} onChange={(e) => setForm({ ...form, sendLogAddresses: e.target.checked })} />}
+                    label="Include player addresses in those lines (removed by default)"
+                    sx={{ ml: 3 }}
+                  />
+                )}
+              </>
+            )}
             <Typography variant="body2" color="text.secondary">
               PalOps never bans or unbans because of PalBan by itself. A ban on your PalBan banlist only becomes a ban in the game when someone on your team presses “Ban in game” on the
               Bans page, one player at a time.
@@ -198,7 +219,7 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
           Your server’s own banlist on PalBan Network{status.serverName ? ` (${status.serverName})` : ''}
           {status.lastSyncAt ? `, read ${formatDateTime(status.lastSyncAt)}` : ''}. {status.notInGame > 0 ? `${status.notInGame} active ${status.notInGame === 1 ? 'ban isn’t' : 'bans aren’t'} banned in the game yet.` : 'Everything active is banned in the game.'}
         </Typography>
-        <PalBanRisks compact />
+        <PalBanPurpose compact />
         {status.error && (
           <Alert severity="warning" sx={{ mx: 2, mt: 1 }}>
             {status.error}

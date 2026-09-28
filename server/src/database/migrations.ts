@@ -540,4 +540,14 @@ export const migrations: Migration[] = [
       CREATE INDEX palban_bans_game ON palban_bans(server_id, game_id);
     `,
   },
+  {
+    id: 18,
+    name: 'palban_logs',
+    sql: `
+      -- Optionally forward the PalDefender log's cheater lines to PalBan Network.
+      -- Off by default, and player addresses are removed from the lines unless allowed.
+      ALTER TABLE palban ADD COLUMN send_logs INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE palban ADD COLUMN send_log_addresses INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];

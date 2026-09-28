@@ -6,6 +6,7 @@ import type { ModerationService } from '../players/moderation.js';
 import type { PlayerDirectory } from '../players/player-directory.js';
 import type { ServerRegistry } from '../servers/server-registry.js';
 import { badRequest, notFound } from '../../utils/errors.js';
+import type { ConsoleLine, ConsoleService } from '../console/console-service.js';
 import { PalBanClient, PalBanError, type PalBanEvent, type PalBanKeyStatus, type PalBanPlayer } from './palban-client.js';
 
 /** Settings as shown to a client: never includes the key. */
@@ -17,6 +18,10 @@ export interface PalBanSettings {
   sendEvents: boolean;
   /** Look each player up on the network when they join. */
   checkJoins: boolean;
+  /** Send the anticheat lines of the PalDefender log file to PalBan, for its Reports tab. */
+  sendLogs: boolean;
+  /** Keep player addresses in those lines. Off: they are removed before anything is sent. */
+  sendLogAddresses: boolean;
   serverName: string | null;
   updatedAt: string;
 }
@@ -28,6 +33,8 @@ export interface PalBanSettingsInput {
   key?: string;
   sendEvents: boolean;
   checkJoins: boolean;
+  sendLogs: boolean;
+  sendLogAddresses: boolean;
 }
 
 export interface PalBanStatus {
@@ -40,6 +47,8 @@ export interface PalBanStatus {
   notInGame: number;
   /** Events waiting to be sent to PalBan. */
   queued: number;
+  /** Log lines waiting to be sent to PalBan. */
+  logsQueued: number;
 }
 
 /** One ban on the server's PalBan banlist, next to what the game says. */
@@ -77,6 +86,8 @@ interface SettingsRow {
   palban_server_name: string | null;
   send_events: number;
   check_joins: number;
+  send_logs: number;
+  send_log_addresses: number;
   sync_cursor: string | null;
   last_sync_at: string | null;
   last_full_sync_at: string | null;
@@ -105,6 +116,19 @@ const SYNC_MS = 5 * 60 * 1000;
 const HEARTBEAT_MS = 5 * 60 * 1000;
 const LOOKUP_TTL_MS = 6 * 3600 * 1000;
 const MAX_QUEUE = 1000;
+const MAX_LOG_QUEUE = 5000;
+/** PalBan takes up to 2000 lines a request. */
+const LOG_BATCH = 1000;
+/** The lines PalDefender writes about cheaters: "... may be a cheater!", "... is a cheater!", heuristic suspicions. Nothing else from its log leaves the server. */
+const ANTICHEAT_LINE = /\bcheat(?:er)?\b|\bsuspicion\b|\bheuristic\b|\banti-?cheat\b/i;
+
+/** Removes player addresses from a log line: `, IP=203.0.113.9` and any other address. */
+export function stripAddresses(line: string): string {
+  return line
+    .replace(/,?\s*\bIP=[^\s,)]+/gi, '')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[address hidden]')
+    .replace(/\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/gi, '[address hidden]');
+}
 /** The API allows 120 reads a minute per key; joins queue behind this so a busy restart can't use them all. */
 const MAX_LOOKUPS_PER_TICK = 20;
 
@@ -114,6 +138,8 @@ const toSettings = (row: SettingsRow): PalBanSettings => ({
   hasKey: row.key_encrypted !== null,
   sendEvents: row.send_events === 1,
   checkJoins: row.check_joins === 1,
+  sendLogs: row.send_logs === 1,
+  sendLogAddresses: row.send_log_addresses === 1,
   serverName: row.palban_server_name,
   updatedAt: row.updated_at,
 });
@@ -156,6 +182,7 @@ export class PalBanService {
   private flagged = new Map<string, number>();
   private flagListeners: Array<(flag: PalBanFlag) => void> = [];
   private busy = false;
+  private logQueue: Array<{ line: string; at: string }> = [];
   /** Players being banned from a PalBan ban right now, so that isn't reported back to PalBan as a new ban. */
   private applying = new Set<string>();
 
@@ -166,7 +193,9 @@ export class PalBanService {
     private readonly players: PlayerDirectory,
     private readonly servers: ServerRegistry,
     private readonly audit: AuditLog,
+    consoleLog: ConsoleService,
   ) {
+    consoleLog.subscribe((lines) => this.onConsoleLines(lines));
     players.onRefresh((online) => this.onRefresh(online));
     moderation.onBan((e) => {
       if (!this.applying.has(e.userId)) this.queueEvent('BAN_CREATED', e.userId, e.name, { reason: e.reason });
@@ -204,14 +233,14 @@ export class PalBanService {
     const changedConnection = !before || before.base_url !== baseUrl || key !== null;
     this.db
       .prepare(
-        `INSERT INTO palban (id, enabled, base_url, key_encrypted, send_events, check_joins)
-         VALUES (1, @enabled, @baseUrl, @key, @sendEvents, @checkJoins)
+        `INSERT INTO palban (id, enabled, base_url, key_encrypted, send_events, check_joins, send_logs, send_log_addresses)
+         VALUES (1, @enabled, @baseUrl, @key, @sendEvents, @checkJoins, @sendLogs, @sendLogAddresses)
          ON CONFLICT (id) DO UPDATE SET enabled = @enabled, base_url = @baseUrl, key_encrypted = COALESCE(@key, key_encrypted),
-           send_events = @sendEvents, check_joins = @checkJoins,
+           send_events = @sendEvents, check_joins = @checkJoins, send_logs = @sendLogs, send_log_addresses = @sendLogAddresses,
            ${changedConnection ? 'palban_server_id = NULL, palban_server_name = NULL, sync_cursor = NULL, last_full_sync_at = NULL, last_sync_at = NULL,' : ''}
            last_error = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
       )
-      .run({ enabled: input.enabled ? 1 : 0, baseUrl, key, sendEvents: input.sendEvents ? 1 : 0, checkJoins: input.checkJoins ? 1 : 0 });
+      .run({ enabled: input.enabled ? 1 : 0, baseUrl, key, sendEvents: input.sendEvents ? 1 : 0, checkJoins: input.checkJoins ? 1 : 0, sendLogs: input.sendLogs ? 1 : 0, sendLogAddresses: input.sendLogAddresses ? 1 : 0 });
     if (changedConnection) {
       // Another key may be another server's banlist.
       const serverId = this.servers.getPrimary()?.id;
@@ -260,6 +289,7 @@ export class PalBanService {
       bans: counts,
       notInGame: row?.enabled === 1 ? this.bans().filter((b) => b.active && !b.inGame).length : 0,
       queued: this.queue.length,
+      logsQueued: this.logQueue.length,
     };
   }
 
@@ -449,6 +479,27 @@ export class PalBanService {
     if (this.queue.length > MAX_QUEUE) this.queue.splice(0, this.queue.length - MAX_QUEUE);
   }
 
+  /** PalDefender log lines about cheaters, when an owner has turned that on. Nothing else in the log is kept or sent. */
+  private onConsoleLines(lines: ConsoleLine[]): void {
+    if (!lines.some((l) => l.source === 'paldefender')) return;
+    const settings = this.settings();
+    if (!settings?.enabled || !settings.sendLogs) return;
+    for (const l of lines) {
+      if (l.source !== 'paldefender' || !ANTICHEAT_LINE.test(l.message)) continue;
+      this.logQueue.push({ line: settings.sendLogAddresses ? l.message : stripAddresses(l.message), at: l.at });
+    }
+    if (this.logQueue.length > MAX_LOG_QUEUE) this.logQueue.splice(0, this.logQueue.length - MAX_LOG_QUEUE);
+  }
+
+  /** Sends the queued log lines. What fails stays queued for the next try. */
+  async flushLogs(): Promise<void> {
+    while (this.logQueue.length > 0) {
+      const batch = this.logQueue.slice(0, LOG_BATCH);
+      await this.client().sendLogs(batch);
+      this.logQueue.splice(0, batch.length);
+    }
+  }
+
   /** Sends what is queued, up to 100 at a time. What fails stays queued for the next try. */
   async flush(): Promise<void> {
     while (this.queue.length > 0) {
@@ -468,6 +519,12 @@ export class PalBanService {
       if (now - this.lastSyncTry >= SYNC_MS) {
         this.lastSyncTry = now;
         await this.sync().catch(() => undefined);
+      }
+      if (this.settings()?.sendLogs) {
+        await this.flushLogs().catch((err) => {
+          const message = err instanceof PalBanError ? err.message : 'Could not send log lines to PalBan Network';
+          this.db.prepare('UPDATE palban SET last_error = ? WHERE id = 1').run(message);
+        });
       }
       if (this.settings()?.sendEvents) {
         if (now - this.lastHeartbeat >= HEARTBEAT_MS) {

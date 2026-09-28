@@ -70,6 +70,10 @@ beforeAll(async () => {
         });
       }
       if (url.pathname === '/api/v1/integrations/events/batch') return send(202, { accepted: (JSON.parse(raw) as { events: unknown[] }).events.length, duplicates: 0, failed: 0, rejected: 0 });
+      if (url.pathname === '/api/v1/integrations/logs') {
+        const n = (JSON.parse(raw) as { lines: unknown[] }).lines.length;
+        return send(202, { lines: n, skipped: 0, accepted: n, duplicates: 0, failed: 0, rejected: 0, errors: [] });
+      }
       if (url.pathname === '/api/v1/integrations/heartbeat') return send(200, { ok: true });
       return send(404, { error: 'no such endpoint' });
     });
@@ -96,7 +100,7 @@ beforeEach(async () => {
 const put = (cookie: string, payload: Record<string, unknown>) => api(ctx.app, { method: 'PUT', url: '/api/v1/palban/settings', cookie, payload });
 const post = (cookie: string, url: string, payload: Record<string, unknown> = {}) => api(ctx.app, { method: 'POST', url, cookie, payload });
 const get = (cookie: string, url: string) => api(ctx.app, { method: 'GET', url, cookie });
-const enable = (extra: Record<string, unknown> = {}) => put(owner, { enabled: true, baseUrl: base, key: KEY, sendEvents: true, checkJoins: true, ...extra });
+const enable = (extra: Record<string, unknown> = {}) => put(owner, { enabled: true, baseUrl: base, key: KEY, sendEvents: true, checkJoins: true, sendLogs: false, sendLogAddresses: false, ...extra });
 
 describe('settings', () => {
   it('is owner-only, never returns the key, and needs a key to switch on', async () => {
@@ -244,6 +248,55 @@ describe('events', () => {
     expect(ctx.services.palban.status().queued).toBe(1);
     await expect(ctx.services.palban.flush()).rejects.toThrow();
     expect(ctx.services.palban.status().queued).toBe(1);
+  });
+});
+
+describe('PalDefender log lines', () => {
+  const CHEATER_LINE = "[12:34:00][warning] 'Fanta' (UserId=steam_76561199142243524, IP=85.153.119.170) may be a cheater! Reason: Stamina cheat suspicion: performed 'Roll' while IsSPOverheat stayed true for 8 more movement ticks.. Not taking any actions, since this requires human judgement.";
+  const CHAT_LINE = '[12:35:00][info] [Chat] Fanta: my address is 85.153.119.170';
+  const logCalls = () => calls.filter((c) => c.path === '/api/v1/integrations/logs').flatMap((c) => (c.body as { lines: Array<{ line: string; at: string }> }).lines);
+  const feed = () => {
+    ctx.services.console.add('paldefender', CHEATER_LINE);
+    ctx.services.console.add('paldefender', CHAT_LINE);
+    ctx.services.console.add('game', CHEATER_LINE);
+    ctx.services.console.flush();
+  };
+
+  it('sends nothing unless an owner turned it on', async () => {
+    await enable();
+    feed();
+    expect(ctx.services.palban.status().logsQueued).toBe(0);
+    await ctx.services.palban.flushLogs();
+    expect(logCalls()).toEqual([]);
+  });
+
+  it('sends only the cheater lines of the PalDefender log, with the time it saw them and no address', async () => {
+    await enable({ sendLogs: true });
+    feed();
+    expect(ctx.services.palban.status().logsQueued).toBe(1);
+    await ctx.services.palban.flushLogs();
+    const sent = logCalls();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.line).toContain("'Fanta' (UserId=steam_76561199142243524) may be a cheater!");
+    expect(sent[0]!.line).not.toContain('85.153.119.170');
+    expect(Date.parse(sent[0]!.at)).not.toBeNaN();
+    expect(JSON.stringify(calls)).not.toContain('my address is');
+    expect(calls.find((c) => c.path === '/api/v1/integrations/logs')!.body).toMatchObject({ source: 'PalOps' });
+    expect(ctx.services.palban.status().logsQueued).toBe(0);
+  });
+
+  it('keeps addresses only when the owner allows it', async () => {
+    await enable({ sendLogs: true, sendLogAddresses: true });
+    feed();
+    await ctx.services.palban.flushLogs();
+    expect(logCalls()[0]!.line).toContain('IP=85.153.119.170');
+  });
+
+  it('keeps the lines queued when PalBan is unreachable', async () => {
+    await put(owner, { enabled: true, baseUrl: 'http://127.0.0.1:1', key: KEY, sendEvents: false, checkJoins: false, sendLogs: true, sendLogAddresses: false });
+    feed();
+    await expect(ctx.services.palban.flushLogs()).rejects.toThrow();
+    expect(ctx.services.palban.status().logsQueued).toBe(1);
   });
 });
 

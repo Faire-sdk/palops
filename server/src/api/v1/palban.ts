@@ -15,6 +15,8 @@ const settingsSchema = z.object({
   key: z.string().trim().max(256).optional(),
   sendEvents: z.boolean().default(true),
   checkJoins: z.boolean().default(true),
+  sendLogs: z.boolean().default(false),
+  sendLogAddresses: z.boolean().default(false),
 });
 
 /** PalBan errors reach the client as ordinary API errors instead of a 500. */
@@ -45,8 +47,8 @@ export default async function palbanRoutes(app: FastifyInstance, { services }: {
       category: 'server',
       action: 'palban_updated',
       details: {
-        before: before ? { enabled: before.enabled, baseUrl: before.baseUrl, sendEvents: before.sendEvents, checkJoins: before.checkJoins } : null,
-        after: { enabled: settings.enabled, baseUrl: settings.baseUrl, sendEvents: settings.sendEvents, checkJoins: settings.checkJoins },
+        before: before ? { enabled: before.enabled, baseUrl: before.baseUrl, sendEvents: before.sendEvents, checkJoins: before.checkJoins, sendLogs: before.sendLogs, sendLogAddresses: before.sendLogAddresses } : null,
+        after: { enabled: settings.enabled, baseUrl: settings.baseUrl, sendEvents: settings.sendEvents, checkJoins: settings.checkJoins, sendLogs: settings.sendLogs, sendLogAddresses: settings.sendLogAddresses },
         // Never log the key itself, only whether it changed.
         keyChanged: key !== undefined,
       },

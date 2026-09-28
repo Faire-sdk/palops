@@ -10,6 +10,7 @@ import type { IpBan, ModerationRecord, PalDefenderBan, PalDefenderResult, PalDef
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { PalBanBans } from '../components/PalBan';
+import { usePalDefender } from '../hooks/usePalDefender';
 import { ExportButton, PlayerName } from '../components/PlayerBits';
 import { DataTable } from '../components/DataTable';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -22,13 +23,14 @@ type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string; 
 
 /** Every ban in one place: players banned from the panel, banned addresses, and PalDefender's own list. */
 export function BansPage() {
+  const pd = usePalDefender();
   const [profile, setProfile] = useState<string | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
   return (
     <>
       <PageHeader
         title="Bans"
-        description="Players and addresses banned from the panel, and PalDefender’s own list when it’s connected."
+        description={pd ? 'Players and addresses banned from the panel, and PalDefender’s own list.' : 'Players and addresses banned from the panel.'}
         actions={<ExportButton path="/players/bans/export.csv" />}
       />
       <Stack spacing={2}>
