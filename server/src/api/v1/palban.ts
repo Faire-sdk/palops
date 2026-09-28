@@ -13,7 +13,6 @@ const settingsSchema = z.object({
   enabled: z.boolean(),
   baseUrl: z.string().trim().min(1).max(300),
   key: z.string().trim().max(256).optional(),
-  autoBan: z.boolean().default(false),
   sendEvents: z.boolean().default(true),
   checkJoins: z.boolean().default(true),
 });
@@ -46,8 +45,8 @@ export default async function palbanRoutes(app: FastifyInstance, { services }: {
       category: 'server',
       action: 'palban_updated',
       details: {
-        before: before ? { enabled: before.enabled, baseUrl: before.baseUrl, autoBan: before.autoBan, sendEvents: before.sendEvents, checkJoins: before.checkJoins } : null,
-        after: { enabled: settings.enabled, baseUrl: settings.baseUrl, autoBan: settings.autoBan, sendEvents: settings.sendEvents, checkJoins: settings.checkJoins },
+        before: before ? { enabled: before.enabled, baseUrl: before.baseUrl, sendEvents: before.sendEvents, checkJoins: before.checkJoins } : null,
+        after: { enabled: settings.enabled, baseUrl: settings.baseUrl, sendEvents: settings.sendEvents, checkJoins: settings.checkJoins },
         // Never log the key itself, only whether it changed.
         keyChanged: key !== undefined,
       },

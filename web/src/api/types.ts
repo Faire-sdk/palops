@@ -530,7 +530,6 @@ export interface PalBanSettings {
   enabled: boolean;
   baseUrl: string;
   hasKey: boolean;
-  autoBan: boolean;
   sendEvents: boolean;
   checkJoins: boolean;
   serverName: string | null;

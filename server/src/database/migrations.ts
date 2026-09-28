@@ -510,7 +510,6 @@ export const migrations: Migration[] = [
         key_encrypted TEXT,
         palban_server_id TEXT,
         palban_server_name TEXT,
-        auto_ban INTEGER NOT NULL DEFAULT 0,
         send_events INTEGER NOT NULL DEFAULT 1,
         check_joins INTEGER NOT NULL DEFAULT 1,
         sync_cursor TEXT,

@@ -14,6 +14,7 @@ import type { PalBanBan, PalBanPlayer, PalBanSettings, PalBanStatus } from '../a
 import { useAuth } from '../auth/AuthContext';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
+import { ConfirmDialog } from './ConfirmDialog';
 import { DataTable } from './DataTable';
 import { EmptyState, ErrorState, Loading, Mono, Section } from './common';
 import { ExportButton, PlayerName } from './PlayerBits';
@@ -23,7 +24,6 @@ interface Form {
   enabled: boolean;
   baseUrl: string;
   key: string;
-  autoBan: boolean;
   sendEvents: boolean;
   checkJoins: boolean;
 }
@@ -32,13 +32,13 @@ interface Form {
 export function PalBanSettingsTab() {
   const notify = useToast();
   const { data, error, loading, reload } = useApi<{ settings: PalBanSettings | null; status: PalBanStatus }>('/palban/settings');
-  const [form, setForm] = useState<Form>({ enabled: false, baseUrl: '', key: '', autoBan: false, sendEvents: true, checkJoins: true });
+  const [form, setForm] = useState<Form>({ enabled: false, baseUrl: '', key: '', sendEvents: true, checkJoins: true });
   const [busy, setBusy] = useState<'save' | 'test' | null>(null);
   const [test, setTest] = useState<{ serverName: string; integrationName: string; missingScopes: string[] }>();
 
   useEffect(() => {
     const s = data?.settings;
-    if (s) setForm({ enabled: s.enabled, baseUrl: s.baseUrl, key: '', autoBan: s.autoBan, sendEvents: s.sendEvents, checkJoins: s.checkJoins });
+    if (s) setForm({ enabled: s.enabled, baseUrl: s.baseUrl, key: '', sendEvents: s.sendEvents, checkJoins: s.checkJoins });
   }, [data]);
 
   if (loading && !data) return <Loading />;
@@ -79,7 +79,7 @@ export function PalBanSettingsTab() {
           >
             <Typography variant="body2" color="text.secondary">
               PalBan Network is a shared banlist for Palworld servers. Switch this on to compare your server’s PalBan banlist with what is banned in the game, see what other servers
-              found about a player, and let PalBan know about joins and bans made here. Nothing is banned because another server did: reports are leads for your team.
+              found about a player, and let PalBan know about joins and bans made here. Nothing is banned because another server did: reports are leads for your team to review.
             </Typography>
             <FormControlLabel control={<Switch checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />} label="Use PalBan Network" />
             <TextField label="PalBan Network address" placeholder="https://palban.net" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} required />
@@ -94,19 +94,10 @@ export function PalBanSettingsTab() {
             />
             <FormControlLabel control={<Switch checked={form.checkJoins} onChange={(e) => setForm({ ...form, checkJoins: e.target.checked })} />} label="Look players up on the network when they join" />
             <FormControlLabel control={<Switch checked={form.sendEvents} onChange={(e) => setForm({ ...form, sendEvents: e.target.checked })} />} label="Tell PalBan about joins, leaves and bans (never addresses)" />
-            <FormControlLabel
-              control={<Switch checked={form.autoBan} onChange={(e) => setForm({ ...form, autoBan: e.target.checked })} />}
-              label={
-                <>
-                  Ban in the game whatever is banned on my PalBan banlist
-                  <Typography variant="body2" color="text.secondary">
-                    Only bans on your own server’s PalBan list, which your team manages. Bans PalOps applied are lifted again when PalBan lifts them. Off by default: otherwise use
-                    “Ban in game” on the Bans page, one at a time.
-                  </Typography>
-                </>
-              }
-              sx={{ alignItems: 'flex-start', '& .MuiSwitch-root': { mt: 0.5 } }}
-            />
+            <Typography variant="body2" color="text.secondary">
+              PalOps never bans or unbans because of PalBan by itself. A ban on your PalBan banlist only becomes a ban in the game when someone on your team presses “Ban in game” on the
+              Bans page, one player at a time.
+            </Typography>
             <Stack direction="row" spacing={1}>
               <Button variant="contained" type="submit" loading={busy === 'save'}>
                 Save
@@ -137,12 +128,13 @@ export function PalBanSettingsTab() {
   );
 }
 
-/** The server's PalBan banlist next to the game's, with one-click banning in the game. */
+/** The server's PalBan banlist next to the game's. Banning or unbanning in the game is always a person's choice, confirmed one player at a time. */
 export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
   const { can } = useAuth();
   const notify = useToast();
   const { data, error, loading, reload } = useApi<{ enabled: boolean; status: PalBanStatus; bans: PalBanBan[]; onlyHere: Array<{ userId: string; name: string | null; reason: string | null; bannedAt: string }> }>('/palban/bans', { pollMs: 60000 });
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: 'ban' | 'unban'; ban: PalBanBan } | null>(null);
 
   if (!data?.enabled) return null;
   if (loading && !data) return <Loading />;
@@ -206,12 +198,19 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
               header: '',
               align: 'right',
               render: (b) =>
-                can('players.ban') &&
-                b.active &&
-                !b.inGame && (
-                  <Button size="small" variant="outlined" color="error" sx={{ whiteSpace: 'nowrap' }} loading={busy === b.id} onClick={() => act(b.id, () => api.post(`/palban/bans/${encodeURIComponent(b.id)}/apply`), `${b.playerName ?? b.gameId} was banned in the game`)}>
-                    Ban in game
-                  </Button>
+                can('players.ban') && (
+                  <>
+                    {b.active && !b.inGame && (
+                      <Button size="small" variant="outlined" color="error" sx={{ whiteSpace: 'nowrap' }} loading={busy === b.id} onClick={() => setConfirm({ kind: 'ban', ban: b })}>
+                        Ban in game
+                      </Button>
+                    )}
+                    {!b.active && b.inGame && b.applied && (
+                      <Button size="small" variant="outlined" sx={{ whiteSpace: 'nowrap' }} loading={busy === b.id} onClick={() => setConfirm({ kind: 'unban', ban: b })}>
+                        Unban in game
+                      </Button>
+                    )}
+                  </>
                 ),
             },
           ]}
@@ -235,6 +234,28 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
           />
         </Section>
       )}
+      <ConfirmDialog
+        open={!!confirm}
+        danger={confirm?.kind === 'ban'}
+        title={confirm?.kind === 'ban' ? `Ban ${confirm.ban.playerName ?? confirm.ban.gameId} in the game?` : `Unban ${confirm?.ban.playerName ?? confirm?.ban.gameId ?? ''} in the game?`}
+        confirmLabel={confirm?.kind === 'ban' ? 'Ban in game' : 'Unban in game'}
+        message={
+          confirm?.kind === 'ban' ? (
+            <>
+              Reason on PalBan: <strong>{confirm.ban.reason ?? 'none given'}</strong>. This is on your server’s own PalBan banlist, but it may have been merged from another server. Check the reason
+              and the evidence before you ban, because this bans the player on your server.
+            </>
+          ) : (
+            'This ban was lifted on PalBan Network. Unbanning in the game is your team’s decision, and PalOps only does it when you confirm.'
+          )
+        }
+        onClose={() => setConfirm(null)}
+        onConfirm={async () => {
+          const c = confirm!;
+          if (c.kind === 'ban') await act(c.ban.id, () => api.post(`/palban/bans/${encodeURIComponent(c.ban.id)}/apply`), `${c.ban.playerName ?? c.ban.gameId} was banned in the game`);
+          else await act(c.ban.id, () => api.post(`/players/${encodeURIComponent(c.ban.gameId)}/unban`, { reason: 'Lifted on PalBan Network' }), `${c.ban.playerName ?? c.ban.gameId} was unbanned in the game`);
+        }}
+      />
     </Stack>
   );
 }

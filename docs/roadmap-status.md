@@ -45,7 +45,7 @@ and player panel for inventories, pals, technologies, progression, guilds and ba
 ## PalBan Network (optional)
 
 An opt-in integration with [PalBan Network](https://github.com/Faire-sdk/PalBanNetwork)'s shared banlists, off unless an owner turns it on: your server's PalBan banlist next to the
-game's with one-click (or optional automatic) banning in the game, a CSV export for adding local bans to PalBan, network lookups on player profiles and at join, and joins and bans
+game's with banning in the game one player at a time on a person's confirmation (never automatic), a CSV export for adding local bans to PalBan, network lookups on player profiles and at join, and joins and bans
 reported to PalBan. Reports from other servers are leads, never bans. See [palban.md](palban.md).
 
 ## Discord bot (optional)

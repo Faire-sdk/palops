@@ -13,8 +13,6 @@ export interface PalBanSettings {
   enabled: boolean;
   baseUrl: string;
   hasKey: boolean;
-  /** Ban in the game whatever is banned on the PalBan banlist. Off unless an owner turns it on. */
-  autoBan: boolean;
   /** Tell PalBan about joins, leaves and bans made here. */
   sendEvents: boolean;
   /** Look each player up on the network when they join. */
@@ -28,7 +26,6 @@ export interface PalBanSettingsInput {
   baseUrl: string;
   /** Omit to keep the stored key. */
   key?: string;
-  autoBan: boolean;
   sendEvents: boolean;
   checkJoins: boolean;
 }
@@ -78,7 +75,6 @@ interface SettingsRow {
   key_encrypted: string | null;
   palban_server_id: string | null;
   palban_server_name: string | null;
-  auto_ban: number;
   send_events: number;
   check_joins: number;
   sync_cursor: string | null;
@@ -116,7 +112,6 @@ const toSettings = (row: SettingsRow): PalBanSettings => ({
   enabled: row.enabled === 1,
   baseUrl: row.base_url,
   hasKey: row.key_encrypted !== null,
-  autoBan: row.auto_ban === 1,
   sendEvents: row.send_events === 1,
   checkJoins: row.check_joins === 1,
   serverName: row.palban_server_name,
@@ -141,12 +136,13 @@ export function cleanBaseUrl(value: string): string | null {
  * The optional PalBan Network integration. Off until an owner turns it on in
  * Settings; while it's off nothing here runs. When on it mirrors the server's
  * PalBan banlist (so the panel can show what is not banned in the game yet and
- * ban it with one click, or automatically if the owner allows), looks players
- * up on the network, and tells PalBan about joins, leaves and bans.
+ * ban it with one click), looks players up on the network, and tells PalBan
+ * about joins, leaves and bans.
  *
- * PalBan's own rule holds here too: a report from another server is a lead for
- * the team, never a ban. Only bans on this server's own PalBan banlist can be
- * applied, and only by the team's choice.
+ * Nothing here acts by itself. A ban or unban on PalBan never becomes a ban or
+ * unban in the game unless a person on this server's team confirms it, one
+ * player at a time, so nobody's ban can spread to servers that didn't choose it.
+ * A report from another server is a lead for the team, never a ban.
  */
 export class PalBanService {
   private cached: { key: string; client: PalBanClient } | undefined;
@@ -160,6 +156,8 @@ export class PalBanService {
   private flagged = new Map<string, number>();
   private flagListeners: Array<(flag: PalBanFlag) => void> = [];
   private busy = false;
+  /** Players being banned from a PalBan ban right now, so that isn't reported back to PalBan as a new ban. */
+  private applying = new Set<string>();
 
   constructor(
     private readonly db: DB,
@@ -171,10 +169,10 @@ export class PalBanService {
   ) {
     players.onRefresh((online) => this.onRefresh(online));
     moderation.onBan((e) => {
-      if (e.actor.username !== PALBAN_ACTOR.username) this.queueEvent('BAN_CREATED', e.userId, e.name, { reason: e.reason });
+      if (!this.applying.has(e.userId)) this.queueEvent('BAN_CREATED', e.userId, e.name, { reason: e.reason });
     });
     moderation.onUnban((e) => {
-      if (e.actor.username !== PALBAN_ACTOR.username) this.queueEvent('BAN_REMOVED', e.userId, e.name, {});
+      this.queueEvent('BAN_REMOVED', e.userId, e.name, {});
     });
   }
 
@@ -206,14 +204,14 @@ export class PalBanService {
     const changedConnection = !before || before.base_url !== baseUrl || key !== null;
     this.db
       .prepare(
-        `INSERT INTO palban (id, enabled, base_url, key_encrypted, auto_ban, send_events, check_joins)
-         VALUES (1, @enabled, @baseUrl, @key, @autoBan, @sendEvents, @checkJoins)
+        `INSERT INTO palban (id, enabled, base_url, key_encrypted, send_events, check_joins)
+         VALUES (1, @enabled, @baseUrl, @key, @sendEvents, @checkJoins)
          ON CONFLICT (id) DO UPDATE SET enabled = @enabled, base_url = @baseUrl, key_encrypted = COALESCE(@key, key_encrypted),
-           auto_ban = @autoBan, send_events = @sendEvents, check_joins = @checkJoins,
+           send_events = @sendEvents, check_joins = @checkJoins,
            ${changedConnection ? 'palban_server_id = NULL, palban_server_name = NULL, sync_cursor = NULL, last_full_sync_at = NULL, last_sync_at = NULL,' : ''}
            last_error = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
       )
-      .run({ enabled: input.enabled ? 1 : 0, baseUrl, key, autoBan: input.autoBan ? 1 : 0, sendEvents: input.sendEvents ? 1 : 0, checkJoins: input.checkJoins ? 1 : 0 });
+      .run({ enabled: input.enabled ? 1 : 0, baseUrl, key, sendEvents: input.sendEvents ? 1 : 0, checkJoins: input.checkJoins ? 1 : 0 });
     if (changedConnection) {
       // Another key may be another server's banlist.
       const serverId = this.servers.getPrimary()?.id;
@@ -349,32 +347,11 @@ export class PalBanService {
         .prepare(`UPDATE palban SET sync_cursor = ?, last_sync_at = ?, last_full_sync_at = CASE WHEN ? THEN ? ELSE last_full_sync_at END, last_error = NULL WHERE id = 1`)
         .run(lastCursor, new Date().toISOString(), full ? 1 : 0, new Date().toISOString());
       if (changed > 0 || actor) this.audit.record(actor ?? PALBAN_ACTOR, { category: 'server', action: 'palban_sync', details: { changed, full } });
-      await this.afterSync();
       return { changed };
     } catch (err) {
       const message = err instanceof PalBanError ? err.message : 'PalBan Network sync failed';
       this.db.prepare('UPDATE palban SET last_error = ? WHERE id = 1').run(message);
       throw err;
-    }
-  }
-
-  /** Applies the ban list to the game if auto-ban is on, and lifts what PalOps applied once PalBan lifts it. */
-  private async afterSync(): Promise<void> {
-    const settings = this.settings();
-    if (!settings) return;
-    const serverId = this.servers.getPrimary()?.id;
-    if (serverId === undefined) return;
-    if (settings.autoBan) {
-      for (const ban of this.bans().filter((b) => b.active && !b.inGame)) {
-        await this.apply(PALBAN_ACTOR, ban.id).catch(() => undefined);
-      }
-    }
-    // Lift only what PalOps itself applied from a ban that is no longer active; a ban a person made stays.
-    for (const ban of this.bans().filter((b) => !b.active && b.applied)) {
-      if (this.moderation.isBanned(ban.gameId)) {
-        await this.moderation.unban(PALBAN_ACTOR, ban.gameId, 'Lifted on PalBan Network').catch(() => undefined);
-      }
-      this.db.prepare('UPDATE palban_bans SET applied_at = NULL WHERE server_id = ? AND ban_id = ?').run(serverId, ban.id);
     }
   }
 
@@ -386,7 +363,12 @@ export class PalBanService {
     if (row.status !== ACTIVE) throw badRequest('That ban is no longer active on PalBan Network', 'not_active');
     if (!/^[A-Za-z0-9_.:-]{1,80}$/.test(row.game_id)) throw badRequest('That Game ID is not a platform id the game accepts', 'invalid_game_id');
     if (this.moderation.isBanned(row.game_id)) return;
-    await this.moderation.ban(actor, row.game_id, `PalBan Network${row.reason ? `: ${row.reason}` : ''}`.slice(0, 200));
+    this.applying.add(row.game_id);
+    try {
+      await this.moderation.ban(actor, row.game_id, `PalBan Network${row.reason ? `: ${row.reason}` : ''}`.slice(0, 200));
+    } finally {
+      this.applying.delete(row.game_id);
+    }
     this.db.prepare('UPDATE palban_bans SET applied_at = ? WHERE server_id = ? AND ban_id = ?').run(new Date().toISOString(), serverId, banId);
   }
 

@@ -96,7 +96,7 @@ beforeEach(async () => {
 const put = (cookie: string, payload: Record<string, unknown>) => api(ctx.app, { method: 'PUT', url: '/api/v1/palban/settings', cookie, payload });
 const post = (cookie: string, url: string, payload: Record<string, unknown> = {}) => api(ctx.app, { method: 'POST', url, cookie, payload });
 const get = (cookie: string, url: string) => api(ctx.app, { method: 'GET', url, cookie });
-const enable = (extra: Record<string, unknown> = {}) => put(owner, { enabled: true, baseUrl: base, key: KEY, autoBan: false, sendEvents: true, checkJoins: true, ...extra });
+const enable = (extra: Record<string, unknown> = {}) => put(owner, { enabled: true, baseUrl: base, key: KEY, sendEvents: true, checkJoins: true, ...extra });
 
 describe('settings', () => {
   it('is owner-only, never returns the key, and needs a key to switch on', async () => {
@@ -107,7 +107,7 @@ describe('settings', () => {
     const res = await enable();
     expect(res.statusCode).toBe(200);
     expect(res.body).not.toContain(KEY);
-    expect(res.json().settings).toMatchObject({ enabled: true, baseUrl: base, hasKey: true, autoBan: false });
+    expect(res.json().settings).toMatchObject({ enabled: true, baseUrl: base, hasKey: true });
     expect(JSON.stringify(ctx.services.audit.list({ category: 'server', limit: 5, offset: 0 }).entries)).not.toContain(KEY);
     expect(cleanBaseUrl('https://user:pw@palban.net')).toBeNull();
     expect(cleanBaseUrl('https://palban.net/')).toBe('https://palban.net');
@@ -151,30 +151,31 @@ describe('banlist', () => {
     expect((await get(owner, '/api/v1/palban/bans')).json().onlyHere.map((b: { userId: string }) => b.userId)).toEqual([ANUBIS]);
   });
 
-  it('syncs only what changed, and lifts a ban it applied when PalBan lifts it', async () => {
-    await enable({ autoBan: true });
+  it('syncs only what changed, and never bans or unbans by itself', async () => {
+    await enable();
     await post(owner, '/api/v1/palban/sync');
-    // Auto-ban put both active bans into the game.
+    // Active bans on PalBan are not banned in the game until a person says so.
+    expect(ctx.services.moderation.isBanned(CHEATER)).toBe(false);
+    expect(ctx.services.moderation.isBanned('steam_76561190000000888')).toBe(false);
+    await post(owner, '/api/v1/palban/bans/b1/apply');
     expect(ctx.services.moderation.isBanned(CHEATER)).toBe(true);
-    expect(ctx.services.moderation.isBanned('steam_76561190000000888')).toBe(true);
-    expect(ctx.services.moderation.isBanned('steam_76561190000000999')).toBe(false);
-
-    // A person's own ban of someone else is never lifted by a PalBan change.
-    await post(owner, `/api/v1/players/${ANUBIS}/ban`, { reason: 'Mine' });
 
     calls = [];
     // PalBan lists a changed ban again, after the ones the sync has already seen.
     bans.push(ban('b1', CHEATER, 'REVOKED', { unban_date: '2026-09-10T00:00:00.000Z', updated_at: '2026-09-10T00:00:00.000Z' }));
+    bans.push(ban('b4', 'steam_76561190000000444'));
     const changed = (await post(owner, '/api/v1/palban/sync')).json().changed;
-    expect(changed).toBeGreaterThanOrEqual(1);
+    expect(changed).toBe(2);
     expect(calls.some((c) => c.path.includes('cursor='))).toBe(true);
-    expect(ctx.services.moderation.isBanned(CHEATER)).toBe(false);
-    expect(ctx.services.moderation.isBanned('steam_76561190000000888')).toBe(true);
-    expect(ctx.services.moderation.isBanned(ANUBIS)).toBe(true);
+    // Lifted on PalBan, still banned in the game: the panel shows it and leaves the choice to the team.
+    expect(ctx.services.moderation.isBanned(CHEATER)).toBe(true);
+    expect(ctx.services.moderation.isBanned('steam_76561190000000444')).toBe(false);
+    const list = (await get(owner, '/api/v1/palban/bans')).json().bans;
+    expect(list.find((b: { id: string }) => b.id === 'b1')).toMatchObject({ active: false, inGame: true, applied: true });
   });
 
   it('reports a rejected key instead of throwing, and keeps the error on the status', async () => {
-    await put(owner, { enabled: true, baseUrl: base, key: 'wrong', autoBan: false, sendEvents: false, checkJoins: false });
+    await put(owner, { enabled: true, baseUrl: base, key: 'wrong', sendEvents: false, checkJoins: false });
     const res = await post(owner, '/api/v1/palban/sync');
     expect(res.statusCode).toBe(502);
     expect((await get(owner, '/api/v1/palban/status')).json().error).toContain('rejected the key');
@@ -238,7 +239,7 @@ describe('events', () => {
   });
 
   it('keeps events queued when PalBan is unreachable', async () => {
-    await put(owner, { enabled: true, baseUrl: 'http://127.0.0.1:1', key: KEY, autoBan: false, sendEvents: true, checkJoins: false });
+    await put(owner, { enabled: true, baseUrl: 'http://127.0.0.1:1', key: KEY, sendEvents: true, checkJoins: false });
     await post(owner, `/api/v1/players/${ANUBIS}/ban`, { reason: 'Griefing' });
     expect(ctx.services.palban.status().queued).toBe(1);
     await expect(ctx.services.palban.flush()).rejects.toThrow();
