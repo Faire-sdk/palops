@@ -107,7 +107,7 @@ function mockPlayer(name: string, userId: string, level: number, guild: string |
     accountName: name.toLowerCase().replace(/\s+/g, ''),
     playerId: createHash('md5').update(userId).digest('hex').toUpperCase(),
     userId,
-    ip: '127.0.0.1',
+    ip: MOCK_HOMES[name]?.ip ?? '127.0.0.1',
     ping: 20 + Math.round(Math.random() * 40),
     level,
     location: { x: 1000 * level, y: -500 * level },

@@ -297,4 +297,35 @@ export const migrations: Migration[] = [
       CREATE INDEX player_signals_dedupe ON player_signals(server_id, dedupe_key, created_at);
     `,
   },
+  {
+    id: 8,
+    name: 'player_ips_and_ip_bans',
+    sql: `
+      -- Every address a player has connected from, recorded from the online
+      -- list and the world snapshot. Staff-only: never sent to the public site.
+      CREATE TABLE player_ips (
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        ip TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL DEFAULT ${now},
+        last_seen_at TEXT NOT NULL DEFAULT ${now},
+        PRIMARY KEY (server_id, user_id, ip)
+      );
+      CREATE INDEX player_ips_ip ON player_ips(server_id, ip);
+
+      -- The game's REST API only bans platform ids, so the panel keeps its own
+      -- list of banned addresses and bans any account seen connecting from one.
+      CREATE TABLE ip_bans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        ip TEXT NOT NULL,
+        reason TEXT,
+        source_user_id TEXT,
+        source_name TEXT,
+        actor_username TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now},
+        UNIQUE (server_id, ip)
+      );
+    `,
+  },
 ];

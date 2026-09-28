@@ -6,7 +6,9 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Checkbox from '@mui/material/Checkbox';
 import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -15,13 +17,13 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { ModerationAction, PlayerProfile } from '../api/types';
+import type { IpBan, ModerationAction, PlayerProfile } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
-import { palLabel, SignalChip } from './world';
+import { formatMapPoint, palLabel, SignalChip } from './world';
 
 type Action = 'kick' | 'ban' | 'unban';
 
@@ -33,20 +35,26 @@ const ACTION_COPY: Record<Action, { title: string; button: string; hint: string;
 
 /** Kick, ban or unban one player, with a reason. */
 export function ModerationDialog({ action, userId, name, onClose }: { action: Action | null; userId: string; name: string; onClose: () => void }) {
+  const { can } = useAuth();
   const notify = useToast();
   const [reason, setReason] = useState('');
+  const [banIp, setBanIp] = useState(false);
   const [busy, setBusy] = useState(false);
   const copy = action ? ACTION_COPY[action] : null;
   useEffect(() => {
-    if (action) setReason('');
+    if (action) {
+      setReason('');
+      setBanIp(false);
+    }
   }, [action, userId]);
 
   const submit = async () => {
     if (!action || !copy) return;
     setBusy(true);
     try {
-      await api.post(`/players/${encodeURIComponent(userId)}/${action}`, { reason });
-      notify(`${name} was ${copy.done}`, 'success');
+      const res = await api.post<{ ipBan?: IpBan | null; ipSkipped?: string | null }>(`/players/${encodeURIComponent(userId)}/${action}`, action === 'ban' ? { reason, banIp } : { reason });
+      notify(`${name} was ${copy.done}${res?.ipBan ? ` and ${res.ipBan.ip} was banned` : ''}`, 'success');
+      if (res?.ipSkipped) notify(res.ipSkipped, 'warning');
       setReason('');
       refreshAll();
       onClose();
@@ -73,6 +81,20 @@ export function ModerationDialog({ action, userId, name, onClose }: { action: Ac
             helperText={copy?.hint}
             slotProps={{ htmlInput: { maxLength: 200 } }}
           />
+          {action === 'ban' && can('world.view') && (
+            <FormControlLabel
+              control={<Checkbox checked={banIp} onChange={(e) => setBanIp(e.target.checked)} />}
+              label={
+                <>
+                  Also ban their IP address
+                  <Typography variant="body2" color="text.secondary">
+                    Bans the address they last connected from, so a new account there is banned too. Housemates and shared networks are caught as well.
+                  </Typography>
+                </>
+              }
+              sx={{ alignItems: 'flex-start', '& .MuiCheckbox-root': { pt: 0.5 } }}
+            />
+          )}
           <Typography variant="body2" color="text.secondary">
             <Mono>{userId}</Mono>
           </Typography>
@@ -84,6 +106,61 @@ export function ModerationDialog({ action, userId, name, onClose }: { action: Ac
         </Button>
         <Button variant="contained" color={action === 'unban' ? 'primary' : 'error'} onClick={submit} loading={busy}>
           {copy?.button}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/** Ban an IP address by hand. Any account seen connecting from it is banned. */
+export function IpBanDialog({ ip, open, onClose }: { ip: string; open: boolean; onClose: () => void }) {
+  const notify = useToast();
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) setReason('');
+  }, [open, ip]);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api.post('/players/ip-bans', { ip, reason });
+      notify(`${ip} was banned`, 'success');
+      refreshAll();
+      onClose();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Ban address {ip}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={1.5} sx={{ pt: 1 }}>
+          <Alert severity="warning">
+            Every account seen on this address is banned, now and whenever it connects later. That includes housemates and anyone on a shared network. The panel checks
+            about every 20 seconds, so a player can be on the server briefly before they’re removed.
+          </Alert>
+          <TextField
+            label="Reason"
+            placeholder="Optional"
+            autoFocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            helperText="Kept with the ban and shown to the player as the ban message."
+            slotProps={{ htmlInput: { maxLength: 200 } }}
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="contained" color="error" onClick={submit} loading={busy}>
+          Ban address
         </Button>
       </DialogActions>
     </Dialog>
@@ -103,6 +180,7 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
   const notify = useToast();
   const { data, error, loading, reload } = useApi<PlayerProfile>(`/players/${encodeURIComponent(userId ?? '')}`, { enabled: !!userId });
   const [action, setAction] = useState<Action | null>(null);
+  const [ipToBan, setIpToBan] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -136,8 +214,14 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
         <KeyValue
           items={[
             ['Platform ID', <Mono>{data.userId}</Mono>],
+            !!player?.accountName && ['Account name', player.accountName],
+            !!player?.playerId && ['Player UID', <Mono>{player.playerId}</Mono>],
             !!player && ['Level', player.level ?? '—'],
             !!player && ['Guild', player.guild ?? '—'],
+            !!data.live && ['Current address', <Mono>{data.live.ip ?? '—'}</Mono>],
+            !!data.live && ['Ping', data.live.ping !== null ? `${Math.round(data.live.ping)} ms` : '—'],
+            !!data.live && ['Buildings', data.live.buildingCount ?? '—'],
+            !!data.live?.position && ['Position', formatMapPoint(data.live.position)],
             !!player && ['First seen', formatDateTime(player.firstSeenAt)],
             !!player && ['Last seen', formatDateTime(player.lastSeenAt)],
           ]}
@@ -162,6 +246,50 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
                 </Button>
               ))}
           </Stack>
+        )}
+
+        {data.ips.length > 0 && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+              Addresses
+            </Typography>
+            <List dense disablePadding>
+              {data.ips.map((i) => (
+                <ListItem
+                  key={i.ip}
+                  disableGutters
+                  alignItems="flex-start"
+                  secondaryAction={
+                    can('players.ban') && !i.banned ? (
+                      <Button size="small" color="error" variant="outlined" onClick={() => setIpToBan(i.ip)}>
+                        Ban address
+                      </Button>
+                    ) : undefined
+                  }
+                >
+                  <ListItemText
+                    slotProps={{ secondary: { component: 'div' } }}
+                    primary={
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                        <Mono>{i.ip}</Mono>
+                        {i.banned && <Chip label="Banned" color="error" size="small" variant="outlined" />}
+                      </Stack>
+                    }
+                    secondary={
+                      <>
+                        {`First seen ${formatDateTime(i.firstSeenAt)} · last seen ${formatDateTime(i.lastSeenAt)}`}
+                        {i.sharedWith.length > 0 && (
+                          <Box sx={{ color: 'warning.main' }}>Also used by {i.sharedWith.map((o) => o.name).join(', ')}</Box>
+                        )}
+                      </>
+                    }
+                    sx={{ pr: can('players.ban') && !i.banned ? 14 : 0 }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </>
         )}
 
         {data.pals.length > 0 && (
@@ -244,6 +372,14 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
           <Button onClick={onClose}>Close</Button>
         </DialogActions>
       </Dialog>
+      <IpBanDialog
+        ip={ipToBan ?? ''}
+        open={!!ipToBan}
+        onClose={() => {
+          setIpToBan(null);
+          void reload();
+        }}
+      />
       <ModerationDialog
         action={action}
         userId={userId ?? ''}

@@ -267,6 +267,16 @@ export class WorldService {
     })();
 
     this.latest = { takenAt, snapshot, baseIds, workersByBase: assignWorkers(snapshot, baseIds) };
+    this.players.recordIps(
+      serverId,
+      playerChars.map((p) => ({ userId: p.userId!, name: p.name, ip: p.ip })),
+    );
+  }
+
+  /** Where a player is in the latest snapshot, in map coordinates. */
+  positionOf(userId: string): MapPoint | null {
+    const p = this.state === 'ok' ? this.latest?.snapshot.characters.find((c) => c.unitType === 'Player' && c.userId === userId) : undefined;
+    return p ? toMap(p.location) : null;
   }
 
   // ---- Guilds and bases ----

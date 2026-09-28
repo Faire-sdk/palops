@@ -73,6 +73,7 @@ export interface KnownPlayer {
   id: number;
   userId: string;
   playerId: string | null;
+  accountName: string | null;
   name: string;
   level: number | null;
   guild: string | null;
@@ -103,6 +104,30 @@ export interface PlayerProfile {
   pals: PlayerPal[];
   /** Empty unless the viewer has world.view. */
   signals: PlayerSignal[];
+  /** Addresses this player has connected from. Empty unless the viewer has world.view. */
+  ips: PlayerIp[];
+  /** Live connection details while online. Null unless the viewer has world.view. */
+  live: { ip: string | null; ping: number | null; buildingCount: number | null; position: MapPoint | null } | null;
+}
+
+export interface PlayerIp {
+  ip: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  banned: boolean;
+  /** Other accounts seen on the same address. */
+  sharedWith: Array<{ userId: string; name: string; lastSeenAt: string }>;
+}
+
+export interface IpBan {
+  id: number;
+  ip: string;
+  reason: string | null;
+  sourceUserId: string | null;
+  sourceName: string | null;
+  actorUsername: string | null;
+  createdAt: string;
+  accounts: Array<{ userId: string; name: string }>;
 }
 
 // ---- World data (the REST API's game-data snapshot) ----

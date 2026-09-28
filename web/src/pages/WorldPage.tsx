@@ -13,13 +13,10 @@ import Link from '@mui/material/Link';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
-import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
@@ -39,7 +36,7 @@ const TABS = [
   { id: 'map', label: 'Map', staff: true },
   { id: 'guilds', label: 'Guilds', staff: false },
   { id: 'bases', label: 'Bases', staff: true },
-  { id: 'performance', label: 'Performance', staff: true },
+  { id: 'performance', label: 'Lag hotspots', staff: true },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -387,35 +384,16 @@ function GuildDialog({ guildId, onClose, onPlayer, onBase }: { guildId: string |
 }
 
 function PerformanceTab({ onShow }: { onShow: (p: MapPoint) => void }) {
-  const [hours, setHours] = useState(24);
-  const { data, error, loading, reload } = useApi<WorldPerformance>(`/world/performance?hours=${hours}`, { pollMs: 60000 });
+  // Lag hotspots over the last week; the FPS graph and average are on the Dashboard.
+  const { data, error, loading, reload } = useApi<WorldPerformance>('/world/performance?hours=168', { pollMs: 60000 });
   if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorState error={error} onRetry={reload} />;
   const perf = data!;
-  const minFps = Math.min(...perf.timeline.map((t) => t.fps ?? Infinity));
   return (
     <Stack spacing={2}>
-      <Section
-        title="Server FPS and world size"
-        action={
-          <TextField select label="Period" value={hours} onChange={(e) => setHours(Number(e.target.value))} sx={{ minWidth: 140 }}>
-            <MenuItem value={1}>Last hour</MenuItem>
-            <MenuItem value={6}>Last 6 hours</MenuItem>
-            <MenuItem value={24}>Last 24 hours</MenuItem>
-            <MenuItem value={168}>Last 7 days</MenuItem>
-          </TextField>
-        }
-      >
-        <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
-          <Stat label="Average FPS" value={perf.avgFps ?? '—'} />
-          <Stat label="Lowest FPS" value={Number.isFinite(minFps) ? minFps : '—'} />
-          <Stat label="Snapshots" value={perf.timeline.length} />
-        </Stack>
-        {perf.timeline.length < 2 ? <EmptyState title="Not enough snapshots yet" /> : <FpsChart timeline={perf.timeline} />}
-      </Section>
       <Section title="Lag hotspots" disablePadding>
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
-          The busiest 500 m areas, with the server’s FPS while they were busy. A crowded area where FPS drops below average is a likely cause of lag, often a base with many pals.
+          The busiest 500 m areas over the last 7 days, with the server’s FPS while they were busy. The FPS graph is on the Dashboard. A crowded area where FPS drops below average is a likely cause of lag, often a base with many pals.
         </Typography>
         <DataTable
           rows={perf.hotspots}
@@ -456,52 +434,5 @@ function PerformanceTab({ onShow }: { onShow: (p: MapPoint) => void }) {
         />
       </Section>
     </Stack>
-  );
-}
-
-/** FPS (line) over characters in the world (shaded), as a plain SVG chart. */
-function FpsChart({ timeline }: { timeline: WorldPerformance['timeline'] }) {
-  const theme = useTheme();
-  const W = 800;
-  const H = 220;
-  const pad = { l: 36, r: 12, t: 10, b: 24 };
-  const maxFps = Math.max(60, ...timeline.map((t) => t.fps ?? 0));
-  // Headroom so a steady world size doesn't fill the whole chart.
-  const maxActors = Math.max(1, ...timeline.map((t) => t.actors)) * 1.6;
-  const x = (i: number) => pad.l + (i / (timeline.length - 1)) * (W - pad.l - pad.r);
-  const yFps = (v: number) => pad.t + (1 - v / maxFps) * (H - pad.t - pad.b);
-  const yAct = (v: number) => pad.t + (1 - v / maxActors) * (H - pad.t - pad.b);
-  const fpsPath = timeline.map((t, i) => (t.fps === null ? '' : `${i === 0 ? 'M' : 'L'}${x(i)},${yFps(t.fps)}`)).join(' ');
-  const areaPath = `M${x(0)},${H - pad.b} ${timeline.map((t, i) => `L${x(i)},${yAct(t.actors)}`).join(' ')} L${x(timeline.length - 1)},${H - pad.b} Z`;
-  const label = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  return (
-    <Box>
-      <Box component="svg" viewBox={`0 0 ${W} ${H}`} sx={{ width: '100%', height: 'auto', display: 'block' }} role="img" aria-label="Server FPS over time">
-        {[0, 0.5, 1].map((f) => (
-          <g key={f}>
-            <line x1={pad.l} x2={W - pad.r} y1={yFps(maxFps * f)} y2={yFps(maxFps * f)} stroke={theme.vars!.palette.divider} />
-            <text x={pad.l - 6} y={yFps(maxFps * f) + 4} fontSize={11} textAnchor="end" fill={theme.vars!.palette.text.secondary}>
-              {Math.round(maxFps * f)}
-            </text>
-          </g>
-        ))}
-        <path d={areaPath} fill={theme.vars!.palette.secondary.main} opacity={0.15} />
-        <path d={fpsPath} fill="none" stroke={theme.vars!.palette.primary.main} strokeWidth={2} />
-        <text x={pad.l} y={H - 6} fontSize={11} fill={theme.vars!.palette.text.secondary}>
-          {label(timeline[0]!.at)}
-        </text>
-        <text x={W - pad.r} y={H - 6} fontSize={11} textAnchor="end" fill={theme.vars!.palette.text.secondary}>
-          {label(timeline[timeline.length - 1]!.at)}
-        </text>
-      </Box>
-      <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
-        <Typography variant="body2" color="primary">
-          ━ Server FPS
-        </Typography>
-        <Typography variant="body2" color="secondary">
-          ▆ Characters in the world
-        </Typography>
-      </Stack>
-    </Box>
   );
 }

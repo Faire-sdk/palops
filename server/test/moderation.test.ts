@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, createTestApp, loginAs } from './helpers.js';
 
 let ctx: Awaited<ReturnType<typeof createTestApp>>;
 const ANUBIS = 'steam_76561190000000002';
+const LAMBALL = 'steam_76561190000000001';
+const CATTIVA = 'epic_0f3a9c2b1d';
 
 beforeEach(async () => {
   ctx = await createTestApp();
@@ -72,6 +74,78 @@ describe('player moderation', () => {
   it('rejects malformed player ids', async () => {
     const admin = await loginAs(ctx.app, ctx.services, 'admin');
     expect((await post(admin, '/api/v1/players/bad%20id/kick')).statusCode).toBe(400);
+  });
+});
+
+describe('player addresses and IP bans', () => {
+  const del = (cookie: string, url: string) => api(ctx.app, { method: 'DELETE', url, cookie });
+
+  it('shows addresses to staff only, in the online list and on profiles', async () => {
+    const viewer = await loginAs(ctx.app, ctx.services, 'viewer');
+    const online = (await get(viewer, '/api/v1/players')).json().players;
+    expect(online.every((p: { ip: unknown; location: unknown }) => p.ip === null && p.location === null)).toBe(true);
+    expect((await get(viewer, `/api/v1/players/${ANUBIS}`)).json()).toMatchObject({ ips: [], live: null });
+
+    const mod = await loginAs(ctx.app, ctx.services, 'moderator');
+    expect((await get(mod, '/api/v1/players')).json().players.find((p: { userId: string }) => p.userId === ANUBIS).ip).toBe('198.51.100.23');
+    const profile = (await get(mod, `/api/v1/players/${LAMBALL}`)).json();
+    // Lamball Enjoyer and CattivaFan connect from the same address.
+    expect(profile.ips).toMatchObject([{ ip: '203.0.113.7', banned: false, sharedWith: [{ userId: CATTIVA, name: 'CattivaFan' }] }]);
+    expect(profile.live).toMatchObject({ ip: '203.0.113.7', ping: expect.any(Number) });
+    expect((await get(viewer, '/api/v1/players/bans')).json().ipBans).toEqual([]);
+  });
+
+  it('bans the last address with a player and lifts it when they are unbanned', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    const res = (await post(admin, `/api/v1/players/${ANUBIS}/ban`, { reason: 'Griefing', banIp: true })).json();
+    expect(res.ipBan).toMatchObject({ ip: '198.51.100.23', sourceUserId: ANUBIS, sourceName: 'Anubis', reason: 'Griefing' });
+    expect((await get(admin, '/api/v1/players/bans')).json().ipBans).toHaveLength(1);
+    expect((await get(admin, `/api/v1/players/${ANUBIS}`)).json().ips[0]).toMatchObject({ banned: true });
+
+    await post(admin, `/api/v1/players/${ANUBIS}/unban`);
+    expect((await get(admin, '/api/v1/players/bans')).json().ipBans).toEqual([]);
+    const actions = ctx.services.audit.list({ category: 'players', limit: 10, offset: 0 }).entries.map((e) => e.action);
+    expect(actions).toEqual(expect.arrayContaining(['ip_ban', 'ip_unban']));
+  });
+
+  it('bans every account on a banned address, now and when they connect later', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    expect((await post(admin, '/api/v1/players/ip-bans', { ip: '203.0.113.7', reason: 'Ban evasion' })).statusCode).toBe(200);
+    // Both online players on that address are banned and kicked straight away.
+    await vi.waitFor(() => {
+      expect(ctx.services.moderation.isBanned(LAMBALL)).toBe(true);
+      expect(ctx.services.moderation.isBanned(CATTIVA)).toBe(true);
+    });
+    expect(ctx.services.moderation.isBanned(ANUBIS)).toBe(false);
+    expect((await get(admin, '/api/v1/players/bans')).json().bans[0]).toMatchObject({ actorUsername: 'PalOps (IP ban)', reason: expect.stringContaining('Banned address: Ban evasion') });
+
+    // A brand new account from the same address is caught at the next snapshot.
+    ctx.services.players.recordIps(ctx.services.servers.getPrimary()!.id, [{ userId: 'steam_new', name: 'Fresh Account', ip: '::ffff:203.0.113.7' }]);
+    await vi.waitFor(() => expect(ctx.services.moderation.isBanned('steam_new')).toBe(true));
+
+    const id = (await get(admin, '/api/v1/players/bans')).json().ipBans[0].id;
+    expect((await del(admin, `/api/v1/players/ip-bans/${id}`)).statusCode).toBe(200);
+    expect((await get(admin, '/api/v1/players/bans')).json().ipBans).toEqual([]);
+  });
+
+  it('refuses private addresses, bad input and non-admins', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    for (const ip of ['127.0.0.1', '192.168.1.20', '10.0.0.5', '::1', 'not-an-ip']) {
+      expect((await post(admin, '/api/v1/players/ip-bans', { ip })).statusCode).toBe(400);
+    }
+    const mod = await loginAs(ctx.app, ctx.services, 'moderator');
+    expect((await post(mod, '/api/v1/players/ip-bans', { ip: '203.0.113.9' })).statusCode).toBe(403);
+    expect((await del(mod, '/api/v1/players/ip-bans/1')).statusCode).toBe(403);
+    expect((await del(admin, '/api/v1/players/ip-bans/999')).statusCode).toBe(404);
+  });
+
+  it('bans only the account when the address is a shared range', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    ctx.services.players.recordIps(ctx.services.servers.getPrimary()!.id, [{ userId: 'steam_local', name: 'Lan Player', ip: '192.168.1.5' }]);
+    const res = (await post(admin, '/api/v1/players/steam_local/ban', { banIp: true })).json();
+    expect(res.ipBan).toBeNull();
+    expect(res.ipSkipped).toContain('private');
+    expect(res.record).toMatchObject({ action: 'ban' });
   });
 });
 

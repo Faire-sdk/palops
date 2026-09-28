@@ -7,6 +7,7 @@ export interface KnownPlayer {
   serverId: number;
   userId: string;
   playerId: string | null;
+  accountName: string | null;
   name: string;
   level: number | null;
   guild: string | null;
@@ -21,6 +22,7 @@ interface PlayerRow {
   server_id: number;
   user_id: string;
   player_id: string | null;
+  account_name: string | null;
   name: string;
   level: number | null;
   guild: string | null;
@@ -31,6 +33,25 @@ interface PlayerRow {
 
 const ONLINE_CACHE_MS = 5000;
 
+/** A player seen connected, with the address they connected from. */
+export interface SeenPlayer {
+  userId: string;
+  name: string;
+  ip: string;
+}
+
+export interface PlayerIp {
+  ip: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+/** Strips the IPv4-in-IPv6 prefix some servers report, so one address is one string. */
+export function normalizeIp(ip: string | null | undefined): string | null {
+  const value = ip?.trim().toLowerCase().replace(/^::ffff:/, '');
+  return value || null;
+}
+
 /**
  * Remembers every player seen online, so the panel and the public website can
  * show people who aren't on right now. Fed from the online player list.
@@ -38,6 +59,7 @@ const ONLINE_CACHE_MS = 5000;
 export class PlayerDirectory {
   private online = new Set<string>();
   private cache: { at: number; players: PalworldPlayer[] } | undefined;
+  private seenListeners: Array<(seen: SeenPlayer[]) => void> = [];
 
   constructor(
     private readonly db: DB,
@@ -53,6 +75,16 @@ export class PlayerDirectory {
     if (server) this.record(server.id, players);
     this.cache = { at: Date.now(), players };
     return players;
+  }
+
+  /** Runs after players are seen connected (online list or world snapshot), e.g. to enforce IP bans. */
+  onSeen(listener: (seen: SeenPlayer[]) => void): void {
+    this.seenListeners.push(listener);
+  }
+
+  /** The most recent online list, if it was fetched in the last minute or so. */
+  liveOf(userId: string): PalworldPlayer | undefined {
+    return this.online.has(userId) ? this.cache?.players.find((p) => p.userId === userId) : undefined;
   }
 
   /** Called when the server is unreachable, so nobody shows as online. */
@@ -96,6 +128,53 @@ export class PlayerDirectory {
       }
     })();
     this.online = new Set(players.map((p) => p.userId));
+    this.recordIps(
+      serverId,
+      players.map((p) => ({ userId: p.userId, name: p.name, ip: p.ip ?? '' })),
+    );
+  }
+
+  /** Remembers which addresses each player connected from, then tells listeners who was seen. */
+  recordIps(serverId: number, entries: Array<{ userId: string; name: string; ip: string | null }>): void {
+    const now = new Date().toISOString();
+    const seen: SeenPlayer[] = [];
+    const upsert = this.db.prepare(
+      `INSERT INTO player_ips (server_id, user_id, ip, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (server_id, user_id, ip) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
+    );
+    this.db.transaction(() => {
+      for (const e of entries) {
+        const ip = normalizeIp(e.ip);
+        if (!e.userId || !ip) continue;
+        upsert.run(serverId, e.userId, ip, now, now);
+        seen.push({ userId: e.userId, name: e.name, ip });
+      }
+    })();
+    if (seen.length) for (const listener of this.seenListeners) listener(seen);
+  }
+
+  /** Addresses this player has connected from, latest first. */
+  ipsOf(userId: string): PlayerIp[] {
+    const server = this.servers.getPrimary();
+    if (!server) return [];
+    const rows = this.db
+      .prepare('SELECT ip, first_seen_at, last_seen_at FROM player_ips WHERE server_id = ? AND user_id = ? ORDER BY last_seen_at DESC, ip')
+      .all(server.id, userId) as Array<{ ip: string; first_seen_at: string; last_seen_at: string }>;
+    return rows.map((r) => ({ ip: r.ip, firstSeenAt: r.first_seen_at, lastSeenAt: r.last_seen_at }));
+  }
+
+  /** Other players seen on this address. */
+  playersOnIp(ip: string, exceptUserId?: string): Array<{ userId: string; name: string; lastSeenAt: string }> {
+    const server = this.servers.getPrimary();
+    if (!server) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT i.user_id, p.name, i.last_seen_at FROM player_ips i
+         LEFT JOIN players p ON p.server_id = i.server_id AND p.user_id = i.user_id
+         WHERE i.server_id = ? AND i.ip = ? AND i.user_id <> ? ORDER BY i.last_seen_at DESC`,
+      )
+      .all(server.id, ip, exceptUserId ?? '') as Array<{ user_id: string; name: string | null; last_seen_at: string }>;
+    return rows.map((r) => ({ userId: r.user_id, name: r.name ?? r.user_id, lastSeenAt: r.last_seen_at }));
   }
 
   /** Guild and level from the world snapshot, which the online list doesn't include. */
@@ -164,6 +243,7 @@ export class PlayerDirectory {
       serverId: row.server_id,
       userId: row.user_id,
       playerId: row.player_id,
+      accountName: row.account_name,
       name: row.name,
       level: row.level,
       guild: row.guild,

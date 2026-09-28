@@ -16,11 +16,12 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage } from '../api/client';
-import type { KnownPlayer, ModerationRecord, Player, PlayerSignal } from '../api/types';
+import type { IpBan, KnownPlayer, ModerationRecord, Player, PlayerSignal } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { DataTable } from '../components/DataTable';
-import { ModerationDialog, PlayerProfileDialog } from '../components/PlayerActions';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { IpBanDialog, ModerationDialog, PlayerProfileDialog } from '../components/PlayerActions';
 import { useToast } from '../components/Toast';
 import { SignalChip } from '../components/world';
 import { formatDateTime } from '../format';
@@ -101,7 +102,7 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
   const players = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = data?.players ?? [];
-    return q ? list.filter((p) => [p.name, p.accountName, p.userId, p.playerId].some((v) => v.toLowerCase().includes(q))) : list;
+    return q ? list.filter((p) => [p.name, p.accountName, p.userId, p.playerId, p.ip ?? ''].some((v) => v.toLowerCase().includes(q))) : list;
   }, [data, query]);
 
   let body;
@@ -125,6 +126,7 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
           { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
           { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
           { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
+          ...(can('world.view') ? [{ key: 'ip', header: 'Address', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : '—') }] : []),
           { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
           { key: 'ping', header: 'Ping', nowrap: true, render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : '—') },
           {
@@ -231,8 +233,12 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
 
 function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction: (t: Target) => void }) {
   const { can } = useAuth();
-  const { data, error, loading, reload } = useApi<{ bans: ModerationRecord[] }>('/players/bans');
+  const notify = useToast();
+  const { data, error, loading, reload } = useApi<{ bans: ModerationRecord[]; ipBans: IpBan[] }>('/players/bans');
   const [userId, setUserId] = useState('');
+  const [address, setAddress] = useState('');
+  const [addressToBan, setAddressToBan] = useState<string | null>(null);
+  const [ipToLift, setIpToLift] = useState<IpBan | null>(null);
 
   let body;
   if (loading && !data) body = <Loading />;
@@ -269,10 +275,108 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
     <Stack spacing={2}>
       <Section title={data ? `Bans (${data.bans.length})` : 'Bans'} disablePadding>
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
-          Only bans made from PalOps are listed. The REST API can’t read bans made in-game or through a shared ban list.
+          Only bans made from PalOps are listed. The REST API can’t read bans made in-game or through a shared ban list. Addresses are banned separately, below.
         </Typography>
         {body}
       </Section>
+      {can('world.view') && (
+        <Section title={data ? `Banned addresses (${data.ipBans.length})` : 'Banned addresses'} disablePadding>
+          <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+            The game can only ban accounts, so PalOps enforces these itself: any account seen connecting from a banned address is banned and kicked at the next check
+            (about every 20 seconds). Unbanning a player lifts the addresses banned with them.
+          </Typography>
+          <DataTable
+            rows={data?.ipBans ?? []}
+            rowKey={(b) => b.id}
+            empty={<EmptyState icon={PeopleOutlinedIcon} title="No banned addresses" />}
+            columns={[
+              { key: 'ip', header: 'Address', render: (b) => <Mono>{b.ip}</Mono> },
+              {
+                key: 'accounts',
+                header: 'Accounts seen on it',
+                render: (b) =>
+                  b.accounts.length === 0 && !b.sourceName ? (
+                    '—'
+                  ) : (
+                    <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                      {[...new Map([...(b.sourceUserId ? [[b.sourceUserId, b.sourceName ?? b.sourceUserId] as const] : []), ...b.accounts.map((a) => [a.userId, a.name] as const)])].map(
+                        ([id, name]) => (
+                          <PlayerName key={id} name={name} userId={id} onOpen={onOpen} />
+                        ),
+                      )}
+                    </Stack>
+                  ),
+              },
+              { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
+              { key: 'by', header: 'Banned by', render: (b) => b.actorUsername ?? '—' },
+              { key: 'at', header: 'When', nowrap: true, render: (b) => formatDateTime(b.createdAt) },
+              {
+                key: 'actions',
+                header: '',
+                align: 'right',
+                render: (b) =>
+                  can('players.ban') && (
+                    <Button size="small" variant="outlined" onClick={() => setIpToLift(b)}>
+                      Unban
+                    </Button>
+                  ),
+              },
+            ]}
+          />
+        </Section>
+      )}
+      {can('players.ban') && can('world.view') && (
+        <Section title="Ban an IP address">
+          <Stack
+            component="form"
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ alignItems: { sm: 'flex-start' } }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (address.trim()) setAddressToBan(address.trim());
+            }}
+          >
+            <TextField
+              label="IP address"
+              helperText="Also available from a player’s profile, which lists every address they’ve used."
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              required
+              slotProps={{ htmlInput: { maxLength: 64 } }}
+              sx={{ maxWidth: { sm: 420 } }}
+            />
+            <Button variant="contained" color="error" type="submit" sx={{ height: 40 }}>
+              Ban
+            </Button>
+          </Stack>
+        </Section>
+      )}
+      <IpBanDialog
+        ip={addressToBan ?? ''}
+        open={!!addressToBan}
+        onClose={() => {
+          setAddressToBan(null);
+          setAddress('');
+          reload();
+        }}
+      />
+      <ConfirmDialog
+        open={!!ipToLift}
+        title={`Unban ${ipToLift?.ip ?? 'address'}?`}
+        message="Accounts that connect from this address are no longer banned automatically. Accounts that were already banned stay banned until you unban them."
+        confirmLabel="Unban address"
+        onClose={() => setIpToLift(null)}
+        onConfirm={async () => {
+          try {
+            await api.delete(`/players/ip-bans/${ipToLift!.id}`);
+            notify(`${ipToLift!.ip} was unbanned`, 'success');
+            reload();
+          } catch (err) {
+            notify(errorMessage(err), 'error');
+          }
+        }}
+      />
       {can('players.ban') && (
         <Section title="Ban by platform ID">
           <Stack

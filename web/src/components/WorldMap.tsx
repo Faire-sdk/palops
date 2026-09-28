@@ -1,15 +1,17 @@
 import AddIcon from '@mui/icons-material/Add';
 import CenterFocusStrongOutlinedIcon from '@mui/icons-material/CenterFocusStrongOutlined';
 import RemoveIcon from '@mui/icons-material/Remove';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import { useTheme } from '@mui/material/styles';
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import type { MapImage, MapPoint, WorldMapData } from '../api/types';
-import { palLabel, useGuildColor } from './world';
+import { GuildDot, palLabel, useGuildColor } from './world';
 
 export type Layer = 'players' | 'bases' | 'basePals' | 'partyPals' | 'wildPals' | 'npcs';
 
@@ -27,6 +29,17 @@ interface View {
   cy: number;
   /** Visible width in map units. */
   width: number;
+}
+
+/** Pals and NPCs are only named once zoomed in this far (visible width in map units), or the map turns into a wall of text. */
+const NAME_WIDTH = { partyPals: 260, npcs: 260, basePals: 110, wildPals: 90 } as const;
+
+interface Place {
+  label: string;
+  group: 'Players' | 'Bases' | 'Guilds';
+  at: MapPoint;
+  /** Points to fit when the place spans several (a guild's bases and members). */
+  around?: MapPoint[];
 }
 
 const WORLD = 1000;
@@ -67,6 +80,7 @@ export function WorldMap({
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [layers, setLayers] = useState<Set<Layer>>(new Set(['players', 'bases', 'partyPals', 'basePals']));
+  const [names, setNames] = useState(true);
   const allPoints = useMemo(() => {
     const points = [...map.players, ...map.bases].map((p) => p.at);
     if (background) points.push({ x: background.bounds.left, y: background.bounds.top }, { x: background.bounds.right, y: background.bounds.bottom });
@@ -90,11 +104,56 @@ export function WorldMap({
     return () => observer.disconnect();
   }, []);
 
+  const guilds = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; points: MapPoint[] }>();
+    for (const item of [...map.bases, ...map.players]) {
+      if (!item.guildId) continue;
+      const g = byId.get(item.guildId) ?? { id: item.guildId, name: item.guildName ?? 'Unknown guild', points: [] };
+      g.points.push(item.at);
+      byId.set(item.guildId, g);
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [map]);
+  /** Everything findable by name: players, bases and guilds. */
+  const places = useMemo<Place[]>(
+    () => [
+      ...map.players.map((p): Place => ({ label: p.name, group: 'Players', at: p.at })),
+      ...map.bases.map((b): Place => ({ label: `${b.guildName ?? 'Unknown guild'} base`, group: 'Bases', at: b.at })),
+      ...guilds.map((g): Place => ({ label: g.name, group: 'Guilds', at: g.points[0]!, around: g.points })),
+    ],
+    [map, guilds],
+  );
+
+  const goTo = (place: Place) => {
+    const points = place.around ?? [place.at];
+    const xs = points.map((q) => q.x);
+    const ys = points.map((q) => q.y);
+    const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    // Frame everything the place covers, but never closer than a base-sized view.
+    setView({ cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, width: Math.max(160, Math.max(maxX - minX, maxY - minY) * 1.5) });
+  };
+
   const unitsPerPx = view.width / size.w;
   const height = size.h * unitsPerPx;
   // SVG y grows downward; map y grows north, so flip it.
   const viewBox = `${view.cx - view.width / 2} ${-view.cy - height / 2} ${view.width} ${height}`;
   const r = (px: number) => px * unitsPerPx;
+  const label = (x: number, y: number, text: string, opts: { size?: number; weight?: number; muted?: boolean; dx?: number; dy?: number } = {}) => (
+    <text
+      x={x + r(opts.dx ?? 11)}
+      y={-y + r(opts.dy ?? 4)}
+      fontSize={r(opts.size ?? 13)}
+      fontWeight={opts.weight ?? 600}
+      fill={opts.muted ? theme.vars!.palette.text.secondary : theme.vars!.palette.text.primary}
+      stroke={theme.vars!.palette.background.default}
+      strokeWidth={r(3)}
+      paintOrder="stroke"
+      style={{ pointerEvents: 'none' }}
+    >
+      {text}
+    </text>
+  );
+  const showNames = (layer: keyof typeof NAME_WIDTH) => names && view.width <= NAME_WIDTH[layer];
 
   const zoom = (factor: number, anchor?: MapPoint) =>
     setView((v) => {
@@ -181,6 +240,34 @@ export function WorldMap({
             onClick={() => toggle(l.id)}
           />
         ))}
+        <Chip label="Names" color={names ? 'primary' : 'default'} variant={names ? 'filled' : 'outlined'} onClick={() => setNames((n) => !n)} title="Show names next to markers. Pals and NPCs are named once you zoom in." />
+      </Stack>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ alignItems: { md: 'center' } }}>
+        <Autocomplete
+          size="small"
+          options={places}
+          groupBy={(o) => o.group}
+          getOptionLabel={(o) => o.label}
+          isOptionEqualToValue={(a, b) => a.group === b.group && a.label === b.label && a.at.x === b.at.x && a.at.y === b.at.y}
+          onChange={(_, value) => value && goTo(value)}
+          renderInput={(params) => <TextField {...params} placeholder="Find a player, base or guild" slotProps={{ ...params.slotProps, htmlInput: { ...params.slotProps.htmlInput, 'aria-label': 'Find on the map' } }} />}
+          sx={{ width: { xs: '100%', md: 300 }, flexShrink: 0 }}
+        />
+        {guilds.length > 0 && (
+          <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+            {guilds.map((g) => (
+              <Chip
+                key={g.id}
+                size="small"
+                variant="outlined"
+                icon={<GuildDot guildId={g.id} />}
+                label={g.name}
+                onClick={() => goTo({ label: g.name, group: 'Guilds', at: g.points[0]!, around: g.points })}
+                sx={{ '& .MuiChip-icon': { ml: 1, mr: -0.5 } }}
+              />
+            ))}
+          </Stack>
+        )}
       </Stack>
       <Box
         ref={box}
@@ -216,21 +303,30 @@ export function WorldMap({
           <g opacity={background ? 0.35 : 1}>{gridLines}</g>
           {layers.has('wildPals') &&
             pal('WildPal').map((p, i) => (
-              <circle key={`w${i}`} cx={p.at.x} cy={-p.at.y} r={r(2.5)} fill={theme.vars!.palette.text.disabled}>
-                <title>{`${palLabel(p)} · level ${p.level ?? '?'}`}</title>
-              </circle>
+              <g key={`w${i}`}>
+                <circle cx={p.at.x} cy={-p.at.y} r={r(2.5)} fill={theme.vars!.palette.text.disabled}>
+                  <title>{`${palLabel(p)} · level ${p.level ?? '?'}`}</title>
+                </circle>
+                {showNames('wildPals') && label(p.at.x - r(4), p.at.y, `${palLabel(p)} Lv ${p.level ?? '?'}`, { size: 11, weight: 400, muted: true })}
+              </g>
             ))}
           {layers.has('npcs') &&
             map.npcs.map((n, i) => (
-              <circle key={`n${i}`} cx={n.at.x} cy={-n.at.y} r={r(3)} fill={theme.vars!.palette.warning.main}>
-                <title>{palLabel({ className: n.className })}</title>
-              </circle>
+              <g key={`n${i}`}>
+                <circle cx={n.at.x} cy={-n.at.y} r={r(3)} fill={theme.vars!.palette.warning.main}>
+                  <title>{palLabel({ className: n.className })}</title>
+                </circle>
+                {showNames('npcs') && label(n.at.x - r(3), n.at.y, palLabel({ className: n.className }), { size: 11, weight: 400, muted: true })}
+              </g>
             ))}
           {layers.has('basePals') &&
             pal('BaseCampPal').map((p, i) => (
-              <circle key={`b${i}`} cx={p.at.x} cy={-p.at.y} r={r(3)} fill={theme.vars!.palette.secondary.main} opacity={0.8}>
-                <title>{`${palLabel(p)} · level ${p.level ?? '?'}${p.guildName ? ` · ${p.guildName}` : ''}`}</title>
-              </circle>
+              <g key={`b${i}`}>
+                <circle cx={p.at.x} cy={-p.at.y} r={r(3)} fill={theme.vars!.palette.secondary.main} opacity={0.8}>
+                  <title>{`${palLabel(p)} · level ${p.level ?? '?'}${p.guildName ? ` · ${p.guildName}` : ''}`}</title>
+                </circle>
+                {showNames('basePals') && label(p.at.x - r(3), p.at.y, `${palLabel(p)} Lv ${p.level ?? '?'}`, { size: 11, weight: 400 })}
+              </g>
             ))}
           {layers.has('bases') &&
             map.bases.map((b) => (
@@ -245,31 +341,24 @@ export function WorldMap({
                   stroke={theme.vars!.palette.background.paper}
                   strokeWidth={r(2)}
                 />
+                {names && label(b.at.x, b.at.y, `${b.guildName ?? 'Base'}${view.width <= 400 ? ` · ${b.workers} worker${b.workers === 1 ? '' : 's'}` : ''}`, { size: 12, dx: -8, dy: 24 })}
                 <title>{`${b.guildName ?? 'Base'} · ${b.workers} worker${b.workers === 1 ? '' : 's'}`}</title>
               </g>
             ))}
           {layers.has('partyPals') &&
             pal('OtomoPal').map((p, i) => (
-              <circle key={`o${i}`} cx={p.at.x} cy={-p.at.y} r={r(4)} fill={theme.vars!.palette.primary.light} stroke={theme.vars!.palette.background.paper} strokeWidth={r(1)}>
-                <title>{`${palLabel(p)} · level ${p.level ?? '?'}${p.owner ? ` · ${p.owner}’s pal` : ''}`}</title>
-              </circle>
+              <g key={`o${i}`}>
+                <circle cx={p.at.x} cy={-p.at.y} r={r(4)} fill={theme.vars!.palette.primary.light} stroke={theme.vars!.palette.background.paper} strokeWidth={r(1)}>
+                  <title>{`${palLabel(p)} · level ${p.level ?? '?'}${p.owner ? ` · ${p.owner}’s pal` : ''}`}</title>
+                </circle>
+                {showNames('partyPals') && label(p.at.x - r(2), p.at.y, `${palLabel(p)}${p.owner ? ` (${p.owner}’s)` : ''}`, { size: 11, weight: 400 })}
+              </g>
             ))}
           {layers.has('players') &&
             map.players.map((p) => (
               <g key={p.userId} onClick={click(() => onPlayer?.(p.userId))} style={{ cursor: onPlayer ? 'pointer' : undefined }}>
                 <circle cx={p.at.x} cy={-p.at.y} r={r(7)} fill={guildColor(p.guildId)} stroke={theme.vars!.palette.background.paper} strokeWidth={r(2.5)} />
-                <text
-                  x={p.at.x + r(11)}
-                  y={-p.at.y + r(4)}
-                  fontSize={r(13)}
-                  fontWeight={600}
-                  fill={theme.vars!.palette.text.primary}
-                  stroke={theme.vars!.palette.background.default}
-                  strokeWidth={r(3)}
-                  paintOrder="stroke"
-                >
-                  {p.name}
-                </text>
+                {names && label(p.at.x, p.at.y, p.name)}
                 <title>{`${p.name} · level ${p.level ?? '?'}${p.guildName ? ` · ${p.guildName}` : ''}`}</title>
               </g>
             ))}

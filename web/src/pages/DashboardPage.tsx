@@ -17,6 +17,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import type { ServerStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
+import { FpsPanel } from '../components/FpsPanel';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono, PageHeader, Section, ServerStateChip, Stat } from '../components/common';
 import { useToast } from '../components/Toast';
 import { formatDateTime, formatDuration } from '../format';
@@ -126,6 +127,11 @@ export function DashboardPage() {
             </Typography>
           </Section>
         </Grid>
+        {can('world.view') && (
+          <Grid size={12}>
+            <FpsPanel />
+          </Grid>
+        )}
       </Grid>
 
       <BroadcastDialog open={broadcastOpen} onClose={() => setBroadcastOpen(false)} />

@@ -7,8 +7,8 @@ Tracks progress against the development priority order in the project roadmap.
 | 1 | Project foundation | Done: monorepo, Fastify API, SQLite + migrations, React dashboard shell, shared UI components |
 | 2 | Authentication & roles | Done: Discord OAuth2 as main sign-in (owners add users by Discord ID), optional password sign-in, first-run owner setup, sessions, owner-issued reset links, 4 roles enforced server-side, user management |
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
-| 4 | Dashboard | Basic: status, info, player count, FPS/frame time, broadcast. Host CPU/RAM pending |
-| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Bans made outside PalOps can't be listed through the API |
+| 4 | Dashboard | Status, info, player count, FPS/frame time, broadcast, and the server FPS graph with average and lowest (from world snapshots, staff only). Host CPU/RAM pending |
+| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every address a player has connected from is recorded (staff only), shown on profiles with the other accounts that share it, and can be banned. The game only bans accounts, so PalOps enforces banned addresses itself: any account seen on one is banned and kicked at the next check (about 20 seconds). Bans made outside PalOps can't be listed through the API |
 | 6 | Console | Blocked on the REST API (no console). Needs RCON or PalOps on the game machine |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
 | 8 | Logs | Started: audit log with category filter and pagination |
@@ -29,7 +29,7 @@ Character links are unverified for now; verification needs staff review or an in
 From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 seconds:
 
 - Guilds with members and bases, also filling in guilds on player lists, profiles and the public site.
-- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
+- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, with names on players and bases, a guild legend and a find box (pals and NPCs are named once you zoom in), over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
 - Bases with their worker pals, levels and HP, and injured workers flagged.
 - Pals seen with each player, kept for 30 days.
 - Cheat signals: unusual movement, level jumps, players sharing an address and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.
