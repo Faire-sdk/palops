@@ -245,7 +245,7 @@ export class WorldService {
 
       this.players.applyWorld(
         serverId,
-        playerChars.map((p) => ({ userId: p.userId!, level: p.level, guildId: p.guildId, guildName: p.guildName })),
+        playerChars.map((p) => ({ userId: p.userId!, level: p.level, guildId: p.guildId, guildName: p.guildName, ip: p.ip })),
       );
 
       const upsertPal = this.db.prepare(

@@ -16,7 +16,7 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage } from '../api/client';
-import type { KnownPlayer, ModerationRecord, Player, PlayerSignal } from '../api/types';
+import type { IpBan, KnownPlayer, ModerationRecord, Player, PlayerSignal } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { DataTable } from '../components/DataTable';
@@ -34,7 +34,7 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
-type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string };
+type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string; ip?: string | null };
 
 export function PlayersPage() {
   const { can } = useAuth();
@@ -56,8 +56,8 @@ export function PlayersPage() {
       {tab === 'all' && <AllPlayers onOpen={setProfile} />}
       {tab === 'bans' && <Bans onOpen={setProfile} onAction={setTarget} />}
       {tab === 'signals' && <Signals onOpen={setProfile} />}
-      <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} />
-      <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} onClose={() => setTarget(null)} />
+      <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} onOpen={setProfile} />
+      <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} ip={target?.ip} onClose={() => setTarget(null)} />
     </>
   );
 }
@@ -101,7 +101,7 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
   const players = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = data?.players ?? [];
-    return q ? list.filter((p) => [p.name, p.accountName, p.userId, p.playerId].some((v) => v.toLowerCase().includes(q))) : list;
+    return q ? list.filter((p) => [p.name, p.accountName, p.userId, p.playerId, p.ip ?? ''].some((v) => v.toLowerCase().includes(q))) : list;
   }, [data, query]);
 
   let body;
@@ -125,6 +125,7 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
           { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
           { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
           { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
+          ...(can('players.ip') ? [{ key: 'ip', header: 'IP address', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : '—') }] : []),
           { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
           { key: 'ping', header: 'Ping', nowrap: true, render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : '—') },
           {
@@ -139,7 +140,7 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
                   </Button>
                 )}
                 {can('players.ban') && (
-                  <Button size="small" variant="outlined" color="error" onClick={() => onAction({ action: 'ban', userId: p.userId, name: p.name })}>
+                  <Button size="small" variant="outlined" color="error" onClick={() => onAction({ action: 'ban', userId: p.userId, name: p.name, ip: p.ip })}>
                     Ban
                   </Button>
                 )}
@@ -231,8 +232,37 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
 
 function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction: (t: Target) => void }) {
   const { can } = useAuth();
-  const { data, error, loading, reload } = useApi<{ bans: ModerationRecord[] }>('/players/bans');
+  const notify = useToast();
+  const { data, error, loading, reload } = useApi<{ bans: ModerationRecord[]; ipBans: IpBan[] }>('/players/bans');
   const [userId, setUserId] = useState('');
+  const [ip, setIp] = useState('');
+  const [ipReason, setIpReason] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const banIp = async () => {
+    setBusy(true);
+    try {
+      const { ipBan } = await api.post<{ ipBan: IpBan }>('/players/ip-bans', { ip, reason: ipReason });
+      notify(`${ipBan.ip} is banned`, 'success');
+      setIp('');
+      setIpReason('');
+      refreshAll();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const liftIpBan = async (ban: IpBan) => {
+    try {
+      await api.delete(`/players/ip-bans/${ban.id}`);
+      notify(`${ban.ip} is no longer banned`, 'success');
+      refreshAll();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    }
+  };
 
   let body;
   if (loading && !data) body = <Loading />;
@@ -273,6 +303,70 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         </Typography>
         {body}
       </Section>
+      {can('players.ip') && (
+        <Section title={data ? `Address bans (${data.ipBans.length})` : 'Address bans'} disablePadding>
+          <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+            The game can only ban platform IDs, so PalOps enforces these itself: anyone who connects from a banned address is kicked within about 20 seconds.
+          </Typography>
+          {data && (
+            <DataTable
+              rows={data.ipBans}
+              rowKey={(b) => b.id}
+              empty={<EmptyState title="No address bans" />}
+              columns={[
+                { key: 'ip', header: 'Address', render: (b) => <Mono>{b.ip}</Mono> },
+                {
+                  key: 'player',
+                  header: 'From player',
+                  render: (b) => (b.playerUserId ? <PlayerName name={b.playerName ?? b.playerUserId} userId={b.playerUserId} onOpen={onOpen} /> : '—'),
+                },
+                { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
+                { key: 'by', header: 'Banned by', render: (b) => b.actorUsername ?? '—' },
+                { key: 'at', header: 'When', nowrap: true, render: (b) => formatDateTime(b.createdAt) },
+                {
+                  key: 'actions',
+                  header: '',
+                  align: 'right',
+                  render: (b) =>
+                    can('players.ban') && (
+                      <Button size="small" variant="outlined" onClick={() => void liftIpBan(b)}>
+                        Lift
+                      </Button>
+                    ),
+                },
+              ]}
+            />
+          )}
+        </Section>
+      )}
+      {can('players.ban') && can('players.ip') && (
+        <Section title="Ban an address">
+          <Stack
+            component="form"
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ alignItems: { sm: 'flex-start' } }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (ip.trim()) void banIp();
+            }}
+          >
+            <TextField
+              label="IP address or range"
+              helperText="e.g. 203.0.113.7, or 203.0.113.0/24 for a whole range"
+              value={ip}
+              onChange={(e) => setIp(e.target.value)}
+              required
+              slotProps={{ htmlInput: { maxLength: 64 } }}
+              sx={{ maxWidth: { sm: 300 } }}
+            />
+            <TextField label="Reason" placeholder="Optional" value={ipReason} onChange={(e) => setIpReason(e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} sx={{ maxWidth: { sm: 300 } }} />
+            <Button variant="contained" color="error" type="submit" loading={busy} sx={{ height: 40 }}>
+              Ban
+            </Button>
+          </Stack>
+        </Section>
+      )}
       {can('players.ban') && (
         <Section title="Ban by platform ID">
           <Stack
