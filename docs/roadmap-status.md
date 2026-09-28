@@ -8,11 +8,11 @@ Tracks progress against the development priority order in the project roadmap.
 | 2 | Authentication & roles | Done: Discord OAuth2 as main sign-in (owners add users by Discord ID), optional password sign-in, first-run owner setup, sessions, owner-issued reset links, 4 roles enforced server-side, user management |
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
 | 4 | Dashboard | Basic: status, info, player count, FPS/frame time, broadcast. Host CPU/RAM pending |
-| 5 | Player management | Started: online player list with search, known players recorded with first/last seen, level and guild. Profiles, kick/ban UI and moderation records next |
-| 6 | Console | Not started |
-| 7 | Configuration | Not started |
+| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Bans made outside PalOps can't be listed through the API |
+| 6 | Console | Blocked on the REST API (no console). Needs RCON or PalOps on the game machine |
+| 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
 | 8 | Logs | Started: audit log with category filter and pagination |
-| 9 | Server controls | Not started (REST API supports shutdown/stop; start needs a process manager integration) |
+| 9 | Server controls | Save, shutdown with countdown and message, force stop. Start/restart needs a process manager integration |
 | 10 | Backups | Not started |
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
 | 12 | Security hardening | Baseline in place (see README) |

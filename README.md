@@ -212,9 +212,12 @@ The password is stored encrypted with `PANEL_SECRET`; if you change that secret,
 | `GET /v1/api/metrics` | Online status, player count, FPS, uptime, in-game day |
 | `GET /v1/api/players` | Online players (name, level, location, ping); also recorded once a minute for player history |
 | `POST /v1/api/announce` | Broadcasts from the dashboard |
+| `POST /v1/api/kick`, `/ban`, `/unban` | Moderation on the **Players** page, with the reason shown to the player and kept in their history |
+| `POST /v1/api/save`, `/shutdown`, `/stop` | **Server** page: save now, shutdown with a countdown and message, force stop |
+| `GET /v1/api/settings` | **Configuration** page (read-only view of the running settings) |
 
-The adapter also supports `kick`, `ban`, `unban`, `save`, `shutdown` and `stop` for the upcoming moderation and control pages.
-The REST API can't start a stopped server, has no console or log access, and doesn't report guilds; those need PalOps on the game machine
+`GET /v1/api/game-data` (the world actor snapshot, which needs the `-enable-gamedata-api` launch flag) isn't used yet.
+The REST API can't start a stopped server, change settings, list bans made elsewhere, or give console or log access; those need PalOps on the game machine
 (see [docs/deployment.md](docs/deployment.md)).
 
 ### Keep the API private
@@ -305,6 +308,12 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET/PUT | `/server/connection` | `server.connection` |
 | POST | `/server/connection/test` | `server.connection` |
 | GET | `/players` | `players.view` (online players) |
+| GET | `/players/known`, `/players/bans`, `/players/:userId` | `players.view` (everyone seen, panel bans, a player's profile and history) |
+| POST | `/players/:userId/kick` | `players.kick` |
+| POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` |
+| POST | `/players/:userId/notes` | `players.note` |
+| POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
+| GET | `/config` | `config.view` (live settings from the REST API) |
 | GET | `/logs/audit` | `audit.view` |
 | GET | `/public/server`, `/public/players` | public, CORS open, no IPs or platform IDs |
 | GET | `/site/me` | player signed in on the website |

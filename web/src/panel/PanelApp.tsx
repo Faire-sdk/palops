@@ -6,9 +6,11 @@ import { Layout } from '../components/Layout';
 import { EmptyState, Loading } from '../components/ui';
 import { LoginPage, ResetPasswordPage, SetupPage } from '../pages/AuthPages';
 import { ComingSoonPage } from '../pages/ComingSoonPage';
+import { ConfigurationPage } from '../pages/ConfigurationPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { LogsPage } from '../pages/LogsPage';
 import { PlayersPage } from '../pages/PlayersPage';
+import { ServerPage } from '../pages/ServerPage';
 import { SettingsPage } from '../pages/SettingsPage';
 
 function Guard({ permission, children }: { permission: Permission; children: React.ReactNode }) {
@@ -37,16 +39,10 @@ function PanelRoutes() {
         <Route path="players" element={<Guard permission="players.view"><PlayersPage /></Guard>} />
         <Route
           path="console"
-          element={<Guard permission="console.view"><ComingSoonPage title="Console" icon="console" description="Live server output and command execution are next on the roadmap." /></Guard>}
+          element={<Guard permission="console.view"><ComingSoonPage title="Console" icon="console" description="The Palworld REST API has no console. Commands will come with RCON support or PalOps running on the game machine." /></Guard>}
         />
-        <Route
-          path="server"
-          element={<Guard permission="server.control"><ComingSoonPage title="Server" icon="server" description="Start, stop and restart controls will live here." /></Guard>}
-        />
-        <Route
-          path="configuration"
-          element={<Guard permission="config.view"><ComingSoonPage title="Configuration" icon="config" description="Editing PalWorldSettings.ini with validation and rollback is coming." /></Guard>}
-        />
+        <Route path="server" element={<Guard permission="server.control"><ServerPage /></Guard>} />
+        <Route path="configuration" element={<Guard permission="config.view"><ConfigurationPage /></Guard>} />
         <Route path="logs" element={<Guard permission="audit.view"><LogsPage /></Guard>} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

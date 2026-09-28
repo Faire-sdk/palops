@@ -100,6 +100,18 @@ code { font-family: var(--mono); font-size: 12.5px; background: var(--bg-input);
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 .grid-3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .row { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.inline-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inline-row .input { flex: 1; min-width: 0; }
+.grid > * { min-width: 0; }
+.card-note { margin: 0 0 12px; }
+.kv + .alert { margin: 12px 0 0; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.link-btn:hover { color: var(--accent); text-decoration: underline; }
+.history { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.history li { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; align-items: baseline; }
+.history li > .small { grid-column: 2; }
+.settings-group + .settings-group { margin-top: 16px; }
+.danger-zone { border-color: rgba(248, 113, 113, 0.35); }
 
 /* Card */
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
