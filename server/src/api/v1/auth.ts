@@ -56,7 +56,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
   app.post('/setup', async (request, reply) => {
     requirePasswordLogin();
     if (!perIp.consume(`setup:${request.ip}`)) throw tooManyRequests();
-    const body = parse(credentials.extend({ setupToken: z.string().min(1).max(256) }), request.body);
+    const body = parse(credentials.extend({ setupToken: z.string().max(256).default('') }), request.body);
     checkSetupToken(body.setupToken);
 
     const user = await services.users.create({ username: body.username, password: body.password, role: 'owner' });
@@ -160,6 +160,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
   function checkSetupToken(token: string) {
     const expected = services.setup.pendingToken;
     if (!expected) throw forbidden('Setup has already been completed');
+    if (!token.trim()) throw badRequest('Enter the setup token printed in the server log', 'setup_token_missing');
     if (!safeEqual(token, expected)) throw forbidden('Invalid setup token');
   }
 
@@ -169,7 +170,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
     if (!discord) throw forbidden('Discord sign-in is not configured on this panel');
     if (!perIp.consume(`discord:${request.ip}`)) throw tooManyRequests();
     const body = parse(
-      z.object({ intent: z.enum(['login', 'setup', 'link', 'player']), setupToken: z.string().min(1).max(256).optional() }),
+      z.object({ intent: z.enum(['login', 'setup', 'link', 'player']), setupToken: z.string().max(256).optional() }),
       request.body,
     );
 

@@ -122,6 +122,7 @@ export function SetupPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const { error, busy, onSubmit } = useSubmit(async () => {
+    if (!token.trim()) throw new Error('Enter the setup token first');
     if (password !== confirm) throw new Error('Passwords do not match');
     await completeSetup(token.trim(), username, password);
   });
