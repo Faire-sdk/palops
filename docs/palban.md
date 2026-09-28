@@ -8,6 +8,17 @@ until an owner turns it on in **Settings → PalBan Network**, and while it's of
 confirms it, one player at a time. A report from another server is a lead for your team, never a ban. This is deliberate: a shared banlist that bans automatically
 lets one person's ban, or one mistake or abuse, reach many servers that never chose it, and the server owner should stay the one who decides. Nothing PalOps sends can ban anyone on PalBan either.
 
+## Know the risks
+
+A shared banlist has real downsides, and they are why some server tool maintainers have chosen not to build one into their tools:
+
+- **It can be abused.** Anyone with access to a team can add a ban that is unfair or built on false evidence, and if other teams copy it, that player can be locked out of servers that never looked into it.
+- **Whoever controls a shared list has power over it.** A single party running one could lock a person out of many servers at will. That is why this integration never acts by itself, and why each team decides what to
+  do with a ban.
+- **A ban or report from another server is a lead, never proof.** Check the reason and the evidence, and hear the player out, before you act on one.
+
+PalOps shows these on the settings page and on the Bans page, next to the PalBan banlist.
+
 ## Setting it up
 
 1. On PalBan Network, open your server's **Integrations** tab, choose **Another tool**, and connect. Copy the key (`pbn_...`); it's shown once.

@@ -1,4 +1,5 @@
 import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
@@ -19,6 +20,30 @@ import { DataTable } from './DataTable';
 import { EmptyState, ErrorState, Loading, Mono, Section } from './common';
 import { ExportButton, PlayerName } from './PlayerBits';
 import { useToast } from './Toast';
+
+/** What a shared banlist gets wrong or can be used for; said wherever PalBan bans are shown. */
+function PalBanRisks({ compact = false }: { compact?: boolean }) {
+  if (compact) {
+    return (
+      <Alert severity="warning" variant="outlined" sx={{ mx: 2, mt: 1.5 }}>
+        A shared banlist can be abused: a ban on it may be unfair, mistaken or copied from another server. Check the reason and the evidence before you ban anyone in the game.
+      </Alert>
+    );
+  }
+  return (
+    <Alert severity="warning" variant="outlined">
+      <AlertTitle>Know the risks of a shared banlist</AlertTitle>
+      <ul style={{ margin: 0, paddingLeft: 18 }}>
+        <li>It can be abused. Anyone with access to a team can add a ban that is unfair or built on false evidence, and if other teams copy it, that player can be locked out of servers that never looked into it.</li>
+        <li>
+          Whoever controls a shared list has power over it. A single party running one could lock a person out of many servers at will. That is why nothing here happens by itself: a ban on PalBan only becomes a ban in the game
+          when someone on your team confirms it.
+        </li>
+        <li>A ban or report from another server is a lead, never proof. Check the reason and the evidence, and hear the player out, before you act on it.</li>
+      </ul>
+    </Alert>
+  );
+}
 
 interface Form {
   enabled: boolean;
@@ -81,6 +106,7 @@ export function PalBanSettingsTab() {
               PalBan Network is a shared banlist for Palworld servers. Switch this on to compare your server’s PalBan banlist with what is banned in the game, see what other servers
               found about a player, and let PalBan know about joins and bans made here. Nothing is banned because another server did: reports are leads for your team to review.
             </Typography>
+            <PalBanRisks />
             <FormControlLabel control={<Switch checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />} label="Use PalBan Network" />
             <TextField label="PalBan Network address" placeholder="https://palban.net" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} required />
             <TextField
@@ -172,6 +198,7 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
           Your server’s own banlist on PalBan Network{status.serverName ? ` (${status.serverName})` : ''}
           {status.lastSyncAt ? `, read ${formatDateTime(status.lastSyncAt)}` : ''}. {status.notInGame > 0 ? `${status.notInGame} active ${status.notInGame === 1 ? 'ban isn’t' : 'bans aren’t'} banned in the game yet.` : 'Everything active is banned in the game.'}
         </Typography>
+        <PalBanRisks compact />
         {status.error && (
           <Alert severity="warning" sx={{ mx: 2, mt: 1 }}>
             {status.error}

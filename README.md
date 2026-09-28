@@ -259,7 +259,7 @@ player inventories, pals, guilds and bases, and let admins give items and pals, 
 
 [PalBan Network](https://github.com/Faire-sdk/PalBanNetwork) shares banlists between Palworld servers. PalOps can read your server's PalBan banlist next to the game's (banning in the game
 one player at a time, after you confirm), export local bans for PalBan to import, look players up on the network, and report joins and bans. Reports from other servers are leads,
-never bans. Off by default. See [docs/palban.md](docs/palban.md).
+never bans. A shared banlist can be abused and gives whoever runs it power over many servers, so read the risks in the doc first. Off by default. See [docs/palban.md](docs/palban.md).
 
 ### Keep the API private
 
