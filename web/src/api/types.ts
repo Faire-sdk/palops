@@ -11,6 +11,7 @@ export type Permission =
   | 'players.kick'
   | 'players.ban'
   | 'players.note'
+  | 'players.ip'
   | 'world.view'
   | 'console.view'
   | 'console.execute'
@@ -77,8 +78,8 @@ export interface KnownPlayer {
   id: number;
   userId: string;
   playerId: string | null;
-  accountName: string | null;
   name: string;
+  accountName: string | null;
   level: number | null;
   guild: string | null;
   guildId: string | null;
@@ -88,6 +89,17 @@ export interface KnownPlayer {
   banned?: boolean;
   playtimeSeconds?: number;
   link?: 'verified' | 'claimed' | null;
+}
+
+/** An address the panel enforces a ban on: one IP or a CIDR range. */
+export interface IpBan {
+  id: number;
+  ip: string;
+  reason: string | null;
+  playerUserId: string | null;
+  playerName: string | null;
+  actorUsername: string | null;
+  createdAt: string;
 }
 
 export type ModerationAction = 'kick' | 'ban' | 'unban' | 'note';
@@ -133,35 +145,17 @@ export interface PlayerProfile {
   activity: PlayerActivity;
   link: CharacterLink | null;
   player: KnownPlayer | null;
+  /** Only while the player is online. ip is null without players.ip. */
+  live: { ping: number | null; location: { x: number; y: number } | null; buildingCount: number | null; ip: string | null } | null;
   banned: boolean;
+  /** Empty unless the viewer has players.ip. */
+  addresses: Array<{ ip: string; firstSeenAt: string; lastSeenAt: string; banned: boolean }>;
+  /** Other players seen on the same addresses. Empty unless the viewer has players.ip. */
+  linkedPlayers: Array<{ userId: string; name: string | null; ip: string; lastSeenAt: string }>;
   history: ModerationRecord[];
   pals: PlayerPal[];
   /** Empty unless the viewer has world.view. */
   signals: PlayerSignal[];
-  /** Addresses this player has connected from. Empty unless the viewer has world.view. */
-  ips: PlayerIp[];
-  /** Live connection details while online. Null unless the viewer has world.view. */
-  live: { ip: string | null; ping: number | null; buildingCount: number | null; position: MapPoint | null } | null;
-}
-
-export interface PlayerIp {
-  ip: string;
-  firstSeenAt: string;
-  lastSeenAt: string;
-  banned: boolean;
-  /** Other accounts seen on the same address. */
-  sharedWith: Array<{ userId: string; name: string; lastSeenAt: string }>;
-}
-
-export interface IpBan {
-  id: number;
-  ip: string;
-  reason: string | null;
-  sourceUserId: string | null;
-  sourceName: string | null;
-  actorUsername: string | null;
-  createdAt: string;
-  accounts: Array<{ userId: string; name: string }>;
 }
 
 // ---- World data (the REST API's game-data snapshot) ----

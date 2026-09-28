@@ -231,12 +231,16 @@ counts, and only when `SITE_SHOW_ONLINE_PLAYERS` is on.
 | --- | --- |
 | `GET /v1/api/info` | Server name, version and description |
 | `GET /v1/api/metrics` | Online status, player count, FPS, uptime, in-game day |
-| `GET /v1/api/players` | Online players (name, level, location, ping); also recorded once a minute for player history |
+| `GET /v1/api/players` | Online players (name, level, location, ping, IP); also recorded every 20 seconds for player history and IP ban checks |
 | `POST /v1/api/announce` | Broadcasts from the dashboard |
 | `POST /v1/api/kick`, `/ban`, `/unban` | Moderation on the **Players** page, with the reason shown to the player and kept in their history |
 | `POST /v1/api/save`, `/shutdown`, `/stop` | **Server** page: save now, shutdown with a countdown and message, force stop |
 | `GET /v1/api/settings` | **Configuration** page (read-only view of the running settings) |
 | `GET /v1/api/game-data` | **World** page and profiles: guilds, bases and their worker pals, each player's pals, the live map, cheat signals and lag hotspots (needs `-enable-gamedata-api`) |
+
+The REST API only bans platform IDs, so PalOps enforces IP bans itself: anyone online from a banned address or range is kicked
+the next time it reads the player list (every 20 seconds). Someone can be in the world for those few seconds, and a shared address
+(a household, a university) catches everyone on it.
 
 The REST API can't start a stopped server, change settings, list bans made elsewhere, or give console or log access; those need PalOps on the game machine
 (see [docs/deployment.md](docs/deployment.md)).
@@ -278,8 +282,9 @@ To try the panel without a server, choose **Mock server** as the connection type
 | View dashboard, server info, online players | ✓ | ✓ | ✓ | ✓ |
 | Guilds and their members | ✓ | ✓ | ✓ | ✓ |
 | Kick players, add moderation notes | ✓ | ✓ | ✓ | |
+| See player IP addresses and who shares them | ✓ | ✓ | ✓ | |
 | World map, bases, performance, cheat signals | ✓ | ✓ | ✓ | |
-| Ban/unban, console, broadcast, server control, config, logs, backups | ✓ | ✓ | | |
+| Ban/unban players and IP addresses, console, broadcast, server control, config, logs, backups | ✓ | ✓ | | |
 | Server connection settings, manage panel users | ✓ | | | |
 
 Permissions are defined in [`server/src/services/authentication/permissions.ts`](server/src/services/authentication/permissions.ts)
@@ -341,12 +346,12 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/server/announce` | `server.broadcast` |
 | GET/PUT | `/server/connection` | `server.connection` |
 | POST | `/server/connection/test` | `server.connection` |
-| GET | `/players` | `players.view` (online players) |
+| GET | `/players` | `players.view` (online players; IPs only with `players.ip`) |
 | GET | `/players/known` (`sort`, `filter`), `/players/bans`, `/players/:userId` | `players.view` (everyone seen with playtime and Discord link, panel bans, a player's profile, activity and history) |
 | GET/POST | `/players/link-requests`, `/players/link-requests/:accountId/approve` or `reject`; POST `/players/:userId/link/verify`, DELETE `/players/:userId/link` | `players.ban` (verify players' Discord links) |
 | POST | `/players/:userId/kick` | `players.kick` |
-| POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` |
-| POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (ban and unban an address; listed with `/players/bans` for `world.view`) |
+| POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` (`banAddress: true` also bans the player's last IP) |
+| POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (IP address or CIDR range bans, enforced by PalOps) |
 | POST | `/players/:userId/notes` | `players.note` |
 | POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
 | GET/PUT | `/paldefender/settings` | `server.connection` (optional PalDefender integration; the token is never returned) |

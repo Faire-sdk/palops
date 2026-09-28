@@ -1,14 +1,15 @@
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Checkbox from '@mui/material/Checkbox';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import Link from '@mui/material/Link';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -40,21 +41,42 @@ export function warnIfPalDefenderFailed(notify: (message: string, tone?: 'warnin
 const ACTION_COPY: Record<Action, { title: string; button: string; hint: string; done: string }> = {
   kick: { title: 'Kick', button: 'Kick player', hint: 'Shown to the player and kept in their history. They can rejoin right away.', done: 'kicked' },
   ban: { title: 'Ban', button: 'Ban player', hint: 'Shown to the player and kept in their history. They can’t rejoin until unbanned.', done: 'banned' },
-  unban: { title: 'Unban', button: 'Unban player', hint: 'Kept in their history. They can join again straight away.', done: 'unbanned' },
+  unban: {
+    title: 'Unban',
+    button: 'Unban player',
+    hint: 'Kept in their history. Address bans made with their ban are lifted too. They can join again straight away.',
+    done: 'unbanned',
+  },
 };
 
-/** Kick, ban or unban one player, with a reason. */
-export function ModerationDialog({ action, userId, name, onClose }: { action: Action | null; userId: string; name: string; onClose: () => void }) {
-  const { can } = useAuth();
+/**
+ * Kick, ban or unban one player, with a reason. When the player's address is
+ * known, a ban can include it so a new account from there is kicked too.
+ */
+export function ModerationDialog({
+  action,
+  userId,
+  name,
+  ip,
+  onClose,
+}: {
+  action: Action | null;
+  userId: string;
+  name: string;
+  ip?: string | null;
+  onClose: () => void;
+}) {
   const notify = useToast();
+  const { can } = useAuth();
   const [reason, setReason] = useState('');
-  const [banIp, setBanIp] = useState(false);
+  const [banAddress, setBanAddress] = useState(false);
   const [busy, setBusy] = useState(false);
   const copy = action ? ACTION_COPY[action] : null;
+  const offerAddress = action === 'ban' && !!ip && can('players.ip');
   useEffect(() => {
     if (action) {
       setReason('');
-      setBanIp(false);
+      setBanAddress(false);
     }
   }, [action, userId]);
 
@@ -62,8 +84,11 @@ export function ModerationDialog({ action, userId, name, onClose }: { action: Ac
     if (!action || !copy) return;
     setBusy(true);
     try {
-      const res = await api.post<{ ipBan?: IpBan | null; ipSkipped?: string | null; paldefender?: PalDefenderResult }>(`/players/${encodeURIComponent(userId)}/${action}`, action === 'ban' ? { reason, banIp } : { reason });
-      notify(`${name} was ${copy.done}${res?.ipBan ? ` and ${res.ipBan.ip} was banned` : ''}`, 'success');
+      const res = await api.post<{ ipBan?: IpBan | null; ipSkipped?: string | null; paldefender?: PalDefenderResult }>(
+        `/players/${encodeURIComponent(userId)}/${action}`,
+        { reason, ...(offerAddress && banAddress ? { banAddress: true } : {}) },
+      );
+      notify(`${name} was ${copy.done}${res?.ipBan ? ` along with ${res.ipBan.ip}` : ''}`, 'success');
       if (res?.ipSkipped) notify(res.ipSkipped, 'warning');
       warnIfPalDefenderFailed(notify, res?.paldefender);
       setReason('');
@@ -92,18 +117,14 @@ export function ModerationDialog({ action, userId, name, onClose }: { action: Ac
             helperText={copy?.hint}
             slotProps={{ htmlInput: { maxLength: 200 } }}
           />
-          {action === 'ban' && can('world.view') && (
+          {offerAddress && (
             <FormControlLabel
-              control={<Checkbox checked={banIp} onChange={(e) => setBanIp(e.target.checked)} />}
+              control={<Checkbox checked={banAddress} onChange={(e) => setBanAddress(e.target.checked)} />}
               label={
                 <>
-                  Also ban their IP address
-                  <Typography variant="body2" color="text.secondary">
-                    Bans the address they last connected from, so a new account there is banned too. Housemates and shared networks are caught as well.
-                  </Typography>
+                  Also ban their address <Mono>{ip}</Mono>
                 </>
               }
-              sx={{ alignItems: 'flex-start', '& .MuiCheckbox-root': { pt: 0.5 } }}
             />
           )}
           <Typography variant="body2" color="text.secondary">
@@ -123,62 +144,6 @@ export function ModerationDialog({ action, userId, name, onClose }: { action: Ac
   );
 }
 
-/** Ban an IP address by hand. Any account seen connecting from it is banned. */
-export function IpBanDialog({ ip, open, onClose }: { ip: string; open: boolean; onClose: () => void }) {
-  const notify = useToast();
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (open) setReason('');
-  }, [open, ip]);
-
-  const submit = async () => {
-    setBusy(true);
-    try {
-      const res = await api.post<{ paldefender?: PalDefenderResult }>('/players/ip-bans', { ip, reason });
-      notify(`${ip} was banned`, 'success');
-      warnIfPalDefenderFailed(notify, res?.paldefender);
-      refreshAll();
-      onClose();
-    } catch (err) {
-      notify(errorMessage(err), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Ban address {ip}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={1.5} sx={{ pt: 1 }}>
-          <Alert severity="warning">
-            Every account seen on this address is banned, now and whenever it connects later. That includes housemates and anyone on a shared network. The panel checks
-            about every 20 seconds, so a player can be on the server briefly before they’re removed.
-          </Alert>
-          <TextField
-            label="Reason"
-            placeholder="Optional"
-            autoFocus
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            helperText="Kept with the ban and shown to the player as the ban message."
-            slotProps={{ htmlInput: { maxLength: 200 } }}
-          />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button variant="contained" color="error" onClick={submit} loading={busy}>
-          Ban address
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
 const ACTION_CHIP: Record<ModerationAction, 'warning' | 'error' | 'success' | 'info'> = {
   kick: 'warning',
   ban: 'error',
@@ -186,13 +151,12 @@ const ACTION_CHIP: Record<ModerationAction, 'warning' | 'error' | 'success' | 'i
   note: 'info',
 };
 
-/** A player's details, moderation history and notes. */
-export function PlayerProfileDialog({ userId, onClose }: { userId: string | null; onClose: () => void }) {
+/** A player's details, moderation history and notes. onOpen switches the dialog to another player. */
+export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: string | null; onClose: () => void; onOpen?: (userId: string) => void }) {
   const { can } = useAuth();
   const notify = useToast();
   const { data, error, loading, reload } = useApi<PlayerProfile>(`/players/${encodeURIComponent(userId ?? '')}`, { enabled: !!userId });
   const [action, setAction] = useState<Action | null>(null);
-  const [ipToBan, setIpToBan] = useState<string | null>(null);
   const [pdOpen, setPdOpen] = useState(false);
   const paldefender = usePalDefender();
   const [note, setNote] = useState('');
@@ -200,6 +164,18 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
 
   const player = data?.userId === userId ? data?.player : undefined;
   const name = player?.name ?? userId ?? '';
+  const lastIp = data?.live?.ip ?? data?.addresses[0]?.ip ?? null;
+
+  const banAddress = async (ip: string) => {
+    try {
+      const res = await api.post<{ paldefender?: PalDefenderResult }>('/players/ip-bans', { ip, reason: `Address used by ${name}` });
+      notify(`${ip} is banned`, 'success');
+      warnIfPalDefenderFailed(notify, res?.paldefender);
+      refreshAll();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    }
+  };
 
   const addNote = async () => {
     if (!userId || !note.trim()) return;
@@ -229,13 +205,13 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
           items={[
             ['Platform ID', <Mono>{data.userId}</Mono>],
             !!player?.accountName && ['Account name', player.accountName],
-            !!player?.playerId && ['Player UID', <Mono>{player.playerId}</Mono>],
+            !!player?.playerId && ['Player ID', <Mono>{player.playerId}</Mono>],
+            !!lastIp && [data.live?.ip ? 'IP address' : 'Last IP address', <Mono>{lastIp}</Mono>],
             !!player && ['Level', player.level ?? '—'],
             !!player && ['Guild', player.guild ?? '—'],
-            !!data.live && ['Current address', <Mono>{data.live.ip ?? '—'}</Mono>],
             !!data.live && ['Ping', data.live.ping !== null ? `${Math.round(data.live.ping)} ms` : '—'],
             !!data.live && ['Buildings', data.live.buildingCount ?? '—'],
-            !!data.live?.position && ['Position', formatMapPoint(data.live.position)],
+            !!data.live?.location && ['Position', formatMapPoint(data.live.location)],
             !!player && ['First seen', formatDateTime(player.firstSeenAt)],
             !!player && ['Last seen', formatDateTime(player.lastSeenAt)],
           ]}
@@ -330,47 +306,52 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
           </Stack>
         )}
 
-        {data.ips.length > 0 && (
+        {data.addresses.length > 0 && (
           <>
             <Divider />
             <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
               Addresses
             </Typography>
             <List dense disablePadding>
-              {data.ips.map((i) => (
+              {data.addresses.map((a) => (
                 <ListItem
-                  key={i.ip}
+                  key={a.ip}
                   disableGutters
-                  alignItems="flex-start"
                   secondaryAction={
-                    can('players.ban') && !i.banned ? (
-                      <Button size="small" color="error" variant="outlined" onClick={() => setIpToBan(i.ip)}>
-                        Ban address
-                      </Button>
-                    ) : undefined
+                    a.banned ? (
+                      <Chip label="Banned" color="error" variant="outlined" />
+                    ) : (
+                      can('players.ban') && (
+                        <Button size="small" color="error" onClick={() => void banAddress(a.ip)}>
+                          Ban address
+                        </Button>
+                      )
+                    )
                   }
                 >
-                  <ListItemText
-                    slotProps={{ secondary: { component: 'div' } }}
-                    primary={
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                        <Mono>{i.ip}</Mono>
-                        {i.banned && <Chip label="Banned" color="error" size="small" variant="outlined" />}
-                      </Stack>
-                    }
-                    secondary={
-                      <>
-                        {`First seen ${formatDateTime(i.firstSeenAt)} · last seen ${formatDateTime(i.lastSeenAt)}`}
-                        {i.sharedWith.length > 0 && (
-                          <Box sx={{ color: 'warning.main' }}>Also used by {i.sharedWith.map((o) => o.name).join(', ')}</Box>
-                        )}
-                      </>
-                    }
-                    sx={{ pr: can('players.ban') && !i.banned ? 14 : 0 }}
-                  />
+                  <ListItemText primary={<Mono>{a.ip}</Mono>} secondary={`First ${formatDateTime(a.firstSeenAt)} · last ${formatDateTime(a.lastSeenAt)}`} />
                 </ListItem>
               ))}
             </List>
+            {data.linkedPlayers.length > 0 && (
+              <Alert severity="warning">
+                Also seen on these addresses:{' '}
+                {data.linkedPlayers.map((l, i) => (
+                  <span key={`${l.userId}-${l.ip}`}>
+                    {i > 0 && ', '}
+                    {onOpen ? (
+                      <Link component="button" underline="hover" onClick={() => onOpen(l.userId)} sx={{ verticalAlign: 'baseline' }}>
+                        {l.name ?? l.userId}
+                      </Link>
+                    ) : (
+                      (l.name ?? l.userId)
+                    )}{' '}
+                    (<Mono>{l.ip}</Mono>)
+                  </span>
+                ))}
+                . Could be an alt account, or just a shared home network.
+              </Alert>
+            )}
           </>
         )}
 
@@ -455,18 +436,11 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
         </DialogActions>
       </Dialog>
       <PalDefenderPlayerDialog userId={pdOpen ? userId : null} name={name} onClose={() => setPdOpen(false)} />
-      <IpBanDialog
-        ip={ipToBan ?? ''}
-        open={!!ipToBan}
-        onClose={() => {
-          setIpToBan(null);
-          void reload();
-        }}
-      />
       <ModerationDialog
         action={action}
         userId={userId ?? ''}
         name={name}
+        ip={lastIp}
         onClose={() => {
           setAction(null);
           void reload();

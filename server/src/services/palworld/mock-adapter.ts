@@ -90,6 +90,11 @@ export class MockAdapter implements PalworldAdapter {
     return mockWorld(this.players, (Date.now() - this.startedAt) / 1000);
   }
 
+  /** Test/dev helper: someone connects. */
+  join(player: Pick<PalworldPlayer, 'name' | 'userId'> & Partial<PalworldPlayer>) {
+    this.players.push({ ...mockPlayer(player.name, player.userId, player.level ?? 1, null), ...player });
+  }
+
   /** Test/dev helper: bring the fake server back up. */
   start() {
     this.running = true;

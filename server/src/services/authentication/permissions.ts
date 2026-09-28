@@ -14,6 +14,8 @@ export const PERMISSIONS = [
   'players.kick',
   'players.ban',
   'players.note',
+  /** See the addresses players connect from. */
+  'players.ip',
   'world.view',
   'console.view',
   'console.execute',
@@ -33,7 +35,7 @@ const ownerOnly: Permission[] = ['server.connection', 'users.manage'];
 const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   owner: new Set(PERMISSIONS),
   admin: new Set(PERMISSIONS.filter((p) => !ownerOnly.includes(p))),
-  moderator: new Set<Permission>(['server.view', 'players.view', 'players.kick', 'players.note', 'world.view']),
+  moderator: new Set<Permission>(['server.view', 'players.view', 'players.kick', 'players.note', 'players.ip', 'world.view']),
   viewer: new Set<Permission>(['server.view', 'players.view']),
 };
 

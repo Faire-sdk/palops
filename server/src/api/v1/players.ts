@@ -4,37 +4,35 @@ import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
 import { hasPermission } from '../../services/authentication/permissions.js';
 import { notFound } from '../../utils/errors.js';
+import { toMap } from '../../services/world/map-coords.js';
 import { parse } from '../../utils/validation.js';
 
 /** Platform ids look like steam_76561198000000000 or epic_0f3a...; keep them to a safe charset. */
 const userIdParams = z.object({ userId: z.string().regex(/^[A-Za-z0-9_.:-]{1,80}$/, 'Invalid player id') });
 const reasonBody = z.object({ reason: z.string().trim().max(200).default('') });
-const banBody = reasonBody.extend({ banIp: z.boolean().default(false) });
 
 export default async function playerRoutes(app: FastifyInstance, { services }: { services: Services }) {
   const { players, moderation, world } = services;
 
-  /** Players online right now. */
+  /** Players online right now. Addresses only for staff with players.ip, positions for staff with world.view. */
   app.get('/', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
-    // Addresses and positions are staff-only (world.view), like the map.
+    const showIp = hasPermission(request.user!.role, 'players.ip');
     const staff = hasPermission(request.user!.role, 'world.view');
+    const online = await players.refreshOnline();
+    const playtime = players.playtimeOf(online.map((p) => p.userId));
     return {
       // The online list has no guilds; the world snapshot fills them in on the known player.
-      players: await (async () => {
-        const online = await players.refreshOnline();
-        const playtime = players.playtimeOf(online.map((p) => p.userId));
-        return online.map((p) => {
-          const link = services.siteAccounts.byPlayerUserId(p.userId, false);
-          return {
-            ...p,
-            ip: staff ? p.ip : null,
-            location: staff ? p.location : null,
-            guild: p.guild ?? players.byUserId(p.userId)?.guild ?? null,
-            playtimeSeconds: playtime.get(p.userId) ?? 0,
-            link: link ? (link.playerVerified ? 'verified' : 'claimed') : null,
-          };
-        });
-      })(),
+      players: online.map((p) => {
+        const link = services.siteAccounts.byPlayerUserId(p.userId, false);
+        return {
+          ...p,
+          ip: showIp ? p.ip : null,
+          location: staff ? p.location : null,
+          guild: p.guild ?? players.byUserId(p.userId)?.guild ?? null,
+          playtimeSeconds: playtime.get(p.userId) ?? 0,
+          link: link ? (link.playerVerified ? 'verified' : 'claimed') : null,
+        };
+      }),
     };
   });
 
@@ -75,13 +73,13 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
   /** Players banned through the panel. The REST API can't list bans made elsewhere. */
   app.get('/bans', { preHandler: requirePermission(services, 'players.view') }, async (request) => ({
     bans: moderation.activeBans(),
-    /** Banned addresses are staff-only, like every other address. */
-    ipBans: hasPermission(request.user!.role, 'world.view') ? moderation.ipBans() : [],
+    /** Address bans the panel enforces. Only for staff who can see addresses. */
+    ipBans: hasPermission(request.user!.role, 'players.ip') ? moderation.ipBans() : [],
   }));
 
   app.post('/ip-bans', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
-    const { ip, reason } = parse(z.object({ ip: z.string().trim().min(2).max(64) }).extend({ reason: reasonBody.shape.reason }), request.body);
-    return moderation.banIp(actorOf(request), ip, reason);
+    const { ip, reason } = parse(z.object({ ip: z.string().trim().min(1, 'Enter an address').max(64), reason: z.string().trim().max(200).default('') }), request.body);
+    return await moderation.banIp(actorOf(request), ip, reason);
   });
 
   app.delete('/ip-bans/:id', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
@@ -134,11 +132,25 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
   app.get('/:userId', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
     const { userId } = parse(userIdParams, request.params);
     const staff = hasPermission(request.user!.role, 'world.view');
-    const live = players.liveOf(userId);
+    const showIp = hasPermission(request.user!.role, 'players.ip');
+    const player = players.byUserId(userId) ?? null;
+    const addresses = showIp ? players.addressesOf(userId) : [];
+    // Live details (ping, position, buildings) only exist while the player is online.
+    const live = player?.online ? ((await players.refreshOnline().catch(() => [])).find((p) => p.userId === userId) ?? null) : null;
     return {
       userId,
-      player: players.byUserId(userId) ?? null,
+      player,
+      live: live && {
+        ping: live.ping,
+        buildingCount: live.buildingCount,
+        /** Positions are staff-only, like the map. */
+        location: staff && live.location ? toMap(live.location) : null,
+        ip: showIp ? live.ip : null,
+      },
       banned: moderation.isBanned(userId),
+      /** Addresses and players sharing them are only for staff with players.ip. */
+      addresses: addresses.map((a) => ({ ...a, banned: moderation.ipBansMatching(a.ip).length > 0 })),
+      linkedPlayers: showIp ? players.linkedTo(userId) : [],
       history: moderation.history(userId),
       pals: world.palsOf(userId),
       /** Time on the server, from the visits the panel has recorded. */
@@ -148,11 +160,6 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
         const a = services.siteAccounts.byPlayerUserId(userId, false);
         return a ? { discord: a.discord, verified: a.playerVerified, verifiedBy: a.verifiedBy, verifiedAt: a.verifiedAt, requestedAt: a.verificationRequestedAt, linkedAt: a.linkedAt } : null;
       })(),
-      /** Addresses and live details are staff-only, like the map. */
-      ips: staff
-        ? players.ipsOf(userId).map((i) => ({ ...i, banned: moderation.isIpBanned(i.ip), sharedWith: players.playersOnIp(i.ip, userId) }))
-        : [],
-      live: staff && live ? { ip: live.ip, ping: live.ping, buildingCount: live.buildingCount, position: world.positionOf(userId) } : null,
       /** Cheat signals are staff-only, like the map. */
       signals: staff ? world.signals({ userId, includeDismissed: true, limit: 20, offset: 0 }).signals : [],
     };
@@ -166,8 +173,8 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
 
   app.post('/:userId/ban', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
     const { userId } = parse(userIdParams, request.params);
-    const { reason, banIp } = parse(banBody, request.body);
-    return moderation.ban(actorOf(request), userId, reason, { banIp });
+    const { reason, banAddress } = parse(reasonBody.extend({ banAddress: z.boolean().default(false) }), request.body);
+    return moderation.ban(actorOf(request), userId, reason, { banAddress });
   });
 
   app.post('/:userId/unban', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {

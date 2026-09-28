@@ -844,8 +844,8 @@ export class DiscordBotService {
       }
       case 'ban': {
         const { game, member } = this.targets(i, options, text('player'), true);
-        const banIp = options.get('ban_ip') === true;
-        if (banIp && !hasPermission(user!.role, 'world.view')) throw new CommandError('Banning an address needs a role that can see player addresses.');
+        const banAddress = options.get('ban_ip') === true;
+        if (banAddress && !hasPermission(user!.role, 'players.ip')) throw new CommandError('Banning an address needs a role that can see player addresses.');
         const lines: string[] = [];
         if (member) {
           this.guardMemberAction(user!, member.id);
@@ -853,7 +853,7 @@ export class DiscordBotService {
           lines.push(`Banned **${escapeMd(member.name)}** from Discord.`);
         }
         if (game) {
-          const result = await this.acting(member?.id ?? '', () => this.deps.moderation.ban(actor, game.userId, text('reason'), { banIp }));
+          const result = await this.acting(member?.id ?? '', () => this.deps.moderation.ban(actor, game.userId, text('reason'), { banAddress }));
           lines.push(`Banned **${escapeMd(game.name)}** in game.`);
           if (result.ipBan) lines.push(`Also banned the address ${result.ipBan.ip}.`);
           if (result.ipSkipped) lines.push(result.ipSkipped);

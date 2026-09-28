@@ -156,7 +156,7 @@ export class PalDefenderService {
     return { version, checks };
   }
 
-  /** Records the addresses PalDefender knows, including offline players, and feeds them to IP ban enforcement. */
+  /** Records the addresses PalDefender knows, including offline players. */
   async syncPlayers(): Promise<number> {
     const server = this.servers.getPrimary();
     if (!server || !this.enabled()) return 0;
@@ -164,9 +164,9 @@ export class PalDefenderService {
       const client = this.client();
       if (!this.version) this.version = await client.version();
       const list = await client.players();
-      this.players.recordIps(
+      this.players.recordAddresses(
         server.id,
-        list.filter((p) => p.userId && p.ip).map((p) => ({ userId: p.userId!, name: p.name || p.userId!, ip: p.ip })),
+        list.map((p) => ({ userId: p.userId ?? '', ip: p.ip })),
       );
       this.lastSyncAt = new Date().toISOString();
       this.lastError = null;

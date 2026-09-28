@@ -15,9 +15,9 @@ import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import type { ServerStatus } from '../api/types';
+import type { ServerStatus, WorldPerformance } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { FpsPanel } from '../components/FpsPanel';
+import { FpsHistory } from '../components/FpsHistory';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono, PageHeader, Section, ServerStateChip, Stat } from '../components/common';
 import { useToast } from '../components/Toast';
 import { formatDateTime, formatDuration } from '../format';
@@ -121,6 +121,7 @@ export function DashboardPage() {
             <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
               <Stat label="Server FPS" value={m ? m.fps : '—'} />
               <Stat label="Frame time" value={m ? `${m.frameTimeMs.toFixed(1)} ms` : '—'} />
+              {can('world.view') && <Stat label="Avg FPS (24 h)" value={<AverageFps />} />}
             </Stack>
             <Typography variant="body2" color="text.secondary">
               CPU and memory usage will appear once host monitoring is added.
@@ -129,7 +130,7 @@ export function DashboardPage() {
         </Grid>
         {can('world.view') && (
           <Grid size={12}>
-            <FpsPanel />
+            <FpsHistory />
           </Grid>
         )}
       </Grid>
@@ -137,6 +138,12 @@ export function DashboardPage() {
       <BroadcastDialog open={broadcastOpen} onClose={() => setBroadcastOpen(false)} />
     </>
   );
+}
+
+/** The last 24 hours' average FPS from the world snapshots. */
+function AverageFps() {
+  const { data } = useApi<WorldPerformance>('/world/performance?hours=24', { pollMs: 60000 });
+  return <>{data?.avgFps ?? '—'}</>;
 }
 
 function BroadcastDialog({ open, onClose }: { open: boolean; onClose: () => void }) {

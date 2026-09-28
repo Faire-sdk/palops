@@ -18,7 +18,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import type { Base, GuildDetail, Guild, MapImage, MapPoint, WorkerPal, WorldMapData, WorldPerformance, WorldStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -98,7 +98,7 @@ export function WorldPage() {
       {tab === 'performance' && <PerformanceTab onShow={(p) => setParams({ tab: 'map', focus: `${p.x},${p.y}` })} />}
       <GuildDialog guildId={guild} onClose={() => setGuild(null)} onPlayer={setProfile} onBase={setBase} />
       <BaseDialog baseId={base} onClose={() => setBase(null)} />
-      <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} />
+      <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} onOpen={setProfile} />
     </GuildColorProvider>
   );
 }
@@ -384,8 +384,7 @@ function GuildDialog({ guildId, onClose, onPlayer, onBase }: { guildId: string |
 }
 
 function PerformanceTab({ onShow }: { onShow: (p: MapPoint) => void }) {
-  // Lag hotspots over the last week; the FPS graph and average are on the Dashboard.
-  const { data, error, loading, reload } = useApi<WorldPerformance>('/world/performance?hours=168', { pollMs: 60000 });
+  const { data, error, loading, reload } = useApi<WorldPerformance>('/world/performance?hours=24', { pollMs: 60000 });
   if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorState error={error} onRetry={reload} />;
   const perf = data!;
@@ -393,7 +392,12 @@ function PerformanceTab({ onShow }: { onShow: (p: MapPoint) => void }) {
     <Stack spacing={2}>
       <Section title="Lag hotspots" disablePadding>
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
-          The busiest 500 m areas over the last 7 days, with the server’s FPS while they were busy. The FPS graph is on the Dashboard. A crowded area where FPS drops below average is a likely cause of lag, often a base with many pals.
+          The busiest 500 m areas over the last 24 hours, with the server’s FPS while they were busy. A crowded area where FPS drops below average is a likely cause of
+          lag, often a base with many pals. The FPS chart is on the{' '}
+          <Link component={RouterLink} to="/">
+            Dashboard
+          </Link>
+          .
         </Typography>
         <DataTable
           rows={perf.hotspots}

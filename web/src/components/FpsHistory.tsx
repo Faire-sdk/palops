@@ -10,30 +10,30 @@ import { useApi } from '../hooks/useApi';
 import { EmptyState, ErrorState, Loading, Section, Stat } from './common';
 
 /**
- * Server FPS over time with the average and lowest, from the world snapshots
- * the panel keeps for a week. For staff who can see world data.
+ * Server FPS over time, with its average and low, from the world snapshots.
+ * Needs world.view, and the server started with -enable-gamedata-api.
  */
-export function FpsPanel() {
+export function FpsHistory() {
   const [hours, setHours] = useState(24);
   const { data, error, loading, reload } = useApi<WorldPerformance>(`/world/performance?hours=${hours}`, { pollMs: 60000 });
+  const timeline = data?.timeline ?? [];
+  const minFps = Math.min(...timeline.map((t) => t.fps ?? Infinity));
 
   let body;
   if (loading && !data) body = <Loading />;
   else if (error && !data) body = <ErrorState error={error} onRetry={reload} />;
-  else if (data) {
-    const known = data.timeline.map((t) => t.fps).filter((f): f is number => f !== null);
-    const lowest = known.length ? Math.min(...known) : null;
+  else {
     body = (
       <>
         <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
-          <Stat label="Average FPS" value={data.avgFps ?? '—'} />
-          <Stat label="Lowest FPS" value={lowest ?? '—'} />
-          <Stat label="Snapshots" value={data.timeline.length} />
+          <Stat label="Average FPS" value={data?.avgFps ?? '—'} />
+          <Stat label="Lowest FPS" value={Number.isFinite(minFps) ? minFps : '—'} />
+          <Stat label="Snapshots" value={timeline.length} />
         </Stack>
-        {data.timeline.length < 2 ? (
-          <EmptyState title="Not enough snapshots yet">The graph fills in as the panel reads the world snapshot every 20 seconds. It needs world data switched on.</EmptyState>
+        {timeline.length < 2 ? (
+          <EmptyState title="Not enough snapshots yet">FPS history comes from the world data, so the server needs world data switched on.</EmptyState>
         ) : (
-          <FpsChart timeline={data.timeline} />
+          <FpsChart timeline={timeline} />
         )}
       </>
     );
@@ -41,7 +41,7 @@ export function FpsPanel() {
 
   return (
     <Section
-      title="Server FPS and world size"
+      title="Server FPS history"
       action={
         <TextField select label="Period" value={hours} onChange={(e) => setHours(Number(e.target.value))} sx={{ minWidth: 140 }}>
           <MenuItem value={1}>Last hour</MenuItem>

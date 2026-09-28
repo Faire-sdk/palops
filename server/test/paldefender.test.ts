@@ -172,7 +172,7 @@ describe('PalDefender integration is optional', () => {
     expect((await get(admin, '/api/v1/paldefender/status')).json()).toMatchObject({ enabled: false });
     expect((await get(admin, '/api/v1/paldefender/banlist')).statusCode).toBe(409);
 
-    const res = (await post(admin, `/api/v1/players/${ANUBIS}/ban`, { reason: 'x', banIp: true })).json();
+    const res = (await post(admin, `/api/v1/players/${ANUBIS}/ban`, { reason: 'x', banAddress: true })).json();
     expect(res).toMatchObject({ record: { action: 'ban' }, paldefender: null });
     expect((await post(admin, '/api/v1/players/ip-bans', { ip: '203.0.113.9' })).json().paldefender).toBeNull();
     expect(calls).toEqual([]);
@@ -238,15 +238,15 @@ describe('with PalDefender switched on', () => {
   });
 
   it('mirrors a ban with the address to PalDefender', async () => {
-    const res = (await post(admin, `/api/v1/players/${ANUBIS}/ban`, { reason: 'Griefing', banIp: true })).json();
+    const res = (await post(admin, `/api/v1/players/${ANUBIS}/ban`, { reason: 'Griefing', banAddress: true })).json();
     expect(res.paldefender).toEqual({ ok: true, message: null });
     expect(res.ipBan.ip).toBe('198.51.100.23');
     expect(calls.find((c) => c.path === `ban/${ANUBIS}`)).toMatchObject({ method: 'POST', body: { Reason: 'Griefing', IP: true } });
   });
 
   it('does not ask PalDefender for an address the panel refused to ban', async () => {
-    ctx.services.players.recordIps(ctx.services.servers.getPrimary()!.id, [{ userId: 'steam_lan', name: 'Lan', ip: '192.168.1.5' }]);
-    const res = (await post(admin, '/api/v1/players/steam_lan/ban', { banIp: true })).json();
+    ctx.services.players.recordAddresses(ctx.services.servers.getPrimary()!.id, [{ userId: 'steam_lan', ip: '192.168.1.5' }]);
+    const res = (await post(admin, '/api/v1/players/steam_lan/ban', { banAddress: true })).json();
     expect(res.ipSkipped).toContain('private');
     expect(calls.find((c) => c.path === 'ban/steam_lan')!.body).toMatchObject({ IP: false });
   });
@@ -260,7 +260,7 @@ describe('with PalDefender switched on', () => {
     expect(del.json().paldefender).toEqual({ ok: true, message: null });
     expect(calls.some((c) => c.path === 'unbanip/203.0.113.9')).toBe(true);
 
-    await post(admin, `/api/v1/players/${ANUBIS}/ban`, { banIp: true });
+    await post(admin, `/api/v1/players/${ANUBIS}/ban`, { banAddress: true });
     calls = [];
     const unban = (await post(admin, `/api/v1/players/${ANUBIS}/unban`)).json();
     expect(unban.paldefender).toEqual({ ok: true, message: null });
@@ -312,15 +312,11 @@ describe('with PalDefender switched on', () => {
     expect((await post(admin, '/api/v1/paldefender/unban', { userId: 'steam_404' })).statusCode).toBe(404);
   });
 
-  it('records addresses of offline players and enforces banned addresses on them', async () => {
-    const world = ctx.services.moderation;
-    await world.banIp({ userId: null, username: 'test' }, '192.0.2.77', 'Ban evasion');
+  it('records addresses of offline players', async () => {
     calls = [];
     expect(await ctx.services.paldefender.syncPlayers()).toBe(3);
-    const ips = ctx.services.players.ipsOf('steam_ollie');
+    const ips = ctx.services.players.addressesOf('steam_ollie');
     expect(ips.map((i) => i.ip)).toEqual(['192.0.2.77']);
-    // The offline player on a banned address is banned when PalDefender reports them.
-    await vi.waitFor(() => expect(world.isBanned('steam_ollie')).toBe(true));
     expect(ctx.services.paldefender.status()).toMatchObject({ enabled: true, version: '1.7.2.9', error: null, lastSyncAt: expect.any(String) });
   });
 

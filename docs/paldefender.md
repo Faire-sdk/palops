@@ -14,8 +14,8 @@ With the integration on, a **PalDefender** page appears in the sidebar and a **P
   are mirrored the same way.
 - PalDefender's ban list is shown on **Players → Bans**, including bans made in-game, by its anti-cheat and by other tools, which the official
   REST API can't list. Admins can lift an entry from there.
-- Player addresses are synced every minute, including for offline players, so profiles show more addresses and banned addresses are caught on
-  accounts PalOps hasn't seen online.
+- Player addresses are synced every minute, including for offline players, so profiles show more addresses and the accounts sharing them.
+  Address bans are enforced by PalOps against players online, and by PalDefender itself for single addresses.
 
 **A player's data** (moderators and up; the player must be online, because that is what PalDefender exposes)
 - **Inventory** in every container, **pals** (party, palbox and each base), **technologies** and **progression**.

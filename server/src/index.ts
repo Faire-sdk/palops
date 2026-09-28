@@ -28,12 +28,13 @@ const pruneTimer = setInterval(() => {
 }, 60 * 60 * 1000);
 pruneTimer.unref();
 
-// Record who is online once a minute so known players, first/last seen and
-// levels stay current even when nobody has the panel open.
+// Record who is online every 20 seconds so known players, first/last seen and
+// levels stay current even when nobody has the panel open. Each fresh list is
+// also checked against the panel's address bans.
 const playerTimer = setInterval(() => {
   if (!services.servers.getPrimary()) return;
   services.players.refreshOnline().catch(() => services.players.markAllOffline());
-}, 60 * 1000);
+}, 20 * 1000);
 playerTimer.unref();
 
 // Console: follow the game and PalDefender log files, if an owner has set them up.

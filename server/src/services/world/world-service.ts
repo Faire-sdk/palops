@@ -253,7 +253,7 @@ export class WorldService {
 
       this.players.applyWorld(
         serverId,
-        playerChars.map((p) => ({ userId: p.userId!, level: p.level, guildId: p.guildId, guildName: p.guildName })),
+        playerChars.map((p) => ({ userId: p.userId!, level: p.level, guildId: p.guildId, guildName: p.guildName, ip: p.ip })),
       );
 
       const upsertPal = this.db.prepare(
@@ -273,10 +273,6 @@ export class WorldService {
     })();
 
     this.latest = { takenAt, snapshot, baseIds, workersByBase: assignWorkers(snapshot, baseIds) };
-    this.players.recordIps(
-      serverId,
-      playerChars.map((p) => ({ userId: p.userId!, name: p.name, ip: p.ip })),
-    );
   }
 
   /** Where a player is in the latest snapshot, in map coordinates. */
