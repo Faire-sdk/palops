@@ -1,12 +1,24 @@
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Grid from '@mui/material/Grid';
+import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import type { ServerStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { Modal } from '../components/Modal';
-import { ServerStateBadge } from '../components/ServerStateBadge';
+import { EmptyState, ErrorState, KeyValue, Loading, Mono, PageHeader, Section, ServerStateChip, Stat } from '../components/common';
 import { useToast } from '../components/Toast';
-import { Alert, Button, Card, EmptyState, ErrorState, Field, Input, Loading, PageHeader, Stat } from '../components/ui';
 import { formatDateTime, formatDuration } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 
@@ -23,17 +35,21 @@ export function DashboardPage() {
     return (
       <>
         <PageHeader title="Dashboard" />
-        <Card>
-          <EmptyState icon="server" title="No server connected yet">
+        <Section>
+          <EmptyState icon={DnsOutlinedIcon} title="No server connected yet">
             {can('server.connection') ? (
-              <p>
-                Add your Palworld server’s REST API details in <Link to="/settings?tab=connection">Settings</Link> to get started.
-              </p>
+              <>
+                Add your Palworld server’s REST API details in{' '}
+                <Link component={RouterLink} to="/settings?tab=connection">
+                  Settings
+                </Link>{' '}
+                to get started.
+              </>
             ) : (
-              <p>Ask a panel owner to connect the Palworld server.</p>
+              'Ask a panel owner to connect the Palworld server.'
             )}
           </EmptyState>
-        </Card>
+        </Section>
       </>
     );
   }
@@ -48,11 +64,11 @@ export function DashboardPage() {
         description={`Last checked ${formatDateTime(status.checkedAt)}`}
         actions={
           <>
-            <Button icon="refresh" onClick={() => api.get('/server/status?fresh=1').then(refreshAll)}>
+            <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => api.get('/server/status?fresh=1').then(refreshAll)}>
               Refresh
             </Button>
             {can('server.broadcast') && (
-              <Button variant="primary" icon="megaphone" disabled={!online} onClick={() => setBroadcastOpen(true)}>
+              <Button variant="contained" startIcon={<CampaignOutlinedIcon />} disabled={!online} onClick={() => setBroadcastOpen(true)}>
                 Broadcast
               </Button>
             )}
@@ -61,55 +77,63 @@ export function DashboardPage() {
       />
 
       {status.error && (
-        <Alert tone={status.state === 'offline' ? 'warning' : 'error'}>
+        <Alert severity={status.state === 'offline' ? 'warning' : 'error'} sx={{ mb: 2 }}>
           {status.state === 'offline' ? 'The server is offline or unreachable. ' : ''}
           {status.error.message}
         </Alert>
       )}
 
-      <div className="grid grid-3">
-        <Card title="Server" actions={<ServerStateBadge state={status.state} />}>
-          <dl className="kv">
-            <dt>Name</dt>
-            <dd>{status.info?.name ?? status.connection?.name}</dd>
-            <dt>Address</dt>
-            <dd className="mono">{status.connection?.adapter === 'mock' ? 'mock server' : `${status.connection?.host}:${status.connection?.port}`}</dd>
-            <dt>Version</dt>
-            <dd>{status.info?.version ?? '—'}</dd>
-            <dt>Uptime</dt>
-            <dd>{m ? formatDuration(m.uptimeSeconds) : '—'}</dd>
-            {status.info?.description && (
-              <>
-                <dt>Description</dt>
-                <dd>{status.info.description}</dd>
-              </>
-            )}
-          </dl>
-        </Card>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <Section title="Server" action={<ServerStateChip state={status.state} />}>
+            <KeyValue
+              items={[
+                ['Name', status.info?.name ?? status.connection?.name],
+                ['Address', <Mono>{status.connection?.adapter === 'mock' ? 'mock server' : `${status.connection?.host}:${status.connection?.port}`}</Mono>],
+                ['Version', status.info?.version ?? '—'],
+                ['Uptime', m ? formatDuration(m.uptimeSeconds) : '—'],
+                !!status.info?.description && ['Description', status.info.description],
+              ]}
+            />
+          </Section>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <Section
+            title="Players"
+            action={
+              can('players.view') && (
+                <Button component={RouterLink} to="/players" size="small">
+                  View all
+                </Button>
+              )
+            }
+          >
+            <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              <Stat label="Online" value={m ? m.currentPlayers : '—'} hint={m ? `of ${m.maxPlayers} slots` : undefined} />
+              <Stat label="In-game day" value={m?.inGameDays ?? '—'} />
+              <Stat label="Base camps" value={m?.baseCampCount ?? '—'} />
+            </Stack>
+          </Section>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <Section title="Performance">
+            <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
+              <Stat label="Server FPS" value={m ? m.fps : '—'} />
+              <Stat label="Frame time" value={m ? `${m.frameTimeMs.toFixed(1)} ms` : '—'} />
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              CPU and memory usage will appear once host monitoring is added.
+            </Typography>
+          </Section>
+        </Grid>
+      </Grid>
 
-        <Card title="Players" actions={can('players.view') && <Link to="/players">View all</Link>}>
-          <div className="stats">
-            <Stat label="Online" value={m ? m.currentPlayers : '—'} hint={m ? `of ${m.maxPlayers} slots` : undefined} />
-            <Stat label="In-game day" value={m?.inGameDays ?? '—'} />
-            <Stat label="Base camps" value={m?.baseCampCount ?? '—'} />
-          </div>
-        </Card>
-
-        <Card title="Performance">
-          <div className="stats">
-            <Stat label="Server FPS" value={m ? m.fps : '—'} />
-            <Stat label="Frame time" value={m ? `${m.frameTimeMs.toFixed(1)} ms` : '—'} />
-          </div>
-          <p className="muted small">CPU and memory usage will appear once host monitoring is added.</p>
-        </Card>
-      </div>
-
-      <BroadcastModal open={broadcastOpen} onClose={() => setBroadcastOpen(false)} />
+      <BroadcastDialog open={broadcastOpen} onClose={() => setBroadcastOpen(false)} />
     </>
   );
 }
 
-function BroadcastModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function BroadcastDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const notify = useToast();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -129,24 +153,25 @@ function BroadcastModal({ open, onClose }: { open: boolean; onClose: () => void 
   };
 
   return (
-    <Modal
-      open={open}
-      title="Broadcast message"
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={send} loading={busy} disabled={!message.trim()}>
-            Send
-          </Button>
-        </>
-      }
-    >
-      <Field label="Message" hint={`${message.length}/200 · shown to everyone on the server`}>
-        <Input autoFocus maxLength={200} value={message} onChange={(e) => setMessage(e.target.value)} />
-      </Field>
-    </Modal>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Broadcast message</DialogTitle>
+      <DialogContent>
+        <TextField
+          label="Message"
+          autoFocus
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          helperText={`${message.length}/200 · shown to everyone on the server`}
+          slotProps={{ htmlInput: { maxLength: 200 } }}
+          sx={{ mt: 1 }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={send} loading={busy} disabled={!message.trim()}>
+          Send
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

@@ -59,6 +59,12 @@ export class PlayerDirectory {
     this.cache = undefined;
   }
 
+  /** A player just left because of a kick or ban: stop showing them online. */
+  markOffline(userId: string): void {
+    this.online.delete(userId);
+    this.cache = undefined;
+  }
+
   record(serverId: number, players: PalworldPlayer[]): void {
     const now = new Date().toISOString();
     const upsert = this.db.prepare(
@@ -103,6 +109,28 @@ export class PlayerDirectory {
       .prepare('SELECT * FROM players WHERE server_id = ? AND (user_id = ? OR name = ? COLLATE NOCASE) LIMIT 5')
       .all(server.id, query, query) as PlayerRow[];
     return rows.map((r) => this.toPlayer(r));
+  }
+
+  /** Every player seen on the primary server, most recently seen first. */
+  list(query: { search?: string; limit: number; offset: number }): { players: KnownPlayer[]; total: number } {
+    const server = this.servers.getPrimary();
+    if (!server) return { players: [], total: 0 };
+    const search = query.search?.trim();
+    const filter = search ? String.raw`AND (name LIKE @like ESCAPE '\' OR user_id LIKE @like ESCAPE '\' OR guild LIKE @like ESCAPE '\')` : '';
+    const params = search ? { serverId: server.id, like: `%${search.replace(/[%_\\]/g, (c) => `\\${c}`)}%` } : { serverId: server.id };
+    const total = (this.db.prepare(`SELECT COUNT(*) AS n FROM players WHERE server_id = @serverId ${filter}`).get(params) as { n: number }).n;
+    const rows = this.db
+      .prepare(`SELECT * FROM players WHERE server_id = @serverId ${filter} ORDER BY last_seen_at DESC, id DESC LIMIT @limit OFFSET @offset`)
+      .all({ ...params, limit: query.limit, offset: query.offset }) as PlayerRow[];
+    return { players: rows.map((r) => this.toPlayer(r)), total };
+  }
+
+  /** The known player with this platform id on the primary server. */
+  byUserId(userId: string): KnownPlayer | undefined {
+    const server = this.servers.getPrimary();
+    if (!server) return undefined;
+    const row = this.db.prepare('SELECT * FROM players WHERE server_id = ? AND user_id = ?').get(server.id, userId) as PlayerRow | undefined;
+    return row && this.toPlayer(row);
   }
 
   count(): number {

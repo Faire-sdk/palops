@@ -1,5 +1,6 @@
+import Alert from '@mui/material/Alert';
+import Snackbar from '@mui/material/Snackbar';
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import { Icon } from './icons';
 
 type Tone = 'success' | 'error' | 'info';
 interface Toast {
@@ -12,33 +13,34 @@ const ToastContext = createContext<(message: string, tone?: Tone) => void>(() =>
 
 let nextId = 1;
 
+/** Short confirmations and errors, shown one at a time as a Material snackbar. */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [queue, setQueue] = useState<Toast[]>([]);
+  const [open, setOpen] = useState(true);
+  const current = queue[0];
 
-  const dismiss = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
-
-  const notify = useCallback(
-    (message: string, tone: Tone = 'info') => {
-      const id = nextId++;
-      setToasts((t) => [...t.slice(-4), { id, tone, message }]);
-      setTimeout(() => dismiss(id), tone === 'error' ? 8000 : 4000);
-    },
-    [dismiss],
-  );
+  const notify = useCallback((message: string, tone: Tone = 'info') => {
+    setQueue((q) => [...q.slice(-4), { id: nextId++, tone, message }]);
+    setOpen(true);
+  }, []);
 
   return (
     <ToastContext.Provider value={notify}>
       {children}
-      <div className="toasts" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast-${t.tone}`}>
-            <span>{t.message}</span>
-            <button className="icon-btn" onClick={() => dismiss(t.id)} aria-label="Dismiss">
-              <Icon name="x" size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
+      <Snackbar
+        key={current?.id}
+        open={!!current && open}
+        autoHideDuration={current?.tone === 'error' ? 8000 : 4000}
+        onClose={(_, reason) => reason !== 'clickaway' && setOpen(false)}
+        slotProps={{ transition: { onExited: () => (setQueue((q) => q.slice(1)), setOpen(true)) } }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        {current ? (
+          <Alert severity={current.tone} variant="filled" onClose={() => setOpen(false)} sx={{ width: '100%' }}>
+            {current.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </ToastContext.Provider>
   );
 }

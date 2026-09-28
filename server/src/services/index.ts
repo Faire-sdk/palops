@@ -9,6 +9,7 @@ import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.j
 import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
 import { PalworldService } from './palworld/index.js';
+import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
 import { SiteAccountService } from './site/site-accounts.js';
 import { ServerRegistry } from './servers/server-registry.js';
@@ -27,6 +28,7 @@ export interface Services {
   discordOAuth: DiscordOAuthProvider | null;
   oauthStates: OAuthStateStore;
   players: PlayerDirectory;
+  moderation: ModerationService;
   siteAccounts: SiteAccountService;
 }
 
@@ -63,13 +65,15 @@ export function createServices(config: Config, db: DB): Services {
   const users = new UserService(db);
   const servers = new ServerRegistry(db, new SecretBox(config.secret, 'server-credentials'));
   const palworld = new PalworldService(servers);
+  const audit = new AuditLog(db);
+  const players = new PlayerDirectory(db, palworld, servers);
   return {
     config,
     db,
     users,
     sessions: new SessionService(db, { idleMs: config.sessionIdleMs, maxMs: config.sessionMaxMs }),
     passwordResets: new PasswordResetService(db),
-    audit: new AuditLog(db),
+    audit,
     servers,
     palworld,
     setup: new SetupGate(users, config.setupToken),
@@ -79,7 +83,8 @@ export function createServices(config: Config, db: DB): Services {
         ? new DiscordOAuthClient(config.discord)
         : null,
     oauthStates: new OAuthStateStore(),
-    players: new PlayerDirectory(db, palworld, servers),
+    players,
+    moderation: new ModerationService(db, palworld, players, servers, audit),
     siteAccounts: new SiteAccountService(db, config.sessionMaxMs),
   };
 }

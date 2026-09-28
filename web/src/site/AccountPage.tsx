@@ -1,8 +1,21 @@
+import Alert from '@mui/material/Alert';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Container from '@mui/material/Container';
+import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import { authErrorMessage, DiscordLogo, discordAvatarUrl } from '../auth/discord';
-import { Alert, Badge, Button, Field, Input, Loading } from '../components/ui';
+import { authErrorMessage, DiscordButton, DiscordLogo, discordAvatarUrl } from '../auth/discord';
+import { KeyValue, Loading, Mono } from '../components/common';
 import { formatDateTime } from '../format';
 import type { PlayerSession } from './SiteApp';
 import type { PlayerProfile } from './types';
@@ -18,21 +31,29 @@ export function AccountPage({ session, enabled }: { session: PlayerSession; enab
 
   if (!session.profile) {
     return (
-      <div className="site-container site-narrow">
-        <div className="site-card center">
-          <h1>Your character</h1>
-          <p className="muted">Sign in with Discord to link your Palworld character and see your level and guild.</p>
-          {error && <Alert tone="error">{error}</Alert>}
-          {enabled ? (
-            <button className="btn btn-discord" onClick={() => session.signIn()}>
-              <DiscordLogo /> Sign in with Discord
-            </button>
-          ) : (
-            <Alert tone="info">Player sign-in isn’t set up on this server yet.</Alert>
-          )}
-          <p className="muted small">We only get your Discord username and avatar.</p>
-        </div>
-      </div>
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Card>
+          <CardContent sx={{ p: 4 }}>
+            <Stack spacing={2.5} sx={{ alignItems: 'center', textAlign: 'center' }}>
+              <Typography variant="h4" component="h1">
+                Your character
+              </Typography>
+              <Typography color="text.secondary">Sign in with Discord to link your Palworld character and see your level and guild.</Typography>
+              {error && <Alert severity="error">{error}</Alert>}
+              {enabled ? (
+                <DiscordButton size="large" onClick={() => session.signIn()}>
+                  Sign in with Discord
+                </DiscordButton>
+              ) : (
+                <Alert severity="info">Player sign-in isn’t set up on this server yet.</Alert>
+              )}
+              <Typography variant="body2" color="text.secondary">
+                We only get your Discord username and avatar.
+              </Typography>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Container>
     );
   }
 
@@ -40,22 +61,28 @@ export function AccountPage({ session, enabled }: { session: PlayerSession; enab
   const avatar = discordAvatarUrl(account.discord);
 
   return (
-    <div className="site-container site-narrow">
-      <div className="site-card">
-        <div className="account-head">
-          {avatar ? <img className="account-avatar" src={avatar} alt="" /> : <div className="account-avatar"><DiscordLogo size={22} /></div>}
-          <div>
-            <div className="muted small">Signed in with Discord</div>
-            <strong>{account.discord.username ?? account.discord.id}</strong>
-          </div>
-          <Button variant="ghost" onClick={() => session.signOut()}>
-            Sign out
-          </Button>
-        </div>
-      </div>
+    <Container maxWidth="sm" sx={{ py: 6 }}>
+      <Stack spacing={2}>
+        <Card>
+          <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, '&:last-child': { pb: 2 } }}>
+            <Avatar src={avatar ?? undefined} sx={{ bgcolor: '#5865F2' }}>
+              <DiscordLogo />
+            </Avatar>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="body2" color="text.secondary">
+                Signed in with Discord
+              </Typography>
+              <Typography noWrap sx={{ fontWeight: 600 }}>
+                {account.discord.username ?? account.discord.id}
+              </Typography>
+            </Box>
+            <Button onClick={() => session.signOut()}>Sign out</Button>
+          </CardContent>
+        </Card>
 
-      {character ? <CharacterCard session={session} /> : <LinkCharacter onLinked={session.setProfile} />}
-    </div>
+        {character ? <CharacterCard session={session} /> : <LinkCharacter onLinked={session.setProfile} />}
+      </Stack>
+    </Container>
   );
 }
 
@@ -63,55 +90,73 @@ function CharacterCard({ session }: { session: PlayerSession }) {
   const c = session.profile!.character!;
   const [busy, setBusy] = useState(false);
   return (
-    <div className="site-card">
-      <div className="character-head">
-        <div className="player-avatar player-avatar-lg">{c.name.slice(0, 1).toUpperCase()}</div>
-        <div>
-          <h1>{c.name}</h1>
-          <div className="character-badges">
-            <Badge tone={c.online ? 'success' : 'neutral'}>
-              <span className="dot" /> {c.online ? 'Online now' : 'Offline'}
-            </Badge>
-            {!c.verified && <Badge tone="warning">Unverified link</Badge>}
+    <Card>
+      <CardContent sx={{ p: 3 }}>
+        <Stack spacing={3}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <Avatar sx={{ width: 64, height: 64, fontSize: 28, bgcolor: 'primary.main', color: 'primary.contrastText' }}>{c.name.slice(0, 1).toUpperCase()}</Avatar>
+            <Box>
+              <Typography variant="h4" component="h1">
+                {c.name}
+              </Typography>
+              <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                <Chip label={c.online ? 'Online now' : 'Offline'} color={c.online ? 'success' : 'default'} variant="outlined" />
+                {!c.verified && <Chip label="Unverified link" color="warning" variant="outlined" />}
+              </Stack>
+            </Box>
+          </Stack>
+
+          <Grid container spacing={2}>
+            {[
+              ['Level', c.level ?? '—'],
+              ['Guild', c.guild ?? '—'],
+            ].map(([label, value]) => (
+              <Grid key={label as string} size={6}>
+                <Card sx={{ bgcolor: 'action.hover', border: 0 }}>
+                  <CardContent sx={{ '&:last-child': { pb: 2 } }}>
+                    <Typography variant="h5" component="div" sx={{ fontWeight: 700 }} noWrap>
+                      {value}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {label}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          <KeyValue
+            items={[
+              ['First seen', formatDateTime(c.firstSeenAt)],
+              ['Last seen', c.online ? 'Now' : formatDateTime(c.lastSeenAt)],
+              ['Platform ID', <Mono>{c.platformId}</Mono>],
+            ]}
+          />
+          {!c.guild && (
+            <Typography variant="body2" color="text.secondary">
+              Guild info appears once the server reports it.
+            </Typography>
+          )}
+          <Divider />
+          <div>
+            <Button
+              loading={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  session.setProfile(await api.post<PlayerProfile>('/site/unlink'));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Not you? Unlink this character
+            </Button>
           </div>
-        </div>
-      </div>
-      <div className="character-stats">
-        <div>
-          <div className="site-stat-value">{c.level ?? '—'}</div>
-          <div className="site-stat-label">Level</div>
-        </div>
-        <div>
-          <div className="site-stat-value">{c.guild ?? '—'}</div>
-          <div className="site-stat-label">Guild</div>
-        </div>
-      </div>
-      <dl className="kv">
-        <dt>First seen</dt>
-        <dd>{formatDateTime(c.firstSeenAt)}</dd>
-        <dt>Last seen</dt>
-        <dd>{c.online ? 'Now' : formatDateTime(c.lastSeenAt)}</dd>
-        <dt>Platform ID</dt>
-        <dd className="mono">{c.platformId}</dd>
-      </dl>
-      {!c.guild && <p className="muted small">Guild info appears once the server reports it.</p>}
-      <div>
-        <Button
-          variant="ghost"
-          loading={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              session.setProfile(await api.post<PlayerProfile>('/site/unlink'));
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          Not you? Unlink this character
-        </Button>
-      </div>
-    </div>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -134,23 +179,31 @@ function LinkCharacter({ onLinked }: { onLinked: (p: PlayerProfile) => void }) {
   };
 
   return (
-    <div className="site-card">
-      <h2>Link your character</h2>
-      <p className="muted">
-        Enter your in-game character name. If several players share it, use your platform ID (like <code>steam_7656…</code>).
-        You need to have joined the server at least once.
-      </p>
-      <form className="form" onSubmit={submit}>
-        {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Character name or platform ID">
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} required minLength={2} maxLength={64} />
-        </Field>
-        <div>
-          <Button variant="primary" type="submit" loading={busy}>
-            Link character
-          </Button>
-        </div>
-      </form>
-    </div>
+    <Card>
+      <CardContent sx={{ p: 3 }}>
+        <Stack component="form" spacing={2} onSubmit={submit}>
+          <Typography variant="h5" component="h2">
+            Link your character
+          </Typography>
+          <Typography color="text.secondary">
+            Enter your in-game character name. If several players share it, use your platform ID (like <Mono>steam_7656…</Mono>). You need to have joined
+            the server at least once.
+          </Typography>
+          {error && <Alert severity="error">{error}</Alert>}
+          <TextField
+            label="Character name or platform ID"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            required
+            slotProps={{ htmlInput: { minLength: 2, maxLength: 64 } }}
+          />
+          <div>
+            <Button variant="contained" type="submit" loading={busy}>
+              Link character
+            </Button>
+          </div>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

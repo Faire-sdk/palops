@@ -1,12 +1,20 @@
+import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
-import { BrowserRouter, Link, NavLink, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link as RouterLink, Route, Routes } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import { DiscordLogo } from '../auth/discord';
+import { DiscordButton } from '../auth/discord';
+import { Brand } from '../components/Brand';
 import { useApi } from '../hooks/useApi';
 import { AccountPage } from './AccountPage';
 import { HomePage } from './HomePage';
 import type { PlayerProfile, PublicServer } from './types';
-import './site.css';
 
 export interface PlayerSession {
   profile: PlayerProfile | null;
@@ -47,63 +55,74 @@ function usePlayerSession(): PlayerSession {
 export default function SiteApp() {
   const session = usePlayerSession();
   const server = useApi<PublicServer>('/public/server', { pollMs: 30000 });
+  const name = server.data?.name ?? 'Palworld server';
   useEffect(() => {
     if (server.data?.name) document.title = server.data.name;
   }, [server.data?.name]);
 
   return (
     <BrowserRouter>
-      <div className="site">
-        <header className="site-header">
-          <div className="site-container site-header-inner">
-            <Link to="/" className="site-brand">
-              <span className="brand-mark">P</span>
-              <span>{server.data?.name ?? 'Palworld server'}</span>
-            </Link>
-            <nav className="site-nav">
-              <NavLink to="/" end>
-                Home
-              </NavLink>
-              <a href="/#join">How to join</a>
-              {server.data?.showOnlinePlayers && <a href="/#players">Players</a>}
-              {server.data?.discordInvite && (
-                <a href={server.data.discordInvite} target="_blank" rel="noreferrer">
-                  Discord
-                </a>
-              )}
-            </nav>
-            <div className="site-header-actions">
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <AppBar position="sticky" color="inherit" sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Container>
+            <Toolbar disableGutters sx={{ gap: 2 }}>
+              <Box component={RouterLink} to="/" sx={{ color: 'inherit', textDecoration: 'none', minWidth: 0, flexShrink: 1 }}>
+                <Brand name={name} />
+              </Box>
+              <Stack component="nav" direction="row" spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' }, ml: 2 }}>
+                <Button color="inherit" component={RouterLink} to="/">
+                  Home
+                </Button>
+                <Button color="inherit" href="/#join">
+                  How to join
+                </Button>
+                {server.data?.showOnlinePlayers && (
+                  <Button color="inherit" href="/#players">
+                    Players
+                  </Button>
+                )}
+                {server.data?.discordInvite && (
+                  <Button color="inherit" href={server.data.discordInvite} target="_blank" rel="noreferrer">
+                    Discord
+                  </Button>
+                )}
+              </Stack>
+              <Box sx={{ flexGrow: 1 }} />
               {session.profile ? (
-                <Link to="/account" className="btn btn-secondary">
+                <Button variant="outlined" component={RouterLink} to="/account" sx={{ flexShrink: 0 }}>
                   {session.profile.character?.name ?? session.profile.account.discord.username ?? 'My account'}
-                </Link>
+                </Button>
               ) : (
                 server.data?.playerLogin && (
-                <button className="btn btn-discord-inline" onClick={() => session.signIn()} disabled={session.loading}>
-                  <DiscordLogo size={16} /> Sign in
-                </button>
+                  <DiscordButton onClick={() => session.signIn()} disabled={session.loading} sx={{ flexShrink: 0 }}>
+                    Sign in
+                  </DiscordButton>
                 )
               )}
-            </div>
-          </div>
-        </header>
+            </Toolbar>
+          </Container>
+        </AppBar>
 
-        <main>
+        <Box component="main" sx={{ flexGrow: 1 }}>
           <Routes>
             <Route path="/account" element={<AccountPage session={session} enabled={server.data?.playerLogin ?? true} />} />
             <Route path="*" element={<HomePage server={server} session={session} />} />
           </Routes>
-        </main>
+        </Box>
 
-        <footer className="site-footer">
-          <div className="site-container site-footer-inner">
-            <span className="muted">© {new Date().getFullYear()} {server.data?.name ?? 'Palworld server'}. Not affiliated with Pocketpair.</span>
-            <a href="/panel" className="muted">
-              Staff panel
-            </a>
-          </div>
-        </footer>
-      </div>
+        <Box component="footer" sx={{ borderTop: 1, borderColor: 'divider', py: 3, mt: 6 }}>
+          <Container>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between' }}>
+              <Typography variant="body2" color="text.secondary">
+                © {new Date().getFullYear()} {name}. Not affiliated with Pocketpair.
+              </Typography>
+              <Link href="/panel" variant="body2" color="text.secondary">
+                Staff panel
+              </Link>
+            </Stack>
+          </Container>
+        </Box>
+      </Box>
     </BrowserRouter>
   );
 }

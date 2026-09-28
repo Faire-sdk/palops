@@ -151,4 +151,24 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 4,
+    name: 'moderation_actions',
+    sql: `
+      -- Kicks, bans, unbans and staff notes made through the panel. The REST
+      -- API has no ban list, so this is the panel's record of who it banned.
+      CREATE TABLE moderation_actions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        player_user_id TEXT NOT NULL,
+        player_name TEXT,
+        action TEXT NOT NULL CHECK (action IN ('kick', 'ban', 'unban', 'note')),
+        reason TEXT,
+        actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        actor_username TEXT,
+        created_at TEXT NOT NULL DEFAULT ${now}
+      );
+      CREATE INDEX moderation_player ON moderation_actions(server_id, player_user_id, id);
+    `,
+  },
 ];

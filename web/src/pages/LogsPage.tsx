@@ -1,7 +1,12 @@
+import Chip from '@mui/material/Chip';
+import MenuItem from '@mui/material/MenuItem';
+import Pagination from '@mui/material/Pagination';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import { useState } from 'react';
 import type { AuditEntry } from '../api/types';
-import { Table } from '../components/Table';
-import { Badge, Button, Card, EmptyState, ErrorState, Loading, PageHeader, Select } from '../components/ui';
+import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
+import { DataTable } from '../components/DataTable';
 import { formatDateTime } from '../format';
 import { useApi } from '../hooks/useApi';
 
@@ -18,24 +23,27 @@ export function LogsPage() {
   return (
     <>
       <PageHeader title="Logs" description="Audit history of sign-ins and administrative actions." />
-      <Card
+      <Section
         title="Audit log"
-        actions={
-          <Select
-            aria-label="Category"
+        disablePadding
+        action={
+          <TextField
+            select
+            label="Category"
             value={category}
             onChange={(e) => {
               setCategory(e.target.value);
               setPage(0);
             }}
+            sx={{ minWidth: 180 }}
           >
-            <option value="">All categories</option>
+            <MenuItem value="">All categories</MenuItem>
             {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
+              <MenuItem key={c} value={c}>
                 {c}
-              </option>
+              </MenuItem>
             ))}
-          </Select>
+          </TextField>
         }
       >
         {loading && !data ? (
@@ -44,40 +52,28 @@ export function LogsPage() {
           <ErrorState error={error} onRetry={reload} />
         ) : (
           <>
-            <Table
+            <DataTable
               rows={data?.entries ?? []}
               rowKey={(e) => e.id}
               empty={<EmptyState title="No log entries yet" />}
               columns={[
-                { key: 'time', header: 'Time', render: (e) => <span className="nowrap">{formatDateTime(e.createdAt)}</span> },
-                { key: 'actor', header: 'User', render: (e) => e.actorUsername ?? <span className="muted">—</span> },
-                { key: 'category', header: 'Category', render: (e) => <Badge>{e.category}</Badge> },
+                { key: 'time', header: 'Time', nowrap: true, render: (e) => formatDateTime(e.createdAt) },
+                { key: 'actor', header: 'User', render: (e) => e.actorUsername ?? '—' },
+                { key: 'category', header: 'Category', render: (e) => <Chip label={e.category} variant="outlined" /> },
                 { key: 'action', header: 'Action', render: (e) => e.action.replace(/_/g, ' ') },
                 { key: 'target', header: 'Target', render: (e) => e.target ?? '' },
-                {
-                  key: 'details',
-                  header: 'Details',
-                  render: (e) => (e.details ? <code className="details">{JSON.stringify(e.details)}</code> : ''),
-                },
-                { key: 'ip', header: 'IP', render: (e) => <span className="mono muted">{e.ip}</span> },
+                { key: 'details', header: 'Details', render: (e) => (e.details ? <Mono muted>{JSON.stringify(e.details)}</Mono> : '') },
+                { key: 'ip', header: 'IP', render: (e) => <Mono muted>{e.ip}</Mono> },
               ]}
             />
             {data && data.total > PAGE_SIZE && (
-              <div className="pager">
-                <Button disabled={page === 0} onClick={() => setPage(page - 1)}>
-                  Previous
-                </Button>
-                <span className="muted">
-                  Page {page + 1} of {pages}
-                </span>
-                <Button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>
-                  Next
-                </Button>
-              </div>
+              <Stack sx={{ alignItems: 'center', py: 2 }}>
+                <Pagination count={pages} page={page + 1} onChange={(_, p) => setPage(p - 1)} color="primary" />
+              </Stack>
             )}
           </>
         )}
-      </Card>
+      </Section>
     </>
   );
 }

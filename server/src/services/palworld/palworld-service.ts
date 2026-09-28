@@ -1,7 +1,7 @@
 import type { AdapterKind, ServerConnection, ServerRegistry } from '../servers/server-registry.js';
 import { MockAdapter } from './mock-adapter.js';
 import { RestApiAdapter } from './rest-api-adapter.js';
-import type { PalworldAdapter, PalworldMetrics, PalworldPlayer, PalworldServerInfo } from './types.js';
+import type { PalworldAdapter, PalworldMetrics, PalworldPlayer, PalworldServerInfo, PalworldSettings } from './types.js';
 import { PalworldError } from './types.js';
 
 export type ServerState = 'online' | 'offline' | 'error' | 'unconfigured';
@@ -89,6 +89,36 @@ export class PalworldService {
 
   async announce(message: string): Promise<void> {
     await this.adapter().announce(message);
+  }
+
+  async getSettings(): Promise<PalworldSettings> {
+    return this.adapter().getSettings();
+  }
+
+  async kick(userId: string, message?: string): Promise<void> {
+    await this.adapter().kick(userId, message);
+  }
+
+  async ban(userId: string, message?: string): Promise<void> {
+    await this.adapter().ban(userId, message);
+  }
+
+  async unban(userId: string): Promise<void> {
+    await this.adapter().unban(userId);
+  }
+
+  async save(): Promise<void> {
+    await this.adapter().save();
+  }
+
+  async shutdown(waitSeconds: number, message: string): Promise<void> {
+    await this.adapter().shutdown(waitSeconds, message);
+    this.cachedStatus = undefined;
+  }
+
+  async forceStop(): Promise<void> {
+    await this.adapter().forceStop();
+    this.cachedStatus = undefined;
   }
 
   private async probe(adapter?: PalworldAdapter, connection?: ServerStatus['connection']): Promise<ServerStatus> {

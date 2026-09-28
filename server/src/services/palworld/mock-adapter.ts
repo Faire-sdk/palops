@@ -43,7 +43,7 @@ export class MockAdapter implements PalworldAdapter {
 
   async getSettings(): Promise<PalworldSettings> {
     this.ensureRunning();
-    return { ServerName: 'Mock Palworld Server', ServerPlayerMaxNum: 32, ExpRate: 1, PalCaptureRate: 1, bIsPvP: false };
+    return { ...MOCK_SETTINGS };
   }
 
   async announce(message: string) {
@@ -105,3 +105,51 @@ function mockPlayer(name: string, userId: string, level: number, guild: string |
     guild,
   };
 }
+
+/** A realistic subset of what GET /v1/api/settings returns. */
+const MOCK_SETTINGS: PalworldSettings = {
+  Difficulty: 'None',
+  DayTimeSpeedRate: 1,
+  NightTimeSpeedRate: 1,
+  ExpRate: 1.5,
+  PalCaptureRate: 1.2,
+  PalSpawnNumRate: 1,
+  PalDamageRateAttack: 1,
+  PalDamageRateDefense: 1,
+  PlayerDamageRateAttack: 1,
+  PlayerDamageRateDefense: 1,
+  PlayerStomachDecreaceRate: 1,
+  PlayerStaminaDecreaceRate: 1,
+  PalStomachDecreaceRate: 1,
+  PalEggDefaultHatchingTime: 12,
+  WorkSpeedRate: 1,
+  CollectionDropRate: 1.5,
+  EnemyDropItemRate: 1,
+  DeathPenalty: 'Item',
+  BaseCampMaxNum: 128,
+  BaseCampWorkerMaxNum: 15,
+  GuildPlayerMaxNum: 20,
+  bEnablePlayerToPlayerDamage: false,
+  bEnableFriendlyFire: false,
+  bEnableInvaderEnemy: true,
+  bIsPvP: false,
+  bEnableFastTravel: true,
+  bExistPlayerAfterLogout: false,
+  bShowPlayerList: true,
+  ServerName: 'Mock Palworld Server',
+  ServerDescription: 'Development server',
+  ServerPlayerMaxNum: 32,
+  CoopPlayerMaxNum: 4,
+  PublicPort: 8211,
+  PublicIP: '',
+  Region: '',
+  bUseAuth: true,
+  BanListURL: 'https://api.palworldgame.com/api/banlist.txt',
+  RCONEnabled: false,
+  RCONPort: 25575,
+  RESTAPIEnabled: true,
+  RESTAPIPort: 8212,
+  AllowConnectPlatform: 'Steam',
+  bIsUseBackupSaveData: true,
+  LogFormatType: 'Text',
+};

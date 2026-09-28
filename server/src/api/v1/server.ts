@@ -37,6 +37,33 @@ export default async function serverRoutes(app: FastifyInstance, { services }: {
     return { ok: true };
   });
 
+  app.post('/save', { preHandler: requirePermission(services, 'server.control') }, async (request) => {
+    await palworld.save();
+    services.audit.record(actorOf(request), { category: 'server', action: 'world_saved' });
+    return { ok: true };
+  });
+
+  /** Graceful shutdown: players see the message and a countdown, then the world saves and the server exits. */
+  app.post('/shutdown', { preHandler: requirePermission(services, 'server.control') }, async (request) => {
+    const { waitSeconds, message } = parse(
+      z.object({
+        waitSeconds: z.number().int().min(1).max(3600),
+        message: z.string().trim().max(200).default(''),
+      }),
+      request.body,
+    );
+    await palworld.shutdown(waitSeconds, message || `Server shutting down in ${waitSeconds} seconds`);
+    services.audit.record(actorOf(request), { category: 'server', action: 'shutdown', details: { waitSeconds, message } });
+    return { ok: true };
+  });
+
+  /** Immediate stop without saving. The UI asks for confirmation first. */
+  app.post('/stop', { preHandler: requirePermission(services, 'server.control') }, async (request) => {
+    await palworld.forceStop();
+    services.audit.record(actorOf(request), { category: 'server', action: 'force_stop' });
+    return { ok: true };
+  });
+
   app.get('/connection', { preHandler: requirePermission(services, 'server.connection') }, async () => ({
     connection: services.servers.getPrimary() ?? null,
   }));

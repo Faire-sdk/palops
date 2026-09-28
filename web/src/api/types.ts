@@ -67,6 +67,38 @@ export interface Player {
   buildingCount: number | null;
 }
 
+export interface KnownPlayer {
+  id: number;
+  userId: string;
+  playerId: string | null;
+  name: string;
+  level: number | null;
+  guild: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  online: boolean;
+  banned?: boolean;
+}
+
+export type ModerationAction = 'kick' | 'ban' | 'unban' | 'note';
+
+export interface ModerationRecord {
+  id: number;
+  playerUserId: string;
+  playerName: string | null;
+  action: ModerationAction;
+  reason: string | null;
+  actorUsername: string | null;
+  createdAt: string;
+}
+
+export interface PlayerProfile {
+  userId: string;
+  player: KnownPlayer | null;
+  banned: boolean;
+  history: ModerationRecord[];
+}
+
 export type AdapterKind = 'rest' | 'mock';
 
 export interface ServerConnection {
