@@ -114,21 +114,68 @@ It's plain HTTP, and it authenticates with Basic auth as user `admin` with the s
 
 ### 1. Turn on the REST API
 
-Stop the Palworld server and edit `PalWorldSettings.ini`:
-
-| Platform | File |
-| --- | --- |
-| Linux | `Pal/Saved/Config/LinuxServer/PalWorldSettings.ini` |
-| Windows | `Pal\Saved\Config\WindowsServer\PalWorldSettings.ini` |
-
-If the file is empty, copy `DefaultPalWorldSettings.ini` from the server's root folder into it first.
-Then, inside the `OptionSettings=(...)` line, set these three values (leave the rest as they are):
+Palworld reads its settings from `PalWorldSettings.ini`, which is created the first time the server runs.
+If it's empty, copy the contents of `DefaultPalWorldSettings.ini` (in the server's install folder) into it.
+Then, inside the `OptionSettings=(...)` line, set these three values and leave the rest as they are:
 
 ```ini
 AdminPassword="<a long random password>",RESTAPIEnabled=True,RESTAPIPort=8212
 ```
 
-Start the server again. Palworld only reads the file on start, so edits made while it runs are lost.
+Always stop the server before editing: Palworld reads the file on start and can overwrite changes made while it runs.
+
+#### Linux (SteamCMD)
+
+```bash
+# Install or update the dedicated server (app 2394010)
+steamcmd +force_install_dir ~/palworld +login anonymous +app_update 2394010 validate +quit
+
+# Start it once so the config folder is created, then stop it (Ctrl+C or your systemd unit)
+cd ~/palworld && ./PalServer.sh
+
+# Edit the settings
+cp -n ~/palworld/DefaultPalWorldSettings.ini ~/palworld/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini
+nano ~/palworld/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini
+
+# Start it again
+./PalServer.sh      # or: sudo systemctl restart palworld
+```
+
+Adjust `~/palworld` if you installed elsewhere; without `+force_install_dir`, SteamCMD uses `~/Steam/steamapps/common/PalServer`.
+If the `.ini` already has content, skip the `cp` line. Keep the REST API closed to the outside:
+
+```bash
+sudo ufw allow 8211/udp   # game port
+sudo ufw deny 8212        # REST API: local only
+```
+
+#### Windows (Palworld Dedicated Server)
+
+Install **Palworld Dedicated Server** from the Steam client (Library → Tools), or with SteamCMD:
+
+```powershell
+steamcmd +force_install_dir C:\palworld +login anonymous +app_update 2394010 validate +quit
+```
+
+Run `PalServer.exe` once so the config folder is created, then close it. Edit:
+
+```text
+<install folder>\Pal\Saved\Config\WindowsServer\PalWorldSettings.ini
+```
+
+The Steam client installs to `C:\Program Files (x86)\Steam\steamapps\common\PalServer` by default.
+If the `.ini` is empty, paste in the contents of `DefaultPalWorldSettings.ini` from the install folder first. Start `PalServer.exe` again.
+
+When Windows asks whether to allow `PalServer.exe` through the firewall, the allow rule covers every port it opens, including the REST API.
+Add an explicit block for the REST API (block rules win over allow rules) from an administrator PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "Palworld game (UDP 8211)" -Direction Inbound -Protocol UDP -LocalPort 8211 -Action Allow
+New-NetFirewallRule -DisplayName "Palworld REST API (block)" -Direction Inbound -Protocol TCP -LocalPort 8212 -Action Block
+```
+
+The block only affects other machines; PalOps on the same PC still reaches `127.0.0.1:8212`.
+To run PalOps on that Windows machine, see [the Windows section of the same-host guide](docs/deploy-same-host.md#windows-server).
 
 ### 2. Check it answers
 
@@ -138,7 +185,8 @@ From the machine PalOps runs on:
 curl -u admin:<AdminPassword> http://127.0.0.1:8212/v1/api/info
 ```
 
-You should get JSON with the server name and version. Replace `127.0.0.1` with the game server's address if PalOps runs elsewhere.
+On Windows use `curl.exe` in PowerShell (plain `curl` is an alias there). You should get JSON with the server name and version.
+Replace `127.0.0.1` with the game server's address if PalOps runs elsewhere.
 A `401` means the password is wrong; no answer means the API is off, the port is different, or a firewall is in the way.
 
 ### 3. Add the connection in the panel
