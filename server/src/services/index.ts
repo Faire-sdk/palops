@@ -9,6 +9,7 @@ import { UserService } from './authentication/users.js';
 import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
 import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
+import { PalBanService } from './palban/palban-service.js';
 import { PalDefenderService } from './paldefender/paldefender-service.js';
 import { PalworldService } from './palworld/index.js';
 import { DiscordBotService } from './discord/discord-bot.js';
@@ -37,6 +38,8 @@ export interface Services {
   moderation: ModerationService;
   /** Optional PalDefender plugin integration; does nothing until an owner enables it. */
   paldefender: PalDefenderService;
+  /** Optional PalBan Network integration; does nothing until an owner enables it. */
+  palban: PalBanService;
   /** The view-only console: tailed log files plus events the panel knows about. */
   console: ConsoleService;
   /** The optional Discord bot; does nothing until an owner enables it. */
@@ -95,8 +98,9 @@ export function createServices(config: Config, db: DB): Services {
   });
   world.onSignal((s) => consoleLog.add('panel', `Signal for ${s.playerName}: ${s.summary}`, 'warn'));
   const moderation = new ModerationService(db, palworld, players, servers, audit, paldefender);
+  const palban = new PalBanService(db, new SecretBox(config.secret, 'palban-key'), moderation, players, servers, audit);
   const siteAccounts = new SiteAccountService(db, config.sessionMaxMs);
-  const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog, siteAccounts, paldefender });
+  const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog, siteAccounts, paldefender, palban });
   return {
     config,
     db,
@@ -116,6 +120,7 @@ export function createServices(config: Config, db: DB): Services {
     players,
     moderation,
     paldefender,
+    palban,
     siteAccounts,
     world,
     console: consoleLog,

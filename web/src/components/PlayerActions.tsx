@@ -25,7 +25,9 @@ import { refreshAll, useApi } from '../hooks/useApi';
 import { DailyPlaytime } from './ActivityMetrics';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
+import { usePalBan } from '../hooks/usePalBan';
 import { usePalDefender } from '../hooks/usePalDefender';
+import { PalBanPlayerSection } from './PalBan';
 import { PalDefenderPlayerDialog } from './PalDefenderPlayer';
 import { formatMapPoint, palLabel, SignalChip } from './world';
 
@@ -160,6 +162,7 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
   const [action, setAction] = useState<Action | null>(null);
   const [pdOpen, setPdOpen] = useState(false);
   const paldefender = usePalDefender();
+  const palban = usePalBan();
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -358,6 +361,8 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
             )}
           </>
         )}
+
+        {palban && can('world.view') && <PalBanPlayerSection userId={data.userId} />}
 
         {data.pals.length > 0 && (
           <>

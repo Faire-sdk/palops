@@ -523,3 +523,57 @@ export interface BotCheck {
   ok: boolean;
   message: string | null;
 }
+
+// ---- PalBan Network (optional shared banlist integration) ----
+
+export interface PalBanSettings {
+  enabled: boolean;
+  baseUrl: string;
+  hasKey: boolean;
+  autoBan: boolean;
+  sendEvents: boolean;
+  checkJoins: boolean;
+  serverName: string | null;
+  updatedAt: string;
+}
+
+export interface PalBanStatus {
+  enabled: boolean;
+  serverName: string | null;
+  lastSyncAt: string | null;
+  error: string | null;
+  bans: { total: number; active: number };
+  notInGame: number;
+  queued: number;
+}
+
+export interface PalBanBan {
+  id: string;
+  gameId: string;
+  playerName: string | null;
+  discordId: string | null;
+  reason: string | null;
+  category: string | null;
+  status: string;
+  active: boolean;
+  banDate: string | null;
+  expiresAt: string | null;
+  unbanDate: string | null;
+  inGame: boolean;
+  applied: boolean;
+}
+
+export interface PalBanPlayer {
+  gameId: string;
+  playerName: string | null;
+  linkedDiscordId: string | null;
+  localBanStatus: 'BANNED' | 'PREVIOUSLY_BANNED' | 'NOT_BANNED';
+  localBans: Array<{ id: string; reason: string | null; category: string | null; status: string; banDate: string | null; expiresAt: string | null }>;
+  network: {
+    serversReporting: number;
+    reportCount: number;
+    activeReportCount: number;
+    reports: Array<{ server: string; reason: string | null; status: string; banDate: string | null; expiresAt: string | null }>;
+  };
+  detections: Array<{ provider: string | null; type: string | null; severity: string | null; confidence: number | null; message: string | null; detectedAt: string | null }>;
+}

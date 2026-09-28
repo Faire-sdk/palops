@@ -51,6 +51,12 @@ const paldefenderTimer = setInterval(() => {
 }, 60 * 1000);
 paldefenderTimer.unref();
 
+// PalBan Network (optional): banlist sync, heartbeat and events. Does nothing unless an owner has switched it on.
+const palbanTimer = setInterval(() => {
+  services.palban.tick().catch((err) => app.log.debug({ err }, 'PalBan tick failed'));
+}, 60 * 1000);
+palbanTimer.unref();
+
 // World snapshot: guilds, bases, the live map, cheat signals and lag hotspots.
 if (config.worldPollSeconds > 0) {
   const worldTimer = setInterval(() => {

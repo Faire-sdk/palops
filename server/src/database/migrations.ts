@@ -497,4 +497,48 @@ export const migrations: Migration[] = [
       CREATE INDEX player_sessions_open ON player_sessions(server_id, ended_at);
     `,
   },
+  {
+    id: 17,
+    name: 'palban_network',
+    sql: `
+      -- The optional PalBan Network integration (one row). Off unless an owner
+      -- enables it. The integration key is encrypted at rest.
+      CREATE TABLE palban (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        base_url TEXT NOT NULL DEFAULT '',
+        key_encrypted TEXT,
+        palban_server_id TEXT,
+        palban_server_name TEXT,
+        auto_ban INTEGER NOT NULL DEFAULT 0,
+        send_events INTEGER NOT NULL DEFAULT 1,
+        check_joins INTEGER NOT NULL DEFAULT 1,
+        sync_cursor TEXT,
+        last_sync_at TEXT,
+        last_full_sync_at TEXT,
+        last_error TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+
+      -- This server's own banlist on PalBan Network, mirrored so the panel can
+      -- compare it with what is banned in the game.
+      CREATE TABLE palban_bans (
+        server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        ban_id TEXT NOT NULL,
+        game_id TEXT NOT NULL,
+        player_name TEXT,
+        discord_id TEXT,
+        reason TEXT,
+        category TEXT,
+        status TEXT NOT NULL,
+        ban_date TEXT,
+        expires_at TEXT,
+        unban_date TEXT,
+        updated_at TEXT,
+        applied_at TEXT,
+        PRIMARY KEY (server_id, ban_id)
+      );
+      CREATE INDEX palban_bans_game ON palban_bans(server_id, game_id);
+    `,
+  },
 ];

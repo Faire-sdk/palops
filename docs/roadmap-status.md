@@ -42,6 +42,12 @@ An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefen
 in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, player addresses synced from it, and a PalDefender page
 and player panel for inventories, pals, technologies, progression, guilds and bases, giving, summoning, base deletion, config reload and messages. See [paldefender.md](paldefender.md).
 
+## PalBan Network (optional)
+
+An opt-in integration with [PalBan Network](https://github.com/Faire-sdk/PalBanNetwork)'s shared banlists, off unless an owner turns it on: your server's PalBan banlist next to the
+game's with one-click (or optional automatic) banning in the game, a CSV export for adding local bans to PalBan, network lookups on player profiles and at join, and joins and bans
+reported to PalBan. Reports from other servers are leads, never bans. See [palban.md](palban.md).
+
 ## Discord bot (optional)
 
 Slash commands that map each Discord user to a panel user by Discord ID and enforce that user's role (including `/ban @member`), notifications to an events channel, log

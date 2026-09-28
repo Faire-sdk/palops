@@ -9,6 +9,7 @@ import { api, errorMessage } from '../api/client';
 import type { IpBan, ModerationRecord, PalDefenderBan, PalDefenderResult, PalDefenderStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
+import { PalBanBans } from '../components/PalBan';
 import { ExportButton, PlayerName } from '../components/PlayerBits';
 import { DataTable } from '../components/DataTable';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -30,6 +31,7 @@ export function BansPage() {
         description="Players and addresses banned from the panel, and PalDefender’s own list when it’s connected."
         actions={<ExportButton path="/players/bans/export.csv" />}
       />
+      <PalBanBans onOpen={setProfile} />
       <Bans onOpen={setProfile} onAction={setTarget} />
       <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} onOpen={setProfile} />
       <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} ip={target?.ip} onClose={() => setTarget(null)} />

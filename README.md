@@ -255,6 +255,12 @@ person's panel role. Off by default and PalOps doesn't need it. See [docs/discor
 If your Windows server runs the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin, PalOps can mirror bans (including IP bans) to it, show its ban list,
 player inventories, pals, guilds and bases, and let admins give items and pals, teach technologies, summon, delete bases and send messages. It's off by default and PalOps doesn't need it. See [docs/paldefender.md](docs/paldefender.md).
 
+### Optional: PalBan Network
+
+[PalBan Network](https://github.com/Faire-sdk/PalBanNetwork) shares banlists between Palworld servers. PalOps can read your server's PalBan banlist next to the game's (banning in the game
+one click at a time, or automatically if you allow it), export local bans for PalBan to import, look players up on the network, and report joins and bans. Reports from other servers are leads,
+never bans. Off by default. See [docs/palban.md](docs/palban.md).
+
 ### Keep the API private
 
 **Never expose the REST API port to the internet.** Anyone who reaches it with the admin password can kick, ban or shut down the server, and it has no TLS.
@@ -355,6 +361,11 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/players/metrics` | `players.view` (unique players, playtime, average visit, peak online, busiest hours, daily series) |
 | GET | `/players/export.csv`, `/players/bans/export.csv` | `players.view` (CSV downloads, audited; addresses only with `players.ip`) |
 | POST | `/players/:userId/notes` | `players.note` |
+| GET/PUT | `/palban/settings` | `server.connection` (optional PalBan Network integration; the key is never returned) |
+| POST | `/palban/test` | `server.connection` (which PalBan server a key is for and its permissions) |
+| GET | `/palban/status`, `/palban/bans` | `players.view` (PalBan banlist next to the game's) |
+| POST | `/palban/sync`, `/palban/bans/:id/apply`; GET `/palban/export.csv` | `players.ban` (read now, ban in game, CSV for PalBan's importer) |
+| GET | `/palban/players/:userId` | `world.view` (what the network knows about a player) |
 | POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
 | GET/PUT | `/paldefender/settings` | `server.connection` (optional PalDefender integration; the token is never returned) |
 | POST | `/paldefender/test` | `server.connection` |
