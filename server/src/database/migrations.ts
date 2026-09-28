@@ -247,4 +247,27 @@ export const migrations: Migration[] = [
       CREATE INDEX world_perf_time ON world_perf(server_id, taken_at);
     `,
   },
+  {
+    id: 6,
+    name: 'map_image',
+    sql: `
+      -- The owner-uploaded background for the live map (one per panel). The
+      -- file lives next to the database; bounds are the image's edges in
+      -- in-game map coordinates.
+      CREATE TABLE map_image (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        file_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        left_x REAL NOT NULL,
+        top_y REAL NOT NULL,
+        right_x REAL NOT NULL,
+        bottom_y REAL NOT NULL,
+        aligned INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT ${now},
+        updated_by TEXT
+      );
+    `,
+  },
 ];

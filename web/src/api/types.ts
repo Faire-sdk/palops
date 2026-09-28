@@ -236,3 +236,14 @@ export interface AuthOptions {
   setupRequired: boolean;
   providers: { discord: boolean; password: boolean };
 }
+
+/** The live map's background image; bounds are its edges in map coordinates. */
+export interface MapImage {
+  contentType: string;
+  width: number;
+  height: number;
+  bounds: { left: number; top: number; right: number; bottom: number };
+  aligned: boolean;
+  updatedAt: string;
+  updatedBy: string | null;
+}

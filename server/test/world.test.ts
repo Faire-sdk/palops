@@ -131,3 +131,52 @@ describe('world data', () => {
     expect(p).toEqual({ x: -123.4, y: 567.8 });
   });
 });
+
+describe('map image', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
+  const upload = (cookie: string, body: Buffer, type = 'image/png', size = 'width=2000&height=1000') =>
+    api(ctx.app, { method: 'PUT', url: `/api/v1/world/map-image?${size}`, cookie, payload: body, headers: { 'content-type': type } });
+
+  it('lets admins upload, align and remove it, and staff view it', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    const res = await upload(admin, PNG);
+    expect(res.statusCode).toBe(200);
+    // A wide image gets a centred guess that keeps its shape until it's aligned.
+    expect(res.json().image).toMatchObject({ width: 2000, height: 1000, aligned: false, bounds: { left: -1000, right: 1000, top: 500, bottom: -500 } });
+
+    const mod = await loginAs(ctx.app, ctx.services, 'moderator');
+    const file = await get(mod, '/api/v1/world/map-image/file');
+    expect(file.statusCode).toBe(200);
+    expect(file.headers['content-type']).toBe('image/png');
+    expect(file.rawPayload.equals(PNG)).toBe(true);
+    expect((await upload(mod, PNG)).statusCode).toBe(403);
+
+    const bounds = { left: -1200, top: 900, right: 1100, bottom: -1000 };
+    const aligned = await api(ctx.app, { method: 'PATCH', url: '/api/v1/world/map-image', cookie: admin, payload: bounds });
+    expect(aligned.json().image).toMatchObject({ aligned: true, bounds });
+    const mirrored = await api(ctx.app, { method: 'PATCH', url: '/api/v1/world/map-image', cookie: admin, payload: { ...bounds, right: -1300 } });
+    expect(mirrored.statusCode).toBe(400);
+
+    // Re-uploading an image of the same shape keeps the alignment.
+    expect((await upload(admin, PNG, 'image/png', 'width=4000&height=2000')).json().image).toMatchObject({ aligned: true, bounds });
+
+    expect((await api(ctx.app, { method: 'DELETE', url: '/api/v1/world/map-image', cookie: admin })).statusCode).toBe(200);
+    expect((await get(mod, '/api/v1/world/map-image')).json().image).toBeNull();
+    expect((await get(mod, '/api/v1/world/map-image/file')).statusCode).toBe(404);
+    expect(ctx.services.audit.list({ category: 'config', limit: 10, offset: 0 }).entries.map((e) => e.action)).toEqual([
+      'map_image_removed',
+      'map_image_uploaded',
+      'map_image_aligned',
+      'map_image_uploaded',
+    ]);
+  });
+
+  it('rejects files that are not images and unsupported types', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    expect((await upload(admin, Buffer.from('<svg onload=alert(1)>'), 'image/png')).statusCode).toBe(400);
+    expect((await upload(admin, PNG, 'image/svg+xml')).statusCode).toBe(415);
+    expect((await upload(admin, PNG, 'image/png', 'width=0&height=10')).statusCode).toBe(400);
+    const viewer = await loginAs(ctx.app, ctx.services, 'viewer');
+    expect((await get(viewer, '/api/v1/world/map-image/file')).statusCode).toBe(403);
+  });
+});
