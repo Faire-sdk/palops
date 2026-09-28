@@ -2,8 +2,10 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, truncateSy
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WebSocketServer } from 'ws';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanMessage, ConsoleService, guessLevel } from '../src/services/console/console-service.js';
+import { SecretBox } from '../src/utils/crypto.js';
 import { api, createTestApp, loginAs } from './helpers.js';
 
 let ctx: Awaited<ReturnType<typeof createTestApp>>;
@@ -144,7 +146,7 @@ describe('tailing log files', () => {
     ctx.services.console.stopTail();
     appendFileSync(file, 'three\n');
     // A new service over the same database, as after a restart.
-    const again = new ConsoleService(ctx.services.db, []);
+    const again = new ConsoleService(ctx.services.db, [], new SecretBox('a'.repeat(40), 'test'));
     again.restartTail();
     again.pollTail();
     again.stopTail();
@@ -207,7 +209,7 @@ describe('log path safety', () => {
     const data = join(dir, 'data');
     mkdirSync(data);
     writeFileSync(join(data, 'palops.log'), 'x');
-    const guarded = new ConsoleService(ctx.services.db, [data]);
+    const guarded = new ConsoleService(ctx.services.db, [data], new SecretBox('a'.repeat(40), 'test'));
     const attempt = (p: string) => guarded.check({ gameLogPath: p, paldefenderLogPath: null })[0]!;
     expect(attempt(data).ok).toBe(false);
     expect(attempt(join(data, 'palops.log')).ok).toBe(false);
@@ -339,5 +341,105 @@ describe('console API', () => {
     expect(text.indexOf('missed while away')).toBeLessThan(text.indexOf('arrived live'));
     controller.abort();
     await ctx.app.close();
+  });
+});
+
+describe('PalServerLogger websocket', () => {
+  const TOKEN = 'logger-secret-123';
+  let wss: WebSocketServer | undefined;
+  let port = 0;
+  let headers: Array<string | undefined> = [];
+
+  const serve = async (listenPort = 0) => {
+    headers = [];
+    wss = new WebSocketServer({
+      host: '127.0.0.1',
+      port: listenPort,
+      // Like the DLL: connections without the right secret are rejected.
+      verifyClient: (info, done) => {
+        headers.push(info.req.headers.authorization);
+        if (info.req.headers.authorization === `Bearer ${TOKEN}`) done(true);
+        else done(false, 401, 'Unauthorized');
+      },
+    });
+    await new Promise<void>((r) => wss!.once('listening', () => r()));
+    port = (wss.address() as AddressInfo).port;
+  };
+  const close = async () => {
+    if (!wss) return;
+    for (const c of wss.clients) c.terminate();
+    await new Promise<void>((r) => wss!.close(() => r()));
+    wss = undefined;
+  };
+  afterEach(close);
+
+  const settings = (token: string | undefined = TOKEN, enabled = true) => ({ tailEnabled: false, gameLogPath: null, paldefenderLogPath: null, logger: { enabled, host: '127.0.0.1', port, tls: false, token } });
+  const status = () => ctx.services.console.loggerStatus();
+
+  it('shows the log messages it sends, and ignores everything else', async () => {
+    await serve();
+    ctx.services.console.save(settings());
+    await vi.waitFor(() => expect(status().state).toBe('connected'));
+    expect(headers).toEqual([`Bearer ${TOKEN}`]);
+    const [client] = [...wss!.clients];
+    client!.send(JSON.stringify({ type: 'log', message: '[2026-09-12 12:00:00] Server started' }));
+    client!.send(JSON.stringify({ type: 'other', message: 'ignored' }));
+    client!.send('not json');
+    client!.send(JSON.stringify({ type: 'log', message: 42 }));
+    client!.send(JSON.stringify({ type: 'log', message: '\u001b[31m[Error] boom\u001b[0m' }));
+    await vi.waitFor(() => expect(messages('game')).toHaveLength(2));
+    expect(messages('game')).toEqual(['[2026-09-12 12:00:00] Server started', '[Error] boom']);
+    expect(ctx.services.console.lines({ limit: 5, minLevel: 'error' })).toHaveLength(1);
+    expect(status().lastMessageAt).not.toBeNull();
+  });
+
+  it('explains a rejected token and keeps trying', async () => {
+    await serve();
+    ctx.services.console.save(settings('wrong-token'));
+    await vi.waitFor(() => expect(status().state).toBe('error'));
+    expect(status().message).toContain('rejected the token');
+  });
+
+  it('reconnects by itself when the server comes back', async () => {
+    await serve();
+    ctx.services.console.save(settings());
+    await vi.waitFor(() => expect(status().state).toBe('connected'));
+    const wasPort = port;
+    await close();
+    await vi.waitFor(() => expect(status().state).toBe('error'), { timeout: 3000 });
+    await serve(wasPort);
+    await vi.waitFor(() => expect(status().state).toBe('connected'), { timeout: 5000 });
+  });
+
+  it('tests a connection without saving, and encrypts the saved token', async () => {
+    await serve();
+    const owner = await loginAs(ctx.app, ctx.services, 'owner');
+    const test = (token?: string, p = port) =>
+      api(ctx.app, { method: 'POST', url: '/api/v1/console/settings/test', cookie: owner, payload: { gameLogPath: null, paldefenderLogPath: null, logger: { host: '127.0.0.1', port: p, tls: false, token } } });
+    expect((await test(TOKEN)).json().logger).toEqual({ ok: true, message: null });
+    expect((await test('nope')).json().logger).toMatchObject({ ok: false, message: expect.stringContaining('rejected the token') });
+    expect((await test(TOKEN, 1)).json().logger).toMatchObject({ ok: false });
+    expect((await test(undefined)).json().logger.message).toContain('websocket_secret');
+
+    const saved = await put(owner, '/api/v1/console/settings', { tailEnabled: false, gameLogPath: null, paldefenderLogPath: null, logger: { enabled: true, host: '127.0.0.1', port, tls: false, token: TOKEN } });
+    expect(saved.json().settings.logger).toEqual({ enabled: true, host: '127.0.0.1', port, tls: false, hasToken: true });
+    expect(JSON.stringify(saved.json())).not.toContain(TOKEN);
+    const raw = ctx.services.db.prepare('SELECT logger_token_encrypted AS t FROM console_settings').get() as { t: string };
+    expect(raw.t).not.toContain(TOKEN);
+    // The saved token is used when the field is left blank.
+    expect((await test(undefined)).json().logger).toEqual({ ok: true, message: null });
+    const audit = ctx.services.audit.list({ category: 'console', limit: 1, offset: 0 }).entries[0]!;
+    expect(JSON.stringify(audit)).not.toContain(TOKEN);
+    expect(audit.details).toMatchObject({ loggerTokenChanged: true });
+  });
+
+  it('will not switch on without a token or host, and is admin-proof', async () => {
+    const owner = await loginAs(ctx.app, ctx.services, 'owner');
+    const noToken = await put(owner, '/api/v1/console/settings', { tailEnabled: false, gameLogPath: null, paldefenderLogPath: null, logger: { enabled: true, host: '127.0.0.1', port: 8765, tls: false } });
+    expect(noToken.statusCode).toBe(400);
+    expect(noToken.json().error.code).toBe('token_required');
+    expect((await put(owner, '/api/v1/console/settings', { tailEnabled: false, gameLogPath: null, paldefenderLogPath: null, logger: { enabled: false, host: 'http://evil', port: 8765, tls: false } })).statusCode).toBe(400);
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    expect((await put(admin, '/api/v1/console/settings', { tailEnabled: false, gameLogPath: null, paldefenderLogPath: null })).statusCode).toBe(403);
   });
 });

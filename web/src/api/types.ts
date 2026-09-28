@@ -401,10 +401,25 @@ export interface TailStatus {
   lastLineAt: string | null;
 }
 
+export interface LoggerSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  tls: boolean;
+  hasToken: boolean;
+}
+
+export interface LoggerStatus {
+  state: 'off' | 'connecting' | 'connected' | 'error';
+  message: string | null;
+  lastMessageAt: string | null;
+}
+
 export interface ConsoleSettings {
   tailEnabled: boolean;
   gameLogPath: string | null;
   paldefenderLogPath: string | null;
+  logger: LoggerSettings;
   updatedAt: string | null;
 }
 
@@ -412,5 +427,31 @@ export interface PathCheck {
   source: 'game' | 'paldefender';
   ok: boolean;
   kind: 'file' | 'directory' | null;
+  message: string | null;
+}
+
+// ---- Discord bot (optional) ----
+
+export interface DiscordBotSettings {
+  enabled: boolean;
+  applicationId: string | null;
+  publicKey: string | null;
+  hasToken: boolean;
+  guildId: string | null;
+  publicInfo: boolean;
+  eventsChannelId: string | null;
+  logChannelId: string | null;
+  logMinLevel: ConsoleLevel;
+  notifyBans: boolean;
+  notifySignals: boolean;
+  notifyServer: boolean;
+  notifyJoins: boolean;
+  commandsRegisteredAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface BotCheck {
+  name: string;
+  ok: boolean;
   message: string | null;
 }

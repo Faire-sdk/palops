@@ -9,7 +9,7 @@ Tracks progress against the development priority order in the project roadmap.
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
 | 4 | Dashboard | Status, info, player count, FPS/frame time, broadcast, and the server FPS graph with average and lowest (from world snapshots, staff only). Host CPU/RAM pending |
 | 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every address a player has connected from is recorded (staff only), shown on profiles with the other accounts that share it, and can be banned. The game only bans accounts, so PalOps enforces banned addresses itself: any account seen on one is banned and kicked at the next check (about 20 seconds). Bans made outside PalOps can't be listed through the API |
-| 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. A PalServerLogger websocket source is planned |
+| 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. Optionally the PalServerLogger websocket for the game's real console output |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
 | 8 | Logs | Audit log with category filter and pagination; the Console page covers the game and PalDefender log files |
 | 9 | Server controls | Save, shutdown with countdown and message, force stop. Start/restart needs a process manager integration |
@@ -41,11 +41,11 @@ An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefen
 in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, player addresses synced from it, and a PalDefender page
 and player panel for inventories, pals, technologies, progression, guilds and bases, giving, summoning, base deletion, config reload and messages. See [paldefender.md](paldefender.md).
 
-## Discord bot (planned)
+## Discord bot (optional)
 
-Panel users are linked to Discord ids, so a bot in `server/src/services/discord/` can resolve the Discord user
-behind a command to a panel user and reuse the same permission checks. It will need `DISCORD_BOT_TOKEN`
-and a guild id; nothing bot-related runs yet.
+Slash commands (`/status`, `/players`, `/player`, `/kick`, `/ban`, `/unban`, `/announce`, `/save`) that map each Discord user to a panel user by Discord ID and
+enforce that user's role, plus notifications to an events channel and forwarding of log warnings to a log channel. Discord calls PalOps over signed HTTPS, so there's no
+gateway connection to run. Off unless an owner enables it; see [discord-bot.md](discord-bot.md).
 
 ## Known limitations
 

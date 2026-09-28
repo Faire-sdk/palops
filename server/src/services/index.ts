@@ -11,6 +11,7 @@ import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
 import { PalDefenderService } from './paldefender/paldefender-service.js';
 import { PalworldService } from './palworld/index.js';
+import { DiscordBotService } from './discord/discord-bot.js';
 import { ConsoleService } from './console/console-service.js';
 import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
@@ -38,6 +39,8 @@ export interface Services {
   paldefender: PalDefenderService;
   /** The view-only console: tailed log files plus events the panel knows about. */
   console: ConsoleService;
+  /** The optional Discord bot; does nothing until an owner enables it. */
+  discordBot: DiscordBotService;
   siteAccounts: SiteAccountService;
   world: WorldService;
   mapImage: MapImageService;
@@ -79,7 +82,7 @@ export function createServices(config: Config, db: DB): Services {
   const audit = new AuditLog(db);
   const players = new PlayerDirectory(db, palworld, servers);
   const paldefender = new PalDefenderService(db, new SecretBox(config.secret, 'paldefender-token'), players, servers);
-  const consoleLog = new ConsoleService(db, config.databasePath === ':memory:' ? [] : [dirname(resolve(config.databasePath))]);
+  const consoleLog = new ConsoleService(db, config.databasePath === ':memory:' ? [] : [dirname(resolve(config.databasePath))], new SecretBox(config.secret, 'console-logger-token'));
   const world = new WorldService(db, palworld, players, servers, audit);
   // Mirror what the panel knows into the console, so it's useful even before any log file is set up.
   audit.onRecord((actor, entry) => {
@@ -91,6 +94,8 @@ export function createServices(config: Config, db: DB): Services {
     for (const name of left) consoleLog.add('panel', `${name} left`, 'info');
   });
   world.onSignal((s) => consoleLog.add('panel', `Signal for ${s.playerName}: ${s.summary}`, 'warn'));
+  const moderation = new ModerationService(db, palworld, players, servers, audit, paldefender);
+  const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog });
   return {
     config,
     db,
@@ -108,11 +113,12 @@ export function createServices(config: Config, db: DB): Services {
         : null,
     oauthStates: new OAuthStateStore(),
     players,
-    moderation: new ModerationService(db, palworld, players, servers, audit, paldefender),
+    moderation,
     paldefender,
     siteAccounts: new SiteAccountService(db, config.sessionMaxMs),
     world,
     console: consoleLog,
+    discordBot,
     mapImage: new MapImageService(db, config.databasePath, audit),
   };
 }

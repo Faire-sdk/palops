@@ -241,6 +241,10 @@ counts, and only when `SITE_SHOW_ONLINE_PLAYERS` is on.
 The REST API can't start a stopped server, change settings, list bans made elsewhere, or give console or log access; those need PalOps on the game machine
 (see [docs/deployment.md](docs/deployment.md)).
 
+### Optional: Discord bot
+
+Slash commands and channel notifications for staff, using each person's panel role. Off by default and PalOps doesn't need it. See [docs/discord-bot.md](docs/discord-bot.md).
+
 ### Optional: PalDefender
 
 If your Windows server runs the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin, PalOps can mirror bans (including IP bans) to it, show its ban list,
@@ -362,7 +366,9 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | PUT/PATCH/DELETE | `/world/map-image` | `config.edit` (upload as a raw PNG/JPEG/WebP body up to 25 MB, align, remove) |
 | GET | `/logs/audit` | `audit.view` |
 | GET | `/console/lines`, `/console/stream` | `console.view` (view-only console: history and a live server-sent event stream) |
-| GET/PUT | `/console/settings`, POST `/console/settings/test` | `server.connection` (where the game and PalDefender log files are) |
+| GET/PUT | `/console/settings`, POST `/console/settings/test` | `server.connection` (where the game and PalDefender log files are, and the PalServerLogger websocket) |
+| POST | `/discord/interactions` | public, but every request must carry Discord's signature (slash commands arrive here) |
+| GET/PUT | `/discord-bot/settings`; POST `/discord-bot/test`, `/register-commands`, `/send-test` | `server.connection` (the optional Discord bot; the token is never returned) |
 | GET | `/public/server`, `/public/players`, `/public/guilds` | public, CORS open, no IPs, platform IDs or positions |
 | GET | `/site/me` | player signed in on the website |
 | POST | `/site/link`, `/site/unlink`, `/site/logout` | player signed in on the website |

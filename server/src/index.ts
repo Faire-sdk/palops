@@ -38,6 +38,9 @@ playerTimer.unref();
 // Console: follow the game and PalDefender log files, if an owner has set them up.
 services.console.restartTail();
 
+// Discord bot (optional): tells the events channel when the server goes down or comes back.
+services.discordBot.start();
+
 // PalDefender (optional): keep player addresses current, including offline players.
 // Does nothing unless an owner has switched the integration on.
 const paldefenderTimer = setInterval(() => {
@@ -67,6 +70,7 @@ if (setupToken) {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
+    services.discordBot.stop();
     services.console.stopTail();
     services.console.flush();
     await app.close();

@@ -16,7 +16,7 @@ import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { api } from '../api/client';
-import type { ConsoleLevel, ConsoleLine, ConsoleSource, TailStatus } from '../api/types';
+import type { ConsoleLevel, ConsoleLine, ConsoleSource, LoggerStatus, TailStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader, Section } from '../components/common';
 
@@ -48,6 +48,7 @@ export function ConsolePage() {
   const [query, setQuery] = useState('');
   const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [tail, setTail] = useState<TailStatus[] | null>(null);
+  const [logger, setLogger] = useState<LoggerStatus | null>(null);
   const [paused, setPaused] = useState(false);
   const [follow, setFollow] = useState(true);
   const [live, setLive] = useState<Live>('connecting');
@@ -83,11 +84,12 @@ export function ConsolePage() {
     if (levelParam) params.set('level', levelParam);
     if (query) params.set('q', query);
     api
-      .get<{ lines: ConsoleLine[]; sources: TailStatus[] }>(`/console/lines?${params}`)
+      .get<{ lines: ConsoleLine[]; sources: TailStatus[]; logger: LoggerStatus | null }>(`/console/lines?${params}`)
       .then((res) => {
         if (closed) return;
         setLines(res.lines);
         setTail(res.sources);
+        setLogger(res.logger);
         const last = res.lines.at(-1)?.id ?? 0;
         const stream = new URLSearchParams({ after: String(last) });
         if (sourceParam) stream.set('sources', sourceParam);
@@ -151,7 +153,7 @@ export function ConsolePage() {
     });
 
   const missing = tail?.filter((t) => t.state === 'missing') ?? [];
-  const noFiles = tail !== null && tail.length === 0;
+  const noFiles = tail !== null && tail.length === 0 && !logger;
   const visible = lines.filter(matches);
 
   return (
@@ -171,6 +173,11 @@ export function ConsolePage() {
           ) : (
             'An owner can point PalOps at the game and PalDefender log files in Settings.'
           )}
+        </Alert>
+      )}
+      {logger && logger.state !== 'connected' && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          PalServerLogger isn’t connected: {logger.message ?? 'connecting…'}
         </Alert>
       )}
       {missing.map((t) => (

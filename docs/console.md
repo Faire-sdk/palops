@@ -5,6 +5,7 @@ The **Console** page is a live, **view-only** feed. It shows:
 - **Panel events**: players joining and leaving, admin actions (kicks, bans, gives, settings changes), and cheat signals. This needs nothing set up.
 - **The game's log file**, if an owner has pointed PalOps at it.
 - **PalDefender's log files**, the same way. This reads the files PalDefender writes and is separate from its REST API integration.
+- **The PalServerLogger websocket**, optional, for the game's real console output on Windows servers.
 
 You can filter by source, show only warnings or errors, search, pause, and download what you're looking at. Lines are kept for a week (at most 100,000).
 It needs the `console.view` permission, which admins and owners have.
@@ -57,7 +58,19 @@ Then use `/logs/game` and `/logs/paldefender` in the settings. Behind a reverse 
 Log files are polled once a second, read from where PalOps left off, split into whole lines, and stored. The page loads recent history and then follows a server-sent
 event stream (`GET /api/v1/console/stream`), which reconnects by itself and catches up on what it missed. Up to 20 viewers can stream at once.
 
+## PalServerLogger (optional, Windows)
+
+[PalServerLogger](https://github.com/GlitchApotamus/PalServerLogger) is a DLL loaded into the game server. It captures the server's console output and serves it over a
+websocket (default `127.0.0.1:8765`). PalOps can connect to it for the real console stream, which the log files don't fully contain. It's another plugin in the game
+process, so only add it if you want it.
+
+In **Settings → Console logs → PalServerLogger websocket**, enter the host, port and the `websocket_secret` from PalServerLogger's `Config.json`, and use **Check**
+to try the connection. PalOps sends the secret in an `Authorization: Bearer` header (never in a URL), reconnects with a growing pause when the server is away, and shows
+why it can't connect (wrong secret, nothing listening, unreachable). The secret is encrypted at rest.
+
+PalServerLogger's documented message is `{"type":"log","message":"..."}`. Other message types aren't documented, so PalOps ignores them. If you also follow the game's log
+file, lines can appear twice: use one or the other for the game log.
+
 ## Not built yet
 
-- The **PalServerLogger** websocket source, for a real console stream on Windows servers. It needs its authentication and message format confirmed first.
-- A journald/`docker logs` source for Linux setups without log files.
+- A journald or `docker logs` source for Linux setups without log files.

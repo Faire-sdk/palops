@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
 import type { ConsoleLevel, ConsoleLine, ConsoleSourceName } from '../../services/console/console-service.js';
+import { isIP } from 'node:net';
 import { tooManyRequests } from '../../utils/errors.js';
 import { parse } from '../../utils/validation.js';
 
@@ -27,7 +28,17 @@ const lineQuery = z.object({
   q: z.string().max(100).optional(),
 });
 
+const HOSTNAME = /^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
+const loggerSchema = z.object({
+  enabled: z.boolean().default(false),
+  host: z.string().trim().min(1).max(253).refine((h) => isIP(h) !== 0 || HOSTNAME.test(h), 'Enter a valid hostname or IP address'),
+  port: z.coerce.number().int().min(1).max(65535).default(8765),
+  tls: z.boolean().default(false),
+  token: z.string().trim().max(256).optional(),
+});
+
 const settingsSchema = z.object({
+  logger: loggerSchema.optional(),
   tailEnabled: z.boolean(),
   gameLogPath: z.string().trim().max(1024).nullable().default(null),
   paldefenderLogPath: z.string().trim().max(1024).nullable().default(null),
@@ -45,7 +56,7 @@ export default async function consoleRoutes(app: FastifyInstance, { services }: 
 
   app.get('/lines', view, async (request) => {
     const q = parse(lineQuery, request.query);
-    return { lines: log.lines({ afterId: q.afterId, beforeId: q.beforeId, limit: q.limit, sources: q.sources, minLevel: q.level as ConsoleLevel | undefined, search: q.q }), sources: log.tailStatus() };
+    return { lines: log.lines({ afterId: q.afterId, beforeId: q.beforeId, limit: q.limit, sources: q.sources, minLevel: q.level as ConsoleLevel | undefined, search: q.q }), sources: log.tailStatus(), logger: log.settings().logger.enabled ? log.loggerStatus() : null };
   });
 
   /**
@@ -90,26 +101,32 @@ export default async function consoleRoutes(app: FastifyInstance, { services }: 
     });
   });
 
-  app.get('/settings', configure, async () => ({ settings: log.settings(), sources: log.tailStatus() }));
+  app.get('/settings', configure, async () => ({ settings: log.settings(), sources: log.tailStatus(), logger: log.loggerStatus() }));
 
   app.put('/settings', configure, async (request) => {
-    const input = parse(settingsSchema, request.body);
+    const { logger, ...paths } = parse(settingsSchema, request.body);
     const before = log.settings();
-    const settings = log.save(input);
+    const tokenValue = logger?.token === '' ? undefined : logger?.token;
+    const settings = log.save({ ...paths, logger: logger ? { ...logger, token: tokenValue } : undefined });
     services.audit.record(actorOf(request), {
       category: 'console',
       action: 'settings_updated',
       details: {
-        before: { tailEnabled: before.tailEnabled, gameLogPath: before.gameLogPath, paldefenderLogPath: before.paldefenderLogPath },
-        after: { tailEnabled: settings.tailEnabled, gameLogPath: settings.gameLogPath, paldefenderLogPath: settings.paldefenderLogPath },
+        before: { tailEnabled: before.tailEnabled, gameLogPath: before.gameLogPath, paldefenderLogPath: before.paldefenderLogPath, logger: { ...before.logger } },
+        after: { tailEnabled: settings.tailEnabled, gameLogPath: settings.gameLogPath, paldefenderLogPath: settings.paldefenderLogPath, logger: { ...settings.logger } },
+        // Never log the token itself, only whether it changed.
+        loggerTokenChanged: tokenValue !== undefined,
       },
     });
-    return { settings, sources: log.tailStatus() };
+    return { settings, sources: log.tailStatus(), logger: log.loggerStatus() };
   });
 
   /** Checks the paths without saving, so a typo shows up before switching anything on. */
   app.post('/settings/test', configure, async (request) => {
-    const { gameLogPath, paldefenderLogPath } = parse(settingsSchema.omit({ tailEnabled: true }), request.body);
-    return { checks: log.check({ gameLogPath, paldefenderLogPath }) };
+    const { gameLogPath, paldefenderLogPath, logger } = parse(settingsSchema.omit({ tailEnabled: true }), request.body);
+    return {
+      checks: log.check({ gameLogPath, paldefenderLogPath }),
+      logger: logger ? await log.testLogger({ host: logger.host, port: logger.port, tls: logger.tls, token: logger.token || undefined }) : null,
+    };
   });
 }

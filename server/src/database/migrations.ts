@@ -378,4 +378,43 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 11,
+    name: 'console_logger_socket',
+    sql: `
+      -- Optional: the PalServerLogger websocket, for the game's real console stream.
+      -- The token is encrypted at rest.
+      ALTER TABLE console_settings ADD COLUMN logger_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE console_settings ADD COLUMN logger_host TEXT NOT NULL DEFAULT '127.0.0.1';
+      ALTER TABLE console_settings ADD COLUMN logger_port INTEGER NOT NULL DEFAULT 8765;
+      ALTER TABLE console_settings ADD COLUMN logger_tls INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE console_settings ADD COLUMN logger_token_encrypted TEXT;
+    `,
+  },
+  {
+    id: 12,
+    name: 'discord_bot',
+    sql: `
+      -- The optional Discord bot (one row). It receives slash commands as signed HTTPS
+      -- requests from Discord and posts events to channels. The bot token is encrypted at rest.
+      CREATE TABLE discord_bot (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        application_id TEXT,
+        public_key TEXT,
+        bot_token_encrypted TEXT,
+        guild_id TEXT,
+        public_info INTEGER NOT NULL DEFAULT 0,
+        events_channel_id TEXT,
+        log_channel_id TEXT,
+        log_min_level TEXT NOT NULL DEFAULT 'error',
+        notify_bans INTEGER NOT NULL DEFAULT 1,
+        notify_signals INTEGER NOT NULL DEFAULT 1,
+        notify_server INTEGER NOT NULL DEFAULT 1,
+        notify_joins INTEGER NOT NULL DEFAULT 0,
+        commands_registered_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
 ];
