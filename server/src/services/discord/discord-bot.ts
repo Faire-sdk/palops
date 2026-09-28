@@ -6,12 +6,14 @@ import type { AuditActor, AuditLog } from '../audit/audit-log.js';
 import { hasPermission, type Permission } from '../authentication/permissions.js';
 import type { User, UserService } from '../authentication/users.js';
 import type { ConsoleLevel, ConsoleLine, ConsoleService } from '../console/console-service.js';
+import type { PalDefenderService } from '../paldefender/paldefender-service.js';
 import { PalworldError, type PalworldService } from '../palworld/index.js';
 import type { ModerationService } from '../players/moderation.js';
 import type { KnownPlayer, PlayerDirectory } from '../players/player-directory.js';
 import type { SiteAccountService } from '../site/site-accounts.js';
 import type { WorldService } from '../world/world-service.js';
 import { DiscordApi, DiscordApiError } from './discord-api.js';
+import { compileChatPattern, DEFAULT_CHAT_PATTERN, fitForGame, parseChatLine, PatternError, plainDiscordText, RELAY_SOURCES, type DiscordMessage, type RelaySource } from './chat-relay.js';
 import { DiscordGateway, Intents, type GatewayStatus, type Presence } from './gateway.js';
 import { COMMANDS, EPHEMERAL, InteractionType, ResponseType, type CommandOption, type Interaction } from './interactions.js';
 
@@ -45,6 +47,16 @@ export interface DiscordBotSettings {
   syncNicknames: boolean;
   /** Bans on either side are carried to the other, for verified links only. */
   syncBans: boolean;
+  /** Chat between the game and one Discord channel. */
+  relayEnabled: boolean;
+  relayChannelId: string | null;
+  relayToDiscord: boolean;
+  relayToGame: boolean;
+  /** A regular expression with (?<player>…) and (?<message>…) that picks chat out of console lines. Null means the default. */
+  relayPattern: string | null;
+  relaySources: RelaySource[];
+  /** Shown in front of Discord messages in the game, e.g. [Discord]. */
+  relayPrefix: string;
   commandsRegisteredAt: string | null;
   updatedAt: string | null;
 }
@@ -74,6 +86,13 @@ export interface DiscordBotInput {
   roleModeratorId: string | null;
   syncNicknames: boolean;
   syncBans: boolean;
+  relayEnabled: boolean;
+  relayChannelId: string | null;
+  relayToDiscord: boolean;
+  relayToGame: boolean;
+  relayPattern: string | null;
+  relaySources: RelaySource[];
+  relayPrefix: string;
 }
 
 export interface BotCheck {
@@ -109,6 +128,13 @@ interface Row {
   role_moderator_id: string | null;
   sync_nicknames: number;
   sync_bans: number;
+  relay_enabled: number;
+  relay_channel_id: string | null;
+  relay_to_discord: number;
+  relay_to_game: number;
+  relay_pattern: string | null;
+  relay_sources: string;
+  relay_prefix: string;
   updated_at: string;
 }
 
@@ -125,6 +151,16 @@ const COMMAND_PERMISSION: Record<string, Permission> = {
 };
 /** Commands anyone in the server may use when "public info" is on. */
 const PUBLIC_COMMANDS = new Set(['status', 'players']);
+
+/** The parts of a Discord message the relay looks at. */
+interface RelayMessage extends DiscordMessage {
+  channel_id?: string;
+  guild_id?: string;
+  type?: number;
+  webhook_id?: string;
+  author?: { id: string; username?: string; global_name?: string | null; bot?: boolean };
+  member?: { nick?: string | null };
+}
 
 const SNOWFLAKE = /^\d{15,25}$/;
 const MAX_PER_WINDOW = 6;
@@ -245,6 +281,7 @@ export class DiscordBotService {
       world: WorldService;
       console: ConsoleService;
       siteAccounts: SiteAccountService;
+      paldefender: PalDefenderService;
     },
   ) {
     deps.audit.onRecord((actor, entry) => this.onAudit(actor, entry));
@@ -299,6 +336,13 @@ export class DiscordBotService {
       roleModeratorId: r?.role_moderator_id ?? null,
       syncNicknames: r?.sync_nicknames === 1,
       syncBans: r?.sync_bans === 1,
+      relayEnabled: r?.relay_enabled === 1,
+      relayChannelId: r?.relay_channel_id ?? null,
+      relayToDiscord: (r?.relay_to_discord ?? 1) === 1,
+      relayToGame: (r?.relay_to_game ?? 1) === 1,
+      relayPattern: r?.relay_pattern ?? null,
+      relaySources: (r?.relay_sources ?? 'game').split(',').filter((x): x is RelaySource => (RELAY_SOURCES as readonly string[]).includes(x)),
+      relayPrefix: r?.relay_prefix ?? 'Discord',
       commandsRegisteredAt: r?.commands_registered_at ?? null,
       updatedAt: r?.updated_at ?? null,
     };
@@ -306,9 +350,17 @@ export class DiscordBotService {
 
   save(input: DiscordBotInput): DiscordBotSettings {
     const existing = this.row();
-    const ids: Array<[string, string | null]> = [['Application ID', input.applicationId], ['Server ID', input.guildId], ['Events channel ID', input.eventsChannelId], ['Log channel ID', input.logChannelId], ['Status channel ID', input.statusChannelId], ['Verified role ID', input.verifiedRoleId], ['Owner role ID', input.roleOwnerId], ['Admin role ID', input.roleAdminId], ['Moderator role ID', input.roleModeratorId]];
+    const ids: Array<[string, string | null]> = [['Application ID', input.applicationId], ['Server ID', input.guildId], ['Events channel ID', input.eventsChannelId], ['Log channel ID', input.logChannelId], ['Status channel ID', input.statusChannelId], ['Verified role ID', input.verifiedRoleId], ['Owner role ID', input.roleOwnerId], ['Admin role ID', input.roleAdminId], ['Moderator role ID', input.roleModeratorId], ['Chat relay channel ID', input.relayChannelId]];
     for (const [label, value] of ids) if (value && !SNOWFLAKE.test(value)) throw badRequest(`${label} should be the long number from Discord (Developer Mode → Copy ID)`, 'invalid_id');
     if (input.publicKey && !/^[0-9a-f]{64}$/i.test(input.publicKey)) throw badRequest('The public key is 64 hexadecimal characters, from the Developer Portal’s General Information page', 'invalid_public_key');
+    if (input.relayPattern) {
+      try {
+        compileChatPattern(input.relayPattern);
+      } catch (err) {
+        throw badRequest(err instanceof PatternError ? err.message : 'Invalid chat pattern', 'invalid_pattern');
+      }
+    }
+    if (input.relayEnabled && !input.relayChannelId) throw badRequest('Enter the chat relay channel ID to switch the chat relay on', 'incomplete');
     if (input.enabled) {
       const missing = [
         !input.applicationId && 'Application ID',
@@ -322,15 +374,19 @@ export class DiscordBotService {
       .prepare(
         `INSERT INTO discord_bot (id, enabled, application_id, public_key, bot_token_encrypted, guild_id, public_info, events_channel_id, log_channel_id, log_min_level,
            notify_bans, notify_signals, notify_server, notify_joins, gateway_enabled, presence_enabled, status_channel_id,
-           join_on_login, verified_role_id, role_owner_id, role_admin_id, role_moderator_id, sync_nicknames, sync_bans)
+           join_on_login, verified_role_id, role_owner_id, role_admin_id, role_moderator_id, sync_nicknames, sync_bans,
+           relay_enabled, relay_channel_id, relay_to_discord, relay_to_game, relay_pattern, relay_sources, relay_prefix)
          VALUES (1, @enabled, @app, @key, @token, @guild, @pub, @events, @logs, @level, @bans, @signals, @server, @joins, @gateway, @presence, @statusChannel,
-           @joinLogin, @verifiedRole, @roleOwner, @roleAdmin, @roleMod, @nicks, @syncBans)
+           @joinLogin, @verifiedRole, @roleOwner, @roleAdmin, @roleMod, @nicks, @syncBans,
+           @relayOn, @relayChannel, @relayToDiscord, @relayToGame, @relayPattern, @relaySources, @relayPrefix)
          ON CONFLICT (id) DO UPDATE SET enabled = @enabled, application_id = @app, public_key = @key, bot_token_encrypted = COALESCE(@token, bot_token_encrypted),
            guild_id = @guild, public_info = @pub, events_channel_id = @events, log_channel_id = @logs, log_min_level = @level,
            notify_bans = @bans, notify_signals = @signals, notify_server = @server, notify_joins = @joins,
            gateway_enabled = @gateway, presence_enabled = @presence, status_channel_id = @statusChannel,
            join_on_login = @joinLogin, verified_role_id = @verifiedRole, role_owner_id = @roleOwner, role_admin_id = @roleAdmin, role_moderator_id = @roleMod,
            sync_nicknames = @nicks, sync_bans = @syncBans,
+           relay_enabled = @relayOn, relay_channel_id = @relayChannel, relay_to_discord = @relayToDiscord, relay_to_game = @relayToGame,
+           relay_pattern = @relayPattern, relay_sources = @relaySources, relay_prefix = @relayPrefix,
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
       )
       .run({
@@ -357,6 +413,13 @@ export class DiscordBotService {
         roleMod: input.roleModeratorId || null,
         nicks: input.syncNicknames ? 1 : 0,
         syncBans: input.syncBans ? 1 : 0,
+        relayOn: input.relayEnabled ? 1 : 0,
+        relayChannel: input.relayChannelId || null,
+        relayToDiscord: input.relayToDiscord ? 1 : 0,
+        relayToGame: input.relayToGame ? 1 : 0,
+        relayPattern: input.relayPattern?.trim() || null,
+        relaySources: input.relaySources.filter((x) => (RELAY_SOURCES as readonly string[]).includes(x)).join(',') || 'game',
+        relayPrefix: input.relayPrefix.trim().slice(0, 20) || 'Discord',
       });
     this.queueKey = '';
     this.lastState = undefined;
@@ -602,6 +665,99 @@ export class DiscordBotService {
     } catch (err) {
       this.notify('notify_bans', `⚠️ Couldn't ${added ? 'ban' : 'unban'} ${escapeMd(player.name)} in game after a Discord ${added ? 'ban' : 'unban'}: ${escapeMd(err instanceof Error ? err.message : 'unknown error')}`);
     }
+  }
+
+  // ---- Chat relay ----
+
+  private relayQueue: ChannelQueue | undefined;
+  private relayQueueKey = '';
+  private chatRegex: { source: string; re: RegExp } | undefined;
+  /** What the bot recently put into the game, so the game's own log of it isn't sent straight back to Discord. */
+  private sentToGame: Array<{ text: string; until: number }> = [];
+  private relayHits = new Map<string, number[]>();
+
+  private chatPattern(s: DiscordBotSettings): RegExp {
+    const source = s.relayPattern ?? DEFAULT_CHAT_PATTERN;
+    if (this.chatRegex?.source !== source) this.chatRegex = { source, re: compileChatPattern(source) };
+    return this.chatRegex.re;
+  }
+
+  /** Tries a pattern against a sample line, for the settings page's tester. */
+  testChatPattern(pattern: string | null, line: string): { matched: boolean; player: string | null; message: string | null; error: string | null } {
+    try {
+      const parsed = parseChatLine(compileChatPattern(pattern?.trim() || DEFAULT_CHAT_PATTERN), line);
+      return { matched: !!parsed, player: parsed?.player ?? null, message: parsed?.message ?? null, error: null };
+    } catch (err) {
+      return { matched: false, player: null, message: null, error: err instanceof Error ? err.message : 'Invalid pattern' };
+    }
+  }
+
+  private isOurEcho(player: string, message: string, s: DiscordBotSettings): boolean {
+    const now = Date.now();
+    this.sentToGame = this.sentToGame.filter((e) => e.until > now);
+    const marker = `[${s.relayPrefix}]`;
+    if (message.startsWith(marker) || player.startsWith(marker)) return true;
+    return this.sentToGame.some((e) => e.text.includes(message) || message.includes(e.text));
+  }
+
+  /** Game chat found in the console goes to the relay channel as "**Name**: message". */
+  private relayToDiscord(lines: ConsoleLine[]): void {
+    const r = this.row();
+    if (!r || r.enabled !== 1 || r.relay_enabled !== 1 || r.relay_to_discord !== 1 || !r.relay_channel_id) return;
+    const s = this.settings();
+    let re: RegExp;
+    try {
+      re = this.chatPattern(s);
+    } catch {
+      return;
+    }
+    const key = `${s.relayChannelId}|${s.updatedAt}`;
+    if (key !== this.relayQueueKey) {
+      this.relayQueue?.stop();
+      this.relayQueueKey = key;
+      const api = this.api();
+      this.relayQueue = api && s.relayChannelId ? new ChannelQueue((t) => api.postMessage(s.relayChannelId!, t)) : undefined;
+    }
+    for (const l of lines) {
+      if (!(s.relaySources as string[]).includes(l.source)) continue;
+      const chat = parseChatLine(re, l.message);
+      if (!chat || this.isOurEcho(chat.player, chat.message, s)) continue;
+      this.relayQueue?.push(`**${escapeMd(chat.player)}**: ${escapeMd(chat.message)}`);
+    }
+  }
+
+  /** A message in the relay channel goes into the game as "[Discord] Name: message". */
+  private async relayToGame(m: RelayMessage): Promise<void> {
+    const s = this.settings();
+    if (!this.active || !s.relayEnabled || !s.relayToGame || !s.relayChannelId) return;
+    if (m.channel_id !== s.relayChannelId || m.guild_id !== s.guildId) return;
+    // Only ordinary messages from people: not bots, webhooks, joins, pins and the like.
+    if (m.author?.bot || m.webhook_id || (m.type !== undefined && m.type !== 0 && m.type !== 19)) return;
+    const authorId = m.author?.id;
+    if (!authorId) return;
+    const linked = this.deps.siteAccounts.verifiedPlayerOf(authorId);
+    if (linked && this.deps.moderation.isBanned(linked.userId)) return;
+    if (this.relayRateLimited(authorId)) return;
+    const text = plainDiscordText(m);
+    if (!text) return;
+    const name = (m.member?.nick || m.author?.global_name || m.author?.username || 'Someone').replace(/\s+/g, ' ').slice(0, 32);
+    const line = fitForGame(`[${s.relayPrefix}] ${name}: ${text}`);
+    this.sentToGame.push({ text: fitForGame(text), until: Date.now() + 60_000 }, { text: line, until: Date.now() + 60_000 });
+    // PalDefender's chat broadcast reads as chat; without it, the server's own announcement does the job.
+    if (this.deps.paldefender.enabled()) {
+      const mirrored = await this.deps.paldefender.mirrorBroadcast(line);
+      if (mirrored?.ok) return;
+    }
+    await this.deps.palworld.announce(line);
+  }
+
+  private relayRateLimited(discordId: string): boolean {
+    const now = Date.now();
+    const hits = (this.relayHits.get(discordId) ?? []).filter((t) => now - t < 10_000);
+    hits.push(now);
+    this.relayHits.set(discordId, hits);
+    if (this.relayHits.size > 500) for (const [k, v] of this.relayHits) if (v.every((t) => now - t >= 10_000)) this.relayHits.delete(k);
+    return hits.length > 5;
   }
 
   // ---- Interactions ----
@@ -872,6 +1028,7 @@ export class DiscordBotService {
   }
 
   private forwardLogs(lines: ConsoleLine[]): void {
+    this.relayToDiscord(lines);
     const r = this.row();
     if (!r || r.enabled !== 1 || !r.log_channel_id) return;
     const rank: Record<ConsoleLevel, number> = { info: 0, warn: 1, error: 2 };
@@ -921,7 +1078,8 @@ export class DiscordBotService {
 
   /** The intents the bot needs for what's switched on. Message content is privileged, so it's only asked for when something reads messages. */
   protected intents(): number {
-    return Intents.Guilds | Intents.GuildModeration | Intents.GuildMessages;
+    const s = this.settings();
+    return Intents.Guilds | Intents.GuildModeration | Intents.GuildMessages | (s.relayEnabled && s.relayToGame ? Intents.MessageContent : 0);
   }
 
   /** Starts, restarts or stops the gateway to match the settings. Safe to call at any time. */
@@ -943,6 +1101,11 @@ export class DiscordBotService {
   private onGatewayEvent(event: string, data: unknown): void {
     if (event === 'GUILD_BAN_ADD' || event === 'GUILD_BAN_REMOVE') {
       const task = this.onDiscordBan(data as { guild_id: string; user: { id: string } }, event === 'GUILD_BAN_ADD').finally(() => this.pending.delete(task));
+      this.pending.add(task);
+      return;
+    }
+    if (event === 'MESSAGE_CREATE') {
+      const task = this.relayToGame(data as DiscordMessage & RelayMessage).catch(() => undefined).finally(() => this.pending.delete(task));
       this.pending.add(task);
       return;
     }

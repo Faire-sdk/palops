@@ -220,6 +220,11 @@ export class PalDefenderService {
     return this.mirror((c) => c.banIp(ip, { reason, userId }));
   }
 
+  /** A chat message from the server to everyone, through PalDefender. */
+  mirrorBroadcast(message: string): Promise<Mirror | null> {
+    return this.mirror((c) => c.broadcast(message));
+  }
+
   mirrorUnbanAddress(ip: string, reason = ''): Promise<Mirror | null> {
     return this.mirror((c) => c.unbanIp(ip, reason), true);
   }

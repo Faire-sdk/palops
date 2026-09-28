@@ -57,6 +57,13 @@ const settingsSchema = z.object({
   roleModeratorId: id,
   syncNicknames: z.boolean().default(false),
   syncBans: z.boolean().default(false),
+  relayEnabled: z.boolean().default(false),
+  relayChannelId: id,
+  relayToDiscord: z.boolean().default(true),
+  relayToGame: z.boolean().default(true),
+  relayPattern: z.string().trim().max(300).nullable().default(null),
+  relaySources: z.array(z.enum(['game', 'paldefender'])).default(['game']),
+  relayPrefix: z.string().trim().max(20).default('Discord'),
 });
 
 /** Owner-only setup for the optional Discord bot. */
@@ -99,6 +106,12 @@ export default async function discordBotRoutes(app: FastifyInstance, { services 
     const result = await discordBot.syncAll();
     services.audit.record(actorOf(request), { category: 'server', action: 'discord_roles_synced', details: { ...result } });
     return result;
+  });
+
+  /** Tries a chat pattern on a sample line from the console, so it can be checked before it's switched on. */
+  app.post('/relay/test', owner, async (request) => {
+    const { pattern, line } = parse(z.object({ pattern: z.string().trim().max(300).nullable().default(null), line: z.string().max(600) }), request.body);
+    return discordBot.testChatPattern(pattern, line);
   });
 
   app.post('/register-commands', owner, async (request) => {

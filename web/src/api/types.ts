@@ -475,6 +475,13 @@ export interface DiscordBotSettings {
   roleModeratorId: string | null;
   syncNicknames: boolean;
   syncBans: boolean;
+  relayEnabled: boolean;
+  relayChannelId: string | null;
+  relayToDiscord: boolean;
+  relayToGame: boolean;
+  relayPattern: string | null;
+  relaySources: Array<'game' | 'paldefender'>;
+  relayPrefix: string;
   commandsRegisteredAt: string | null;
   updatedAt: string | null;
 }

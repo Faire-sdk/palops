@@ -462,4 +462,19 @@ export const migrations: Migration[] = [
       ALTER TABLE discord_bot ADD COLUMN sync_bans INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    id: 15,
+    name: 'discord_chat_relay',
+    sql: `
+      -- Chat between the game and a Discord channel. Game chat is read from console lines
+      -- with a pattern (Palworld's REST API has no chat), so the pattern is configurable.
+      ALTER TABLE discord_bot ADD COLUMN relay_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE discord_bot ADD COLUMN relay_channel_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN relay_to_discord INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE discord_bot ADD COLUMN relay_to_game INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE discord_bot ADD COLUMN relay_pattern TEXT;
+      ALTER TABLE discord_bot ADD COLUMN relay_sources TEXT NOT NULL DEFAULT 'game';
+      ALTER TABLE discord_bot ADD COLUMN relay_prefix TEXT NOT NULL DEFAULT 'Discord';
+    `,
+  },
 ];

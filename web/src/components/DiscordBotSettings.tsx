@@ -46,6 +46,13 @@ interface Form {
   roleModeratorId: string;
   syncNicknames: boolean;
   syncBans: boolean;
+  relayEnabled: boolean;
+  relayChannelId: string;
+  relayToDiscord: boolean;
+  relayToGame: boolean;
+  relayPattern: string;
+  relaySources: Array<'game' | 'paldefender'>;
+  relayPrefix: string;
 }
 
 const blank = (v: string) => v.trim() || null;
@@ -56,6 +63,8 @@ export function DiscordBotSettingsTab() {
   const { data, error, loading, reload } = useApi<{ settings: DiscordBotSettings; gateway: GatewayStatus; interactionsUrl: string; commands: Array<{ name: string; description: string }> }>('/discord-bot/settings', { pollMs: 10000 });
   const [form, setForm] = useState<Form | null>(null);
   const [checks, setChecks] = useState<BotCheck[]>();
+  const [sample, setSample] = useState('');
+  const [patternResult, setPatternResult] = useState<{ matched: boolean; player: string | null; message: string | null; error: string | null }>();
   const [busy, setBusy] = useState<'save' | 'test' | 'register' | 'send' | 'roles' | null>(null);
 
   useEffect(() => {
@@ -85,6 +94,13 @@ export function DiscordBotSettingsTab() {
         roleModeratorId: s.roleModeratorId ?? '',
         syncNicknames: s.syncNicknames,
         syncBans: s.syncBans,
+        relayEnabled: s.relayEnabled,
+        relayChannelId: s.relayChannelId ?? '',
+        relayToDiscord: s.relayToDiscord,
+        relayToGame: s.relayToGame,
+        relayPattern: s.relayPattern ?? '',
+        relaySources: s.relaySources,
+        relayPrefix: s.relayPrefix,
       });
     }
   }, [data, form]);
@@ -124,6 +140,8 @@ export function DiscordBotSettingsTab() {
     roleOwnerId: blank(form.roleOwnerId),
     roleAdminId: blank(form.roleAdminId),
     roleModeratorId: blank(form.roleModeratorId),
+    relayChannelId: blank(form.relayChannelId),
+    relayPattern: blank(form.relayPattern),
   });
 
   const run = async (kind: 'save' | 'test' | 'register' | 'send' | 'roles') => {
@@ -239,6 +257,66 @@ export function DiscordBotSettingsTab() {
             {flag('joinOnLogin', 'Add players to the Discord server when they sign in on the website', 'They’re asked to allow it when they sign in. The bot needs Create Invite. Nobody is added without agreeing.')}
             {flag('syncNicknames', 'Set members’ nicknames to their verified character name', 'The bot can’t change the server owner’s nickname')}
             {flag('syncBans', 'Keep bans in step', 'Banning a player in game also bans their verified Discord account, and banning or unbanning someone on Discord does the same to their verified character. Panel users are never banned on Discord this way.')}
+
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, pt: 1 }}>
+              Chat relay
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Shows game chat in a Discord channel and Discord messages from that channel in the game. Palworld’s API can’t read chat, so game chat is picked out of the Console’s lines with a
+              pattern: set up the Console’s log files (or PalServerLogger) first. Reading Discord messages needs <strong>Message Content Intent</strong> switched on in the Developer Portal (Bot page).
+            </Typography>
+            {flag('relayEnabled', 'Relay chat between the game and Discord')}
+            <TextField label="Chat channel ID" value={form.relayChannelId} onChange={text('relayChannelId')} helperText="The channel for the relay. The bot needs View Channel, Send Messages and Read Message History." />
+            <Stack>
+              {flag('relayToDiscord', 'Game chat goes to Discord')}
+              {flag('relayToGame', 'Discord messages go to the game', 'Shown to everyone in the game as a chat message (through PalDefender when it’s on) or a server announcement')}
+            </Stack>
+            <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+              <Typography variant="body2">Read game chat from:</Typography>
+              {([['game', 'Game log'], ['paldefender', 'PalDefender log']] as const).map(([id, label]) => (
+                <FormControlLabel
+                  key={id}
+                  control={
+                    <Checkbox
+                      checked={form.relaySources.includes(id)}
+                      onChange={(e) => setForm({ ...form, relaySources: e.target.checked ? [...new Set([...form.relaySources, id])] : form.relaySources.filter((x) => x !== id) })}
+                    />
+                  }
+                  label={label}
+                />
+              ))}
+            </Stack>
+            <TextField label="Prefix in the game" value={form.relayPrefix} onChange={text('relayPrefix')} helperText="Shown as [Discord] Name: message. Lines starting with it are never sent back to Discord." sx={{ maxWidth: 280 }} slotProps={{ htmlInput: { maxLength: 20 } }} />
+            <TextField
+              label="Chat line pattern"
+              value={form.relayPattern}
+              onChange={text('relayPattern')}
+              placeholder="Leave empty for the default"
+              helperText="A regular expression with (?<player>…) and (?<message>…). The default assumes lines like [2026-09-28 12:00:00] [CHAT] <Name> message, which is a guess: check it against a real line below."
+              slotProps={{ htmlInput: { style: { fontFamily: 'monospace' }, maxLength: 300 } }}
+            />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'flex-start' } }}>
+              <TextField label="Paste a real chat line from the Console to test" value={sample} onChange={(e) => setSample(e.target.value)} fullWidth />
+              <Button
+                variant="outlined"
+                sx={{ height: 40, flexShrink: 0 }}
+                disabled={!sample.trim()}
+                onClick={async () => {
+                  try {
+                    setPatternResult(await api.post('/discord-bot/relay/test', { pattern: blank(form.relayPattern), line: sample }));
+                  } catch (err) {
+                    notify(errorMessage(err), 'error');
+                  }
+                }}
+              >
+                Test
+              </Button>
+            </Stack>
+            {patternResult && (
+              <Alert severity={patternResult.error ? 'error' : patternResult.matched ? 'success' : 'warning'}>
+                {patternResult.error ?? (patternResult.matched ? `Player “${patternResult.player}” said “${patternResult.message}”` : 'That line isn’t recognised as chat with this pattern.')}
+              </Alert>
+            )}
 
             <Typography variant="subtitle1" sx={{ fontWeight: 600, pt: 1 }}>
               Who can use commands
