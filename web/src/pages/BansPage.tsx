@@ -31,8 +31,10 @@ export function BansPage() {
         description="Players and addresses banned from the panel, and PalDefender’s own list when it’s connected."
         actions={<ExportButton path="/players/bans/export.csv" />}
       />
-      <PalBanBans onOpen={setProfile} />
-      <Bans onOpen={setProfile} onAction={setTarget} />
+      <Stack spacing={2}>
+        <PalBanBans onOpen={setProfile} />
+        <Bans onOpen={setProfile} onAction={setTarget} />
+      </Stack>
       <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} onOpen={setProfile} />
       <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} ip={target?.ip} onClose={() => setTarget(null)} />
     </>

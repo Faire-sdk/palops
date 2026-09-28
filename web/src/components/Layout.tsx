@@ -79,7 +79,7 @@ export function Layout() {
             end={n.to === '/'}
             onClick={() => setMobileOpen(false)}
             sx={{
-              borderRadius: 999,
+              borderRadius: '8px',
               mb: 0.5,
               '&.active': { bgcolor: 'action.selected', color: 'primary.main', '& .MuiListItemIcon-root': { color: 'primary.main' } },
             }}

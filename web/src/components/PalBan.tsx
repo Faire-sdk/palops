@@ -209,7 +209,7 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
                 can('players.ban') &&
                 b.active &&
                 !b.inGame && (
-                  <Button size="small" variant="outlined" color="error" loading={busy === b.id} onClick={() => act(b.id, () => api.post(`/palban/bans/${encodeURIComponent(b.id)}/apply`), `${b.playerName ?? b.gameId} was banned in the game`)}>
+                  <Button size="small" variant="outlined" color="error" sx={{ whiteSpace: 'nowrap' }} loading={busy === b.id} onClick={() => act(b.id, () => api.post(`/palban/bans/${encodeURIComponent(b.id)}/apply`), `${b.playerName ?? b.gameId} was banned in the game`)}>
                     Ban in game
                   </Button>
                 ),
