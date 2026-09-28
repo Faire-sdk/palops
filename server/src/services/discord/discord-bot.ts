@@ -9,6 +9,7 @@ import type { ConsoleLevel, ConsoleLine, ConsoleService } from '../console/conso
 import { PalworldError, type PalworldService } from '../palworld/index.js';
 import type { ModerationService } from '../players/moderation.js';
 import type { KnownPlayer, PlayerDirectory } from '../players/player-directory.js';
+import type { SiteAccountService } from '../site/site-accounts.js';
 import type { WorldService } from '../world/world-service.js';
 import { DiscordApi, DiscordApiError } from './discord-api.js';
 import { DiscordGateway, Intents, type GatewayStatus, type Presence } from './gateway.js';
@@ -34,6 +35,16 @@ export interface DiscordBotSettings {
   /** Show the player count, or that the server is offline, as the bot's status. */
   presenceEnabled: boolean;
   statusChannelId: string | null;
+  /** Add players to the Discord server when they sign in to the website. */
+  joinOnLogin: boolean;
+  /** Given to players whose character link is verified. */
+  verifiedRoleId: string | null;
+  roleOwnerId: string | null;
+  roleAdminId: string | null;
+  roleModeratorId: string | null;
+  syncNicknames: boolean;
+  /** Bans on either side are carried to the other, for verified links only. */
+  syncBans: boolean;
   commandsRegisteredAt: string | null;
   updatedAt: string | null;
 }
@@ -56,6 +67,13 @@ export interface DiscordBotInput {
   gatewayEnabled: boolean;
   presenceEnabled: boolean;
   statusChannelId: string | null;
+  joinOnLogin: boolean;
+  verifiedRoleId: string | null;
+  roleOwnerId: string | null;
+  roleAdminId: string | null;
+  roleModeratorId: string | null;
+  syncNicknames: boolean;
+  syncBans: boolean;
 }
 
 export interface BotCheck {
@@ -84,6 +102,13 @@ interface Row {
   status_channel_id: string | null;
   status_channel_name: string | null;
   status_channel_changed_at: string | null;
+  join_on_login: number;
+  verified_role_id: string | null;
+  role_owner_id: string | null;
+  role_admin_id: string | null;
+  role_moderator_id: string | null;
+  sync_nicknames: number;
+  sync_bans: number;
   updated_at: string;
 }
 
@@ -192,6 +217,13 @@ export class DiscordBotService {
   private serverTimer: NodeJS.Timeout | undefined;
   private lastState: 'online' | 'offline' | undefined;
   private offlineStreak = 0;
+  private syncing = new Set<string>();
+  private syncQueue = new Set<string>();
+  private syncRunning: Promise<void> | undefined;
+  /** Discord events the bot caused itself and is waiting to see come back, so they aren't acted on twice. */
+  private expected = new Map<string, number>();
+  /** Discord IDs the bot is acting on right now, so the matching game-side change isn't carried back. */
+  private inFlight = new Set<string>();
   private gateway: DiscordGateway | undefined;
   private gatewayKey = '';
   private gatewayUrl: string | undefined;
@@ -212,6 +244,7 @@ export class DiscordBotService {
       audit: AuditLog;
       world: WorldService;
       console: ConsoleService;
+      siteAccounts: SiteAccountService;
     },
   ) {
     deps.audit.onRecord((actor, entry) => this.onAudit(actor, entry));
@@ -221,6 +254,10 @@ export class DiscordBotService {
       for (const n of left) this.notify('notify_joins', `${escapeMd(n)} left`);
     });
     deps.console.subscribe((lines) => this.forwardLogs(lines));
+    deps.siteAccounts.onLinkChange((e) => this.queueSync(e.account.discord.id));
+    deps.users.onDiscordChange((ids) => ids.forEach((id) => this.queueSync(id)));
+    deps.moderation.onBan((e) => void this.onGameBan(e));
+    deps.moderation.onUnban((e) => void this.onGameUnban(e));
   }
 
   /** Test hook: point at a fake Discord. */
@@ -255,6 +292,13 @@ export class DiscordBotService {
       gatewayEnabled: (r?.gateway_enabled ?? 1) === 1,
       presenceEnabled: (r?.presence_enabled ?? 1) === 1,
       statusChannelId: r?.status_channel_id ?? null,
+      joinOnLogin: r?.join_on_login === 1,
+      verifiedRoleId: r?.verified_role_id ?? null,
+      roleOwnerId: r?.role_owner_id ?? null,
+      roleAdminId: r?.role_admin_id ?? null,
+      roleModeratorId: r?.role_moderator_id ?? null,
+      syncNicknames: r?.sync_nicknames === 1,
+      syncBans: r?.sync_bans === 1,
       commandsRegisteredAt: r?.commands_registered_at ?? null,
       updatedAt: r?.updated_at ?? null,
     };
@@ -262,7 +306,7 @@ export class DiscordBotService {
 
   save(input: DiscordBotInput): DiscordBotSettings {
     const existing = this.row();
-    const ids: Array<[string, string | null]> = [['Application ID', input.applicationId], ['Server ID', input.guildId], ['Events channel ID', input.eventsChannelId], ['Log channel ID', input.logChannelId], ['Status channel ID', input.statusChannelId]];
+    const ids: Array<[string, string | null]> = [['Application ID', input.applicationId], ['Server ID', input.guildId], ['Events channel ID', input.eventsChannelId], ['Log channel ID', input.logChannelId], ['Status channel ID', input.statusChannelId], ['Verified role ID', input.verifiedRoleId], ['Owner role ID', input.roleOwnerId], ['Admin role ID', input.roleAdminId], ['Moderator role ID', input.roleModeratorId]];
     for (const [label, value] of ids) if (value && !SNOWFLAKE.test(value)) throw badRequest(`${label} should be the long number from Discord (Developer Mode → Copy ID)`, 'invalid_id');
     if (input.publicKey && !/^[0-9a-f]{64}$/i.test(input.publicKey)) throw badRequest('The public key is 64 hexadecimal characters, from the Developer Portal’s General Information page', 'invalid_public_key');
     if (input.enabled) {
@@ -277,12 +321,16 @@ export class DiscordBotService {
     this.db
       .prepare(
         `INSERT INTO discord_bot (id, enabled, application_id, public_key, bot_token_encrypted, guild_id, public_info, events_channel_id, log_channel_id, log_min_level,
-           notify_bans, notify_signals, notify_server, notify_joins, gateway_enabled, presence_enabled, status_channel_id)
-         VALUES (1, @enabled, @app, @key, @token, @guild, @pub, @events, @logs, @level, @bans, @signals, @server, @joins, @gateway, @presence, @statusChannel)
+           notify_bans, notify_signals, notify_server, notify_joins, gateway_enabled, presence_enabled, status_channel_id,
+           join_on_login, verified_role_id, role_owner_id, role_admin_id, role_moderator_id, sync_nicknames, sync_bans)
+         VALUES (1, @enabled, @app, @key, @token, @guild, @pub, @events, @logs, @level, @bans, @signals, @server, @joins, @gateway, @presence, @statusChannel,
+           @joinLogin, @verifiedRole, @roleOwner, @roleAdmin, @roleMod, @nicks, @syncBans)
          ON CONFLICT (id) DO UPDATE SET enabled = @enabled, application_id = @app, public_key = @key, bot_token_encrypted = COALESCE(@token, bot_token_encrypted),
            guild_id = @guild, public_info = @pub, events_channel_id = @events, log_channel_id = @logs, log_min_level = @level,
            notify_bans = @bans, notify_signals = @signals, notify_server = @server, notify_joins = @joins,
            gateway_enabled = @gateway, presence_enabled = @presence, status_channel_id = @statusChannel,
+           join_on_login = @joinLogin, verified_role_id = @verifiedRole, role_owner_id = @roleOwner, role_admin_id = @roleAdmin, role_moderator_id = @roleMod,
+           sync_nicknames = @nicks, sync_bans = @syncBans,
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
       )
       .run({
@@ -302,6 +350,13 @@ export class DiscordBotService {
         gateway: input.gatewayEnabled ? 1 : 0,
         presence: input.presenceEnabled ? 1 : 0,
         statusChannel: input.statusChannelId || null,
+        joinLogin: input.joinOnLogin ? 1 : 0,
+        verifiedRole: input.verifiedRoleId || null,
+        roleOwner: input.roleOwnerId || null,
+        roleAdmin: input.roleAdminId || null,
+        roleMod: input.roleModeratorId || null,
+        nicks: input.syncNicknames ? 1 : 0,
+        syncBans: input.syncBans ? 1 : 0,
       });
     this.queueKey = '';
     this.lastState = undefined;
@@ -362,6 +417,191 @@ export class DiscordBotService {
     const api = this.api();
     if (!api || !s.eventsChannelId) throw badRequest('Save an events channel first', 'incomplete');
     await api.postMessage(s.eventsChannelId, 'PalOps is connected to this channel.');
+  }
+
+  // ---- Roles, nicknames and joining the server ----
+
+  /** Whether players are added to the Discord server when they sign in on the website. */
+  get joinOnLoginActive(): boolean {
+    return this.active && this.settings().joinOnLogin;
+  }
+
+  private managedRoles(s: DiscordBotSettings): string[] {
+    return [s.verifiedRoleId, s.roleOwnerId, s.roleAdminId, s.roleModeratorId].filter((r): r is string => !!r);
+  }
+
+  /** The roles and nickname a Discord user should have: from their verified link, and from their panel role. */
+  private desired(discordId: string, s: DiscordBotSettings): { roles: string[]; nick: string | null } {
+    const roles: string[] = [];
+    const player = this.deps.siteAccounts.verifiedPlayerOf(discordId);
+    if (player && s.verifiedRoleId) roles.push(s.verifiedRoleId);
+    const user = this.deps.users.findByDiscordId(discordId);
+    if (user && !user.disabled) {
+      const staff = ({ owner: s.roleOwnerId, admin: s.roleAdminId, moderator: s.roleModeratorId } as Record<string, string | null>)[user.role];
+      if (staff) roles.push(staff);
+    }
+    return { roles, nick: s.syncNicknames && player ? player.name.slice(0, 32) : null };
+  }
+
+  /** Adds someone to the server with the access token from their sign-in. It's used once and never kept. */
+  async addToGuild(discordId: string, accessToken: string): Promise<void> {
+    const s = this.settings();
+    const api = this.api();
+    if (!api || !s.guildId) return;
+    const want = this.desired(discordId, s);
+    await api.addMember(s.guildId, discordId, { access_token: accessToken, ...(want.nick ? { nick: want.nick } : {}), ...(want.roles.length ? { roles: want.roles } : {}) });
+    // Someone already in the server isn't changed by the call above, so make sure their roles are right.
+    this.queueSync(discordId);
+  }
+
+  /** Brings one member's managed roles (and nickname) in line with their link and panel role. Other roles are left alone. */
+  async syncMember(discordId: string): Promise<'synced' | 'not_in_server'> {
+    const s = this.settings();
+    const api = this.api();
+    if (!api || !s.guildId) throw badRequest('Save the bot token and server ID first', 'incomplete');
+    const member = await api.member(s.guildId, discordId);
+    if (!member) return 'not_in_server';
+    const want = this.desired(discordId, s);
+    for (const role of this.managedRoles(s)) {
+      const has = member.roles.includes(role);
+      const should = want.roles.includes(role);
+      if (should && !has) await api.addRole(s.guildId, discordId, role, 'PalOps: role sync');
+      if (!should && has) await api.removeRole(s.guildId, discordId, role, 'PalOps: role sync');
+    }
+    if (want.nick && member.nick !== want.nick) await api.setNickname(s.guildId, discordId, want.nick, 'PalOps: character name');
+    return 'synced';
+  }
+
+  /** Syncs everyone who has a link or a panel role. Slow on purpose, to stay inside Discord's rate limits. */
+  async syncAll(): Promise<{ checked: number; synced: number; notInServer: number; failed: number }> {
+    if (!this.active) throw badRequest('Switch the bot on first', 'incomplete');
+    const ids = new Set<string>([...this.deps.siteAccounts.all().map((a) => a.discord.id), ...this.deps.users.list().flatMap((u) => (u.discord ? [u.discord.id] : []))]);
+    const result = { checked: ids.size, synced: 0, notInServer: 0, failed: 0 };
+    for (const id of ids) {
+      try {
+        if ((await this.syncMember(id)) === 'synced') result.synced++;
+        else result.notInServer++;
+      } catch {
+        result.failed++;
+      }
+      await this.pause();
+    }
+    return result;
+  }
+
+  private pause(): Promise<void> {
+    return new Promise((r) => setTimeout(r, this.config.env === 'test' ? 0 : 250));
+  }
+
+  /** Syncs a member soon, one at a time, so a burst of changes doesn't hammer Discord. */
+  private queueSync(discordId: string): void {
+    if (!this.active) return;
+    this.syncQueue.add(discordId);
+    if (this.syncRunning) return;
+    const run = (async () => {
+      await Promise.resolve();
+      while (this.syncQueue.size) {
+        const id = this.syncQueue.values().next().value as string;
+        this.syncQueue.delete(id);
+        try {
+          await this.syncMember(id);
+        } catch {
+          // Not in the server, or the bot lacks Manage Roles; the settings page's checks explain it.
+        }
+        await this.pause();
+      }
+    })().finally(() => {
+      this.syncRunning = undefined;
+      this.pending.delete(run);
+    });
+    this.syncRunning = run;
+    this.pending.add(run);
+  }
+
+  // ---- Keeping bans in step (verified links only) ----
+
+  private get syncBansActive(): boolean {
+    return this.active && this.settings().syncBans;
+  }
+
+  /** The bot is about to ban or unban this user on Discord; Discord will send an event back, which should be ignored once. */
+  private expect(discordId: string, kind: 'add' | 'remove'): void {
+    this.expected.set(`${discordId}:${kind}`, Date.now() + 30_000);
+  }
+
+  private consumeExpected(discordId: string, kind: 'add' | 'remove'): boolean {
+    const now = Date.now();
+    for (const [key, until] of this.expected) if (until <= now) this.expected.delete(key);
+    return this.expected.delete(`${discordId}:${kind}`);
+  }
+
+  /** Runs an action while the game-side listeners are told to leave this Discord user alone. */
+  private async acting<T>(discordId: string, fn: () => Promise<T>): Promise<T> {
+    this.inFlight.add(discordId);
+    try {
+      return await fn();
+    } finally {
+      this.inFlight.delete(discordId);
+    }
+  }
+
+  /** A player was banned in game (by staff, the bot or address enforcement): ban their verified Discord account too. */
+  private async onGameBan(e: { userId: string; name: string | null; reason: string }): Promise<void> {
+    if (!this.syncBansActive) return;
+    const account = this.deps.siteAccounts.byPlayerUserId(e.userId, true);
+    const s = this.settings();
+    const api = this.api();
+    if (!account || !api || !s.guildId) return;
+    const id = account.discord.id;
+    if (this.inFlight.has(id)) return;
+    const who = escapeMd(account.discord.username ?? id);
+    if (this.deps.users.findByDiscordId(id)) {
+      this.notify('notify_bans', `ℹ️ ${who} is a panel user, so they were not banned from Discord along with ${escapeMd(e.name ?? e.userId)}.`);
+      return;
+    }
+    this.expect(id, 'add');
+    try {
+      await api.banMember(s.guildId, id, `Banned in game${e.reason ? `: ${e.reason}` : ''}`.slice(0, 200));
+      this.notify('notify_bans', `🔨 Also banned ${who} from Discord (linked to ${escapeMd(e.name ?? e.userId)}).`);
+    } catch (err) {
+      this.notify('notify_bans', `⚠️ Couldn't ban ${who} from Discord: ${escapeMd(err instanceof DiscordApiError ? err.message : 'unknown error')}`);
+    }
+  }
+
+  private async onGameUnban(e: { userId: string; name: string | null }): Promise<void> {
+    if (!this.syncBansActive) return;
+    const account = this.deps.siteAccounts.byPlayerUserId(e.userId, true);
+    const s = this.settings();
+    const api = this.api();
+    if (!account || !api || !s.guildId) return;
+    const id = account.discord.id;
+    if (this.inFlight.has(id)) return;
+    this.expect(id, 'remove');
+    try {
+      await api.unbanMember(s.guildId, id, 'Unbanned in game');
+      this.notify('notify_bans', `♻️ Also unbanned ${escapeMd(account.discord.username ?? id)} on Discord.`);
+    } catch {
+      // Not banned there, or no permission.
+    }
+  }
+
+  /** Someone was banned or unbanned on Discord directly: do the same to their verified character. */
+  private async onDiscordBan(d: { guild_id: string; user: { id: string } }, added: boolean): Promise<void> {
+    const s = this.settings();
+    if (!this.syncBansActive || d.guild_id !== s.guildId) return;
+    const id = d.user?.id;
+    if (!id || this.consumeExpected(id, added ? 'add' : 'remove')) return;
+    const player = this.deps.siteAccounts.verifiedPlayerOf(id);
+    if (!player) return;
+    const actor: AuditActor = { userId: null, username: 'Discord ban sync' };
+    try {
+      await this.acting(id, async () => {
+        if (added && !this.deps.moderation.isBanned(player.userId)) await this.deps.moderation.ban(actor, player.userId, 'Banned from the Discord server');
+        else if (!added && this.deps.moderation.isBanned(player.userId)) await this.deps.moderation.unban(actor, player.userId, 'Unbanned from the Discord server');
+      });
+    } catch (err) {
+      this.notify('notify_bans', `⚠️ Couldn't ${added ? 'ban' : 'unban'} ${escapeMd(player.name)} in game after a Discord ${added ? 'ban' : 'unban'}: ${escapeMd(err instanceof Error ? err.message : 'unknown error')}`);
+    }
   }
 
   // ---- Interactions ----
@@ -441,21 +681,44 @@ export class DiscordBotService {
       case 'player':
         return this.lookup(this.resolve(text('player')));
       case 'kick': {
-        const target = this.resolve(text('player'));
-        await this.deps.moderation.kick(actor, target.userId, text('reason'));
-        return `Kicked **${escapeMd(target.name)}**.`;
+        const { game, member } = this.targets(i, options, text('player'), false);
+        if (!game) throw new CommandError(`${escapeMd(member?.name ?? 'That member')} has no verified character linked, so I don’t know who to kick in game.`);
+        await this.deps.moderation.kick(actor, game.userId, text('reason'));
+        return `Kicked **${escapeMd(game.name)}**.`;
       }
       case 'ban': {
-        const target = this.resolve(text('player'), true);
+        const { game, member } = this.targets(i, options, text('player'), true);
         const banIp = options.get('ban_ip') === true;
         if (banIp && !hasPermission(user!.role, 'world.view')) throw new CommandError('Banning an address needs a role that can see player addresses.');
-        const result = await this.deps.moderation.ban(actor, target.userId, text('reason'), { banIp });
-        return [`Banned **${escapeMd(target.name)}**.`, result.ipBan ? `Also banned the address ${result.ipBan.ip}.` : '', result.ipSkipped ?? ''].filter(Boolean).join(' ');
+        const lines: string[] = [];
+        if (member) {
+          this.guardMemberAction(user!, member.id);
+          await this.banOnDiscord(member.id, text('reason'));
+          lines.push(`Banned **${escapeMd(member.name)}** from Discord.`);
+        }
+        if (game) {
+          const result = await this.acting(member?.id ?? '', () => this.deps.moderation.ban(actor, game.userId, text('reason'), { banIp }));
+          lines.push(`Banned **${escapeMd(game.name)}** in game.`);
+          if (result.ipBan) lines.push(`Also banned the address ${result.ipBan.ip}.`);
+          if (result.ipSkipped) lines.push(result.ipSkipped);
+          if (!member && this.syncBansActive && this.deps.siteAccounts.byPlayerUserId(game.userId, true)) lines.push('Their linked Discord account is being banned too.');
+        } else if (member) {
+          lines.push('They have no verified character linked, so nothing was banned in game.');
+        }
+        return lines.join(' ');
       }
       case 'unban': {
-        const target = this.resolve(text('player'), true);
-        await this.deps.moderation.unban(actor, target.userId, text('reason'));
-        return `Unbanned **${escapeMd(target.name)}**.`;
+        const { game, member } = this.targets(i, options, text('player'), true);
+        const lines: string[] = [];
+        if (member) {
+          await this.unbanOnDiscord(member.id, text('reason'));
+          lines.push(`Unbanned **${escapeMd(member.name)}** on Discord.`);
+        }
+        if (game) {
+          await this.acting(member?.id ?? '', () => this.deps.moderation.unban(actor, game.userId, text('reason')));
+          lines.push(`Unbanned **${escapeMd(game.name)}** in game.`);
+        }
+        return lines.join(' ');
       }
       case 'announce': {
         const message = text('message');
@@ -481,6 +744,50 @@ export class DiscordBotService {
     if (found.length > 1) throw new CommandError(`More than one player matches “${escapeMd(query)}”. Pick from the list, or use their platform ID.`);
     if (allowUnknownId && /^[A-Za-z0-9_.:-]{1,80}$/.test(query) && /_/.test(query)) return { userId: query, name: query };
     throw new CommandError(`I haven't seen a player called “${escapeMd(query)}”.`);
+  }
+
+  /** Who a moderation command is about: a player, a Discord member, or both. A member's character comes from their verified link only. */
+  private targets(
+    i: Interaction,
+    options: Map<string, string | number | boolean | undefined>,
+    typedPlayer: string,
+    allowUnknownId: boolean,
+  ): { game?: { userId: string; name: string }; member?: { id: string; name: string } } {
+    const memberId = typeof options.get('member') === 'string' ? String(options.get('member')) : '';
+    const resolvedUser = memberId ? i.data?.resolved?.users?.[memberId] : undefined;
+    const member = memberId ? { id: memberId, name: resolvedUser?.global_name || resolvedUser?.username || memberId } : undefined;
+    let game = typedPlayer ? this.resolve(typedPlayer, allowUnknownId) : undefined;
+    if (member && !game) {
+      const linked = this.deps.siteAccounts.verifiedPlayerOf(member.id);
+      if (linked) game = { userId: linked.userId, name: linked.name };
+    }
+    if (!game && !member) throw new CommandError('Say which player, or pick a Discord member.');
+    return { game, member };
+  }
+
+  /** Nobody can be Discord-banned through the bot by someone of equal or lower panel rank, and nobody bans themselves or the bot. */
+  private guardMemberAction(caller: User, targetDiscordId: string): void {
+    if (targetDiscordId === caller.discord?.id) throw new CommandError('You can’t do that to yourself.');
+    if (targetDiscordId === this.gatewayStatus().botUserId) throw new CommandError('I can’t do that to myself.');
+    const rank: Record<string, number> = { owner: 3, admin: 2, moderator: 1, viewer: 0 };
+    const target = this.deps.users.findByDiscordId(targetDiscordId);
+    if (target && rank[target.role]! >= rank[caller.role]!) throw new CommandError('That member is a panel user with the same or a higher role than yours, so I won’t ban them from Discord.');
+  }
+
+  private async banOnDiscord(discordId: string, reason: string): Promise<void> {
+    const s = this.settings();
+    const api = this.api();
+    if (!api || !s.guildId) throw new CommandError('The bot isn’t fully set up.');
+    this.expect(discordId, 'add');
+    await api.banMember(s.guildId, discordId, `PalOps: ${reason || 'banned'}`.slice(0, 200));
+  }
+
+  private async unbanOnDiscord(discordId: string, reason: string): Promise<void> {
+    const s = this.settings();
+    const api = this.api();
+    if (!api || !s.guildId) throw new CommandError('The bot isn’t fully set up.');
+    this.expect(discordId, 'remove');
+    await api.unbanMember(s.guildId, discordId, `PalOps: ${reason || 'unbanned'}`.slice(0, 200));
   }
 
   private async status(): Promise<string> {
@@ -634,6 +941,11 @@ export class DiscordBotService {
   }
 
   private onGatewayEvent(event: string, data: unknown): void {
+    if (event === 'GUILD_BAN_ADD' || event === 'GUILD_BAN_REMOVE') {
+      const task = this.onDiscordBan(data as { guild_id: string; user: { id: string } }, event === 'GUILD_BAN_ADD').finally(() => this.pending.delete(task));
+      this.pending.add(task);
+      return;
+    }
     if (event === 'INTERACTION_CREATE') {
       const interaction = data as Interaction;
       const response = this.handleInteraction(interaction);
@@ -720,7 +1032,7 @@ export class DiscordBotService {
 
 /** What to tell the user when a command fails. These errors are written to be shown to people. */
 function explain(err: unknown): string {
-  if (err instanceof CommandError || err instanceof HttpError) return err.message;
+  if (err instanceof CommandError || err instanceof HttpError || err instanceof DiscordApiError) return err.message;
   if (err instanceof PalworldError) return `The Palworld server said: ${err.message}`;
   return 'Something went wrong running that command.';
 }

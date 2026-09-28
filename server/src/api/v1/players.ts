@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
 import { hasPermission } from '../../services/authentication/permissions.js';
+import { notFound } from '../../utils/errors.js';
 import { parse } from '../../utils/validation.js';
 
 /** Platform ids look like steam_76561198000000000 or epic_0f3a...; keep them to a safe charset. */
@@ -60,6 +61,48 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
     return { ok: true, paldefender: await moderation.unbanIp(actorOf(request), id) };
   });
 
+  /** Character links waiting for staff to confirm. */
+  app.get('/link-requests', { preHandler: requirePermission(services, 'players.ban') }, async () => ({
+    requests: services.siteAccounts.pendingRequests().map((r) => ({
+      accountId: r.account.id,
+      discord: r.account.discord,
+      player: r.player,
+      requestedAt: r.account.verificationRequestedAt,
+      linkedAt: r.account.linkedAt,
+    })),
+  }));
+
+  app.post('/link-requests/:accountId/:decision', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
+    const { accountId, decision } = parse(z.object({ accountId: z.coerce.number().int().positive(), decision: z.enum(['approve', 'reject']) }), request.params);
+    const account = services.siteAccounts.get(accountId);
+    const player = account?.playerId ? players.get(account.playerId) : undefined;
+    if (!account || !player) throw notFound('That link request no longer exists');
+    const actor = actorOf(request);
+    if (decision === 'approve') services.siteAccounts.verify(accountId, actor.username ?? 'staff');
+    else services.siteAccounts.unlinkPlayer(accountId);
+    services.audit.record(actor, { category: 'players', action: decision === 'approve' ? 'character_verified' : 'character_link_rejected', target: player.name, details: { discordId: account.discord.id, platformId: player.userId, method: 'staff' } });
+    return { ok: true };
+  });
+
+  app.post('/:userId/link/verify', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
+    const { userId } = parse(userIdParams, request.params);
+    const account = services.siteAccounts.byPlayerUserId(userId, false);
+    if (!account) throw notFound('Nobody has linked this player');
+    const actor = actorOf(request);
+    services.siteAccounts.verify(account.id, actor.username ?? 'staff');
+    services.audit.record(actor, { category: 'players', action: 'character_verified', target: players.byUserId(userId)?.name ?? userId, details: { discordId: account.discord.id, method: 'staff' } });
+    return { ok: true };
+  });
+
+  app.delete('/:userId/link', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
+    const { userId } = parse(userIdParams, request.params);
+    const account = services.siteAccounts.byPlayerUserId(userId, false);
+    if (!account) throw notFound('Nobody has linked this player');
+    services.siteAccounts.unlinkPlayer(account.id);
+    services.audit.record(actorOf(request), { category: 'players', action: 'character_unlinked', target: players.byUserId(userId)?.name ?? userId, details: { discordId: account.discord.id } });
+    return { ok: true };
+  });
+
   app.get('/:userId', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
     const { userId } = parse(userIdParams, request.params);
     const staff = hasPermission(request.user!.role, 'world.view');
@@ -70,6 +113,11 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
       banned: moderation.isBanned(userId),
       history: moderation.history(userId),
       pals: world.palsOf(userId),
+      /** The website account linked to this character, and whether the link is proven. */
+      link: (() => {
+        const a = services.siteAccounts.byPlayerUserId(userId, false);
+        return a ? { discord: a.discord, verified: a.playerVerified, verifiedBy: a.verifiedBy, verifiedAt: a.verifiedAt, requestedAt: a.verificationRequestedAt, linkedAt: a.linkedAt } : null;
+      })(),
       /** Addresses and live details are staff-only, like the map. */
       ips: staff
         ? players.ipsOf(userId).map((i) => ({ ...i, banned: moderation.isIpBanned(i.ip), sharedWith: players.playersOnIp(i.ip, userId) }))

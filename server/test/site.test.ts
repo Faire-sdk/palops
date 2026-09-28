@@ -98,12 +98,25 @@ describe('player accounts', () => {
       platformId: 'steam_76561190000000001',
     });
 
+    // Once verified, the character is locked to that account.
+    const owner = ctx.services.siteAccounts.getByDiscordId(PLAYER_ONE.id)!;
+    ctx.services.siteAccounts.verify(owner.id, 'staff');
     const other = await playerSignIn(PLAYER_TWO);
     const taken = await api(ctx.app, { method: 'POST', url: '/api/v1/site/link', cookie: other, payload: { query: 'steam_76561190000000001' } });
     expect(taken.statusCode).toBe(409);
 
     const unlink = await api(ctx.app, { method: 'POST', url: '/api/v1/site/unlink', cookie });
     expect(unlink.json().character).toBeNull();
+  });
+
+  it('lets a claim be taken over until it is verified, so nobody can squat on someone else’s character', async () => {
+    const squatter = await playerSignIn(PLAYER_TWO);
+    await api(ctx.app, { method: 'POST', url: '/api/v1/site/link', cookie: squatter, payload: { query: 'Lamball Enjoyer' } });
+    const real = await playerSignIn(PLAYER_ONE);
+    const claimed = await api(ctx.app, { method: 'POST', url: '/api/v1/site/link', cookie: real, payload: { query: 'Lamball Enjoyer' } });
+    expect(claimed.statusCode).toBe(200);
+    expect(claimed.json().character.name).toBe('Lamball Enjoyer');
+    expect((await api(ctx.app, { method: 'GET', url: '/api/v1/site/me', cookie: squatter })).json().character).toBeNull();
   });
 
   it('keeps showing a linked character after they log off', async () => {

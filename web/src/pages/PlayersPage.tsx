@@ -16,7 +16,7 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage } from '../api/client';
-import type { IpBan, KnownPlayer, ModerationRecord, PalDefenderBan, PalDefenderResult, PalDefenderStatus, Player, PlayerSignal } from '../api/types';
+import type { IpBan, KnownPlayer, LinkRequest, ModerationRecord, PalDefenderBan, PalDefenderResult, PalDefenderStatus, Player, PlayerSignal } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { DataTable } from '../components/DataTable';
@@ -32,6 +32,7 @@ const TABS = [
   { id: 'all', label: 'All players' },
   { id: 'bans', label: 'Bans' },
   { id: 'signals', label: 'Signals' },
+  { id: 'links', label: 'Link requests' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -40,7 +41,7 @@ type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string }
 export function PlayersPage() {
   const { can } = useAuth();
   const [params, setParams] = useSearchParams();
-  const tabs = TABS.filter((t) => t.id !== 'signals' || can('world.view'));
+  const tabs = TABS.filter((t) => (t.id !== 'signals' || can('world.view')) && (t.id !== 'links' || can('players.ban')));
   const tab: TabId = tabs.find((t) => t.id === params.get('tab'))?.id ?? 'online';
   const [profile, setProfile] = useState<string | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
@@ -57,6 +58,7 @@ export function PlayersPage() {
       {tab === 'all' && <AllPlayers onOpen={setProfile} />}
       {tab === 'bans' && <Bans onOpen={setProfile} onAction={setTarget} />}
       {tab === 'signals' && <Signals onOpen={setProfile} />}
+      {tab === 'links' && <LinkRequests onOpen={setProfile} />}
       <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} />
       <ModerationDialog action={target?.action ?? null} userId={target?.userId ?? ''} name={target?.name ?? ''} onClose={() => setTarget(null)} />
     </>
@@ -407,6 +409,67 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         </Section>
       )}
     </Stack>
+  );
+}
+
+/** Website accounts that asked staff to confirm the character they linked is theirs. */
+function LinkRequests({ onOpen }: { onOpen: (userId: string) => void }) {
+  const notify = useToast();
+  const { data, error, loading, reload } = useApi<{ requests: LinkRequest[] }>('/players/link-requests', { pollMs: 30000 });
+
+  const decide = async (r: LinkRequest, decision: 'approve' | 'reject') => {
+    try {
+      await api.post(`/players/link-requests/${r.accountId}/${decision}`);
+      notify(decision === 'approve' ? `${r.player.name} is now verified for ${r.discord.username ?? r.discord.id}` : 'Link rejected', 'success');
+      await reload();
+      refreshAll();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    }
+  };
+
+  let body;
+  if (loading && !data) body = <Loading />;
+  else if (error && !data) body = <ErrorState error={error} onRetry={reload} />;
+  else {
+    body = (
+      <DataTable
+        rows={data?.requests ?? []}
+        rowKey={(r) => r.accountId}
+        empty={<EmptyState icon={PeopleOutlinedIcon} title="No link requests">Players who ask staff to verify their character show up here.</EmptyState>}
+        columns={[
+          { key: 'discord', header: 'Discord account', render: (r) => r.discord.username ?? r.discord.id },
+          { key: 'player', header: 'Says they are', render: (r) => <PlayerName name={r.player.name} userId={r.player.userId} onOpen={onOpen} /> },
+          { key: 'level', header: 'Level', render: (r) => r.player.level ?? '—' },
+          { key: 'at', header: 'Asked', nowrap: true, render: (r) => (r.requestedAt ? formatDateTime(r.requestedAt) : '—') },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            render: (r) => (
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                <Button size="small" variant="contained" onClick={() => decide(r, 'approve')}>
+                  Approve
+                </Button>
+                <Button size="small" variant="outlined" color="error" onClick={() => decide(r, 'reject')}>
+                  Reject
+                </Button>
+              </Stack>
+            ),
+          },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <Section title={data ? `Link requests (${data.requests.length})` : 'Link requests'} disablePadding>
+      <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+        Only approve someone you can tell is really that player (ask in Discord or the game). An approved link gives them their Discord roles, and it’s what lets a ban on either side reach the
+        other. Open the player to see their history first.
+      </Typography>
+      {body}
+    </Section>
   );
 }
 

@@ -35,10 +35,15 @@ export interface Character {
   lastSeenAt: string;
   platformId: string;
   verified: boolean;
+  /** "in-game code" or "staff" once verified. */
+  verifiedBy: string | null;
+  verifiedAt: string | null;
   linkedAt: string | null;
+  verification: { requestedAt: string | null; inGameCode: boolean; codePending: boolean };
 }
 
 export interface PlayerProfile {
   account: { discord: { id: string; username: string | null; avatar: string | null }; createdAt: string };
   character: Character | null;
+  privacy: { showDiscord: boolean };
 }

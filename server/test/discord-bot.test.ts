@@ -273,12 +273,12 @@ describe('slash commands', () => {
   it('ban, unban, announce and save for an admin, and audit them as the panel user', async () => {
     await setup();
     const ban = await run('ban', ADMIN_DISCORD, [{ name: 'player', type: 3, value: 'Anubis' }, { name: 'reason', type: 3, value: 'Griefing' }, { name: 'ban_ip', type: 5, value: true }]);
-    expect(ban.text).toContain('Banned **Anubis**');
+    expect(ban.text).toContain('Banned **Anubis** in game');
     expect(ban.text).toContain('198.51.100.23');
     expect(ctx.services.moderation.isBanned(ANUBIS)).toBe(true);
     expect(ctx.services.moderation.history(ANUBIS)[0]).toMatchObject({ action: 'ban', reason: 'Griefing', actorUsername: 'admin-user (via Discord)' });
 
-    expect((await run('unban', ADMIN_DISCORD, [{ name: 'player', type: 3, value: ANUBIS }])).text).toBe('Unbanned **Anubis**.');
+    expect((await run('unban', ADMIN_DISCORD, [{ name: 'player', type: 3, value: ANUBIS }])).text).toBe('Unbanned **Anubis** in game.');
     expect(ctx.services.moderation.isBanned(ANUBIS)).toBe(false);
     expect((await run('announce', ADMIN_DISCORD, [{ name: 'message', type: 3, value: 'Restart in 5' }])).text).toContain('Announced');
     expect(ctx.services.palworld.mock.announcements).toContain('Restart in 5');

@@ -430,4 +430,36 @@ export const migrations: Migration[] = [
       ALTER TABLE discord_bot ADD COLUMN status_channel_changed_at TEXT;
     `,
   },
+  {
+    id: 14,
+    name: 'verified_links_roles_and_ban_sync',
+    sql: `
+      -- A character link is a claim until it is verified: by an in-game code, or by staff.
+      -- Only verified links are ever used for Discord roles or bans.
+      ALTER TABLE site_accounts ADD COLUMN verified_at TEXT;
+      ALTER TABLE site_accounts ADD COLUMN verified_by TEXT;
+      ALTER TABLE site_accounts ADD COLUMN verification_requested_at TEXT;
+      -- The player chooses whether their Discord name is shown on their public profile.
+      ALTER TABLE site_accounts ADD COLUMN show_discord INTEGER NOT NULL DEFAULT 0;
+
+      -- One pending in-game code per account, kept as a hash, expiring and attempt-limited.
+      CREATE TABLE link_codes (
+        account_id INTEGER PRIMARY KEY REFERENCES site_accounts(id) ON DELETE CASCADE,
+        player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        code_hash TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        sent_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      -- The bot: put people in the Discord server on sign-in, give roles, and keep bans in step.
+      ALTER TABLE discord_bot ADD COLUMN join_on_login INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE discord_bot ADD COLUMN verified_role_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN role_owner_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN role_admin_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN role_moderator_id TEXT;
+      ALTER TABLE discord_bot ADD COLUMN sync_nicknames INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE discord_bot ADD COLUMN sync_bans INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];

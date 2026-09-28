@@ -43,7 +43,7 @@ export interface Interaction {
   guild_id?: string;
   member?: { user?: { id: string; username?: string } };
   user?: { id: string; username?: string };
-  data?: { name?: string; options?: CommandOption[] };
+  data?: { name?: string; options?: CommandOption[]; resolved?: { users?: Record<string, { username?: string; global_name?: string | null }> } };
 }
 
 export interface CommandDefinition {
@@ -55,7 +55,9 @@ export interface CommandDefinition {
 
 const STRING = 3;
 const BOOLEAN = 5;
-const player = (description: string) => ({ name: 'player', description, type: STRING, required: true, autocomplete: true });
+const USER = 6;
+const player = (description: string) => ({ name: 'player', description, type: STRING, autocomplete: true });
+const member = (description: string) => ({ name: 'member', description, type: USER });
 const reason = { name: 'reason', description: 'Why (shown to the player and kept in their history)', type: STRING, max_length: 200 };
 
 /** The slash commands, registered to the configured server. */
@@ -63,14 +65,14 @@ export const COMMANDS: CommandDefinition[] = [
   { name: 'status', description: 'Server status: online, players, FPS and uptime', type: 1 },
   { name: 'players', description: 'Who is online right now', type: 1 },
   { name: 'player', description: 'Look up a player', type: 1, options: [player('Name or platform ID')] },
-  { name: 'kick', description: 'Kick an online player', type: 1, options: [player('Who to kick'), reason] },
+  { name: 'kick', description: 'Kick an online player (give a player, or a Discord member with a verified link)', type: 1, options: [player('Who to kick'), member('Their Discord account, if linked and verified'), reason] },
   {
     name: 'ban',
     description: 'Ban a player',
     type: 1,
-    options: [player('Who to ban'), reason, { name: 'ban_ip', description: 'Also ban the address they last connected from', type: BOOLEAN }],
+    options: [player('Who to ban in game'), member('A Discord member: banned here, and in game if their character is linked and verified'), reason, { name: 'ban_ip', description: 'Also ban the address they last connected from', type: BOOLEAN }],
   },
-  { name: 'unban', description: 'Unban a player', type: 1, options: [player('Who to unban'), reason] },
+  { name: 'unban', description: 'Unban a player', type: 1, options: [player('Who to unban in game'), member('A Discord member to unban here (and their linked character)'), reason] },
   { name: 'announce', description: 'Broadcast a message to everyone on the server', type: 1, options: [{ name: 'message', description: 'What to say', type: STRING, required: true, max_length: 200 }] },
   { name: 'save', description: 'Save the world now', type: 1 },
 ];

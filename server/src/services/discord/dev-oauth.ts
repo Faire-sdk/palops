@@ -1,6 +1,5 @@
-import type { DiscordAccount } from '../authentication/users.js';
 import { DISCORD_ID_PATTERN } from '../authentication/users.js';
-import { DiscordOAuthError, type DiscordOAuthProvider } from './oauth.js';
+import { DiscordOAuthError, type DiscordOAuthProvider, type DiscordSignIn } from './oauth.js';
 
 /**
  * Local development stand-in for Discord (DEV_DISCORD_LOGIN=true, only with
@@ -9,11 +8,11 @@ import { DiscordOAuthError, type DiscordOAuthProvider } from './oauth.js';
  * rest of the flow (state, callback, sessions) is the real code path.
  */
 export class DevDiscordOAuth implements DiscordOAuthProvider {
-  authorizeUrl(state: string): string {
+  authorizeUrl(state: string, _options?: { joinServer?: boolean }): string {
     return `/api/v1/auth/dev-discord?state=${encodeURIComponent(state)}`;
   }
 
-  async exchange(code: string): Promise<DiscordAccount> {
+  async exchange(code: string): Promise<DiscordSignIn> {
     let parsed: { id?: unknown; username?: unknown };
     try {
       parsed = JSON.parse(Buffer.from(code, 'base64url').toString('utf8'));
@@ -24,7 +23,7 @@ export class DevDiscordOAuth implements DiscordOAuthProvider {
       throw new DiscordOAuthError('Invalid development Discord id');
     }
     const username = typeof parsed.username === 'string' && parsed.username.trim() ? parsed.username.trim().slice(0, 32) : null;
-    return { id: parsed.id, username, avatar: null };
+    return { id: parsed.id, username, avatar: null, accessToken: 'dev-access-token' };
   }
 
   static encode(id: string, username: string): string {

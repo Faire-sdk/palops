@@ -85,6 +85,17 @@ export class ModerationService {
 
   /** Accounts currently being banned for their address, so two polls don't race. */
   private enforcing = new Set<string>();
+  private banListeners: Array<(event: { userId: string; name: string | null; reason: string; actor: AuditActor }) => void> = [];
+  private unbanListeners: Array<(event: { userId: string; name: string | null; actor: AuditActor }) => void> = [];
+
+  /** Runs after a player is banned, by anyone or anything (staff, the Discord bot, address enforcement). */
+  onBan(listener: (event: { userId: string; name: string | null; reason: string; actor: AuditActor }) => void): void {
+    this.banListeners.push(listener);
+  }
+
+  onUnban(listener: (event: { userId: string; name: string | null; actor: AuditActor }) => void): void {
+    this.unbanListeners.push(listener);
+  }
 
   /** The reason is stored for staff and shown to the player as the kick message. */
   async kick(actor: AuditActor, userId: string, reason: string): Promise<ModerationRecord> {
@@ -117,6 +128,7 @@ export class ModerationService {
     }
     // PalDefender resolves the address itself, so only ask it to ban one when the panel did.
     const paldefender = await this.paldefender.mirrorBanPlayer(userId, reason, !!ipBan);
+    for (const listener of this.banListeners) listener({ userId, name: record.playerName, reason, actor });
     return { record, ipBan, ipSkipped, paldefender };
   }
 
@@ -133,7 +145,9 @@ export class ModerationService {
       }
     }
     const results = [await this.paldefender.mirrorUnbanPlayer(userId, reason), ...(await Promise.all(lifted.map((ip) => this.paldefender.mirrorUnbanAddress(ip, reason))))];
-    return { record: this.store(actor, userId, 'unban', reason), paldefender: combine(results) };
+    const record = this.store(actor, userId, 'unban', reason);
+    for (const listener of this.unbanListeners) listener({ userId, name: record.playerName, actor });
+    return { record, paldefender: combine(results) };
   }
 
   // ---- IP bans ----
@@ -206,7 +220,10 @@ export class ModerationService {
         try {
           await this.palworld.ban(p.userId, reason);
           this.players.markOffline(p.userId);
-          if (!this.isBanned(p.userId)) this.store(SYSTEM_ACTOR, p.userId, 'ban', `${reason} (${p.ip})`);
+          if (!this.isBanned(p.userId)) {
+            const record = this.store(SYSTEM_ACTOR, p.userId, 'ban', `${reason} (${p.ip})`);
+            for (const listener of this.banListeners) listener({ userId: p.userId, name: record.playerName, reason, actor: SYSTEM_ACTOR });
+          }
         } catch {
           // Server unreachable or the call failed; the next snapshot tries again.
         } finally {

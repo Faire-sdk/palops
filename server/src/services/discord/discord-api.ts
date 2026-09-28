@@ -47,6 +47,44 @@ export class DiscordApi {
     return this.call('POST', `/channels/${channelId}/messages`, { content: content.slice(0, 2000), allowed_mentions: { parse: [] } });
   }
 
+  // ---- Members, roles and bans ----
+
+  /** The member's roles and nickname, or null when they aren't in the server. */
+  async member(guildId: string, userId: string): Promise<{ roles: string[]; nick: string | null } | null> {
+    try {
+      const m = await this.call<{ roles?: string[]; nick?: string | null }>('GET', `/guilds/${guildId}/members/${userId}`);
+      return { roles: m.roles ?? [], nick: m.nick ?? null };
+    } catch (err) {
+      if (err instanceof DiscordApiError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Puts someone in the server using the access token from their sign-in (needs the guilds.join scope). */
+  addMember(guildId: string, userId: string, body: { access_token: string; nick?: string; roles?: string[] }): Promise<unknown> {
+    return this.call('PUT', `/guilds/${guildId}/members/${userId}`, body);
+  }
+
+  addRole(guildId: string, userId: string, roleId: string, reason: string): Promise<unknown> {
+    return this.call('PUT', `/guilds/${guildId}/members/${userId}/roles/${roleId}`, undefined, true, reason);
+  }
+
+  removeRole(guildId: string, userId: string, roleId: string, reason: string): Promise<unknown> {
+    return this.call('DELETE', `/guilds/${guildId}/members/${userId}/roles/${roleId}`, undefined, true, reason);
+  }
+
+  setNickname(guildId: string, userId: string, nick: string | null, reason: string): Promise<unknown> {
+    return this.call('PATCH', `/guilds/${guildId}/members/${userId}`, { nick }, true, reason);
+  }
+
+  banMember(guildId: string, userId: string, reason: string): Promise<unknown> {
+    return this.call('PUT', `/guilds/${guildId}/bans/${userId}`, { delete_message_seconds: 0 }, true, reason);
+  }
+
+  unbanMember(guildId: string, userId: string, reason: string): Promise<unknown> {
+    return this.call('DELETE', `/guilds/${guildId}/bans/${userId}`, undefined, true, reason);
+  }
+
   /** Answers an interaction that arrived over the gateway (over HTTP the answer is the response itself). */
   interactionCallback(interactionId: string, interactionToken: string, response: unknown): Promise<unknown> {
     return this.call('POST', `/interactions/${interactionId}/${interactionToken}/callback`, response, false);
@@ -62,12 +100,12 @@ export class DiscordApi {
     return this.call('PATCH', `/webhooks/${applicationId}/${interactionToken}/messages/@original`, { content: content.slice(0, 2000), allowed_mentions: { parse: [] } }, false);
   }
 
-  private async call<T = unknown>(method: string, path: string, body?: unknown, auth = true, retried = false): Promise<T> {
+  private async call<T = unknown>(method: string, path: string, body?: unknown, auth = true, reason?: string, retried = false): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${this.base}${path}`, {
         method,
-        headers: { ...(auth ? { Authorization: `Bot ${this.token}` } : {}), 'User-Agent': 'PalOps (https://github.com/Faire-sdk/palops, 1)', Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+        headers: { ...(auth ? { Authorization: `Bot ${this.token}` } : {}), ...(reason ? { 'X-Audit-Log-Reason': encodeURIComponent(reason.slice(0, 400)) } : {}), 'User-Agent': 'PalOps (https://github.com/Faire-sdk/palops, 1)', Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(8000),
         redirect: 'error',
@@ -85,7 +123,7 @@ export class DiscordApi {
     if (response.status === 429 && !retried) {
       const wait = Math.min(Number((parsed as { retry_after?: number } | undefined)?.retry_after ?? 1), 5);
       await new Promise((r) => setTimeout(r, wait * 1000));
-      return this.call<T>(method, path, body, auth, true);
+      return this.call<T>(method, path, body, auth, reason, true);
     }
     if (!response.ok) throw new DiscordApiError(response.status, describe(response.status, parsed));
     return parsed as T;

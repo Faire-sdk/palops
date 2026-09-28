@@ -242,6 +242,34 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
         />
         {!player && <Alert severity="info">PalOps hasn’t seen this player online yet.</Alert>}
 
+        {data.link && (
+          <>
+            <Divider />
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+                Discord
+              </Typography>
+              <Chip label={data.link.verified ? `Verified · ${data.link.verifiedBy === 'code' ? 'in-game code' : `by ${data.link.verifiedBy}`}` : data.link.requestedAt ? 'Verification requested' : 'Claimed, not verified'} color={data.link.verified ? 'success' : 'warning'} variant="outlined" />
+            </Stack>
+            <Typography>
+              Linked to <strong>{data.link.discord.username ?? data.link.discord.id}</strong> <Mono muted>{data.link.discord.id}</Mono>
+            </Typography>
+            {!data.link.verified && <Typography variant="body2" color="text.secondary">A claim proves nothing: anyone can claim a name. Only verified links give Discord roles or carry bans.</Typography>}
+            {can('players.ban') && (
+              <Stack direction="row" spacing={1}>
+                {!data.link.verified && (
+                  <Button size="small" variant="outlined" onClick={async () => { try { await api.post(`/players/${encodeURIComponent(data.userId)}/link/verify`); notify('Link verified', 'success'); await reload(); } catch (err) { notify(errorMessage(err), 'error'); } }}>
+                    Verify this link
+                  </Button>
+                )}
+                <Button size="small" color="error" variant="outlined" onClick={async () => { try { await api.delete(`/players/${encodeURIComponent(data.userId)}/link`); notify('Link removed', 'success'); await reload(); } catch (err) { notify(errorMessage(err), 'error'); } }}>
+                  Remove link
+                </Button>
+              </Stack>
+            )}
+          </>
+        )}
+
         {(can('players.kick') || can('players.ban') || (paldefender && can('world.view') && player?.online)) && (
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
             {paldefender && can('world.view') && player?.online && (

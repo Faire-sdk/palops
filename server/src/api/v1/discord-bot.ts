@@ -50,6 +50,13 @@ const settingsSchema = z.object({
   gatewayEnabled: z.boolean().default(true),
   presenceEnabled: z.boolean().default(true),
   statusChannelId: id,
+  joinOnLogin: z.boolean().default(false),
+  verifiedRoleId: id,
+  roleOwnerId: id,
+  roleAdminId: id,
+  roleModeratorId: id,
+  syncNicknames: z.boolean().default(false),
+  syncBans: z.boolean().default(false),
 });
 
 /** Owner-only setup for the optional Discord bot. */
@@ -85,6 +92,13 @@ export default async function discordBotRoutes(app: FastifyInstance, { services 
   app.post('/test', owner, async (request) => {
     const { botToken, guildId, eventsChannelId, logChannelId, statusChannelId } = parse(settingsSchema.pick({ botToken: true, guildId: true, eventsChannelId: true, logChannelId: true, statusChannelId: true }), request.body);
     return { checks: await discordBot.check({ botToken: botToken || undefined, guildId, eventsChannelId, logChannelId, statusChannelId }) };
+  });
+
+  /** Brings every linked player's and panel user's Discord roles in line. */
+  app.post('/sync-roles', owner, async (request) => {
+    const result = await discordBot.syncAll();
+    services.audit.record(actorOf(request), { category: 'server', action: 'discord_roles_synced', details: { ...result } });
+    return result;
   });
 
   app.post('/register-commands', owner, async (request) => {

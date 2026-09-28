@@ -97,8 +97,27 @@ export interface ModerationRecord {
   createdAt: string;
 }
 
+/** The website account linked to a character. */
+export interface CharacterLink {
+  discord: { id: string; username: string | null; avatar: string | null };
+  verified: boolean;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  requestedAt: string | null;
+  linkedAt: string | null;
+}
+
+export interface LinkRequest {
+  accountId: number;
+  discord: { id: string; username: string | null; avatar: string | null };
+  player: { id: number; userId: string; name: string; level: number | null };
+  requestedAt: string | null;
+  linkedAt: string | null;
+}
+
 export interface PlayerProfile {
   userId: string;
+  link: CharacterLink | null;
   player: KnownPlayer | null;
   banned: boolean;
   history: ModerationRecord[];
@@ -449,6 +468,13 @@ export interface DiscordBotSettings {
   gatewayEnabled: boolean;
   presenceEnabled: boolean;
   statusChannelId: string | null;
+  joinOnLogin: boolean;
+  verifiedRoleId: string | null;
+  roleOwnerId: string | null;
+  roleAdminId: string | null;
+  roleModeratorId: string | null;
+  syncNicknames: boolean;
+  syncBans: boolean;
   commandsRegisteredAt: string | null;
   updatedAt: string | null;
 }

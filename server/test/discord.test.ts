@@ -248,7 +248,8 @@ describe('DiscordOAuthClient', () => {
   });
 
   it('exchanges a code for the Discord user', async () => {
-    expect(await client().exchange('abc')).toEqual(ALICE);
+    // The access token is handed back for the moment of sign-in (e.g. to join the server) and never stored.
+    expect(await client().exchange('abc')).toEqual({ ...ALICE, accessToken: expect.any(String) });
     await expect(client().exchange('wrong')).rejects.toThrow('HTTP 400');
   });
 });

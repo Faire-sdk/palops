@@ -95,7 +95,8 @@ export function createServices(config: Config, db: DB): Services {
   });
   world.onSignal((s) => consoleLog.add('panel', `Signal for ${s.playerName}: ${s.summary}`, 'warn'));
   const moderation = new ModerationService(db, palworld, players, servers, audit, paldefender);
-  const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog });
+  const siteAccounts = new SiteAccountService(db, config.sessionMaxMs);
+  const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog, siteAccounts });
   return {
     config,
     db,
@@ -115,7 +116,7 @@ export function createServices(config: Config, db: DB): Services {
     players,
     moderation,
     paldefender,
-    siteAccounts: new SiteAccountService(db, config.sessionMaxMs),
+    siteAccounts,
     world,
     console: consoleLog,
     discordBot,

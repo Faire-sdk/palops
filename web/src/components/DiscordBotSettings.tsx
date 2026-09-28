@@ -39,6 +39,13 @@ interface Form {
   gatewayEnabled: boolean;
   presenceEnabled: boolean;
   statusChannelId: string;
+  joinOnLogin: boolean;
+  verifiedRoleId: string;
+  roleOwnerId: string;
+  roleAdminId: string;
+  roleModeratorId: string;
+  syncNicknames: boolean;
+  syncBans: boolean;
 }
 
 const blank = (v: string) => v.trim() || null;
@@ -49,7 +56,7 @@ export function DiscordBotSettingsTab() {
   const { data, error, loading, reload } = useApi<{ settings: DiscordBotSettings; gateway: GatewayStatus; interactionsUrl: string; commands: Array<{ name: string; description: string }> }>('/discord-bot/settings', { pollMs: 10000 });
   const [form, setForm] = useState<Form | null>(null);
   const [checks, setChecks] = useState<BotCheck[]>();
-  const [busy, setBusy] = useState<'save' | 'test' | 'register' | 'send' | null>(null);
+  const [busy, setBusy] = useState<'save' | 'test' | 'register' | 'send' | 'roles' | null>(null);
 
   useEffect(() => {
     const s = data?.settings;
@@ -71,6 +78,13 @@ export function DiscordBotSettingsTab() {
         gatewayEnabled: s.gatewayEnabled,
         presenceEnabled: s.presenceEnabled,
         statusChannelId: s.statusChannelId ?? '',
+        joinOnLogin: s.joinOnLogin,
+        verifiedRoleId: s.verifiedRoleId ?? '',
+        roleOwnerId: s.roleOwnerId ?? '',
+        roleAdminId: s.roleAdminId ?? '',
+        roleModeratorId: s.roleModeratorId ?? '',
+        syncNicknames: s.syncNicknames,
+        syncBans: s.syncBans,
       });
     }
   }, [data, form]);
@@ -106,9 +120,13 @@ export function DiscordBotSettingsTab() {
     eventsChannelId: blank(form.eventsChannelId),
     logChannelId: blank(form.logChannelId),
     statusChannelId: blank(form.statusChannelId),
+    verifiedRoleId: blank(form.verifiedRoleId),
+    roleOwnerId: blank(form.roleOwnerId),
+    roleAdminId: blank(form.roleAdminId),
+    roleModeratorId: blank(form.roleModeratorId),
   });
 
-  const run = async (kind: 'save' | 'test' | 'register' | 'send') => {
+  const run = async (kind: 'save' | 'test' | 'register' | 'send' | 'roles') => {
     setBusy(kind);
     try {
       if (kind === 'test') {
@@ -117,6 +135,9 @@ export function DiscordBotSettingsTab() {
         const res = await api.post<{ count: number }>('/discord-bot/register-commands');
         notify(`Registered ${res.count} slash commands on your server`, 'success');
         await reload();
+      } else if (kind === 'roles') {
+        const r = await api.post<{ checked: number; synced: number; notInServer: number; failed: number }>('/discord-bot/sync-roles');
+        notify(`Checked ${r.checked}: ${r.synced} synced, ${r.notInServer} not in the server${r.failed ? `, ${r.failed} failed (check the bot’s Manage Roles permission and that its role is above the roles it manages)` : ''}`, r.failed ? 'warning' : 'success');
       } else if (kind === 'send') {
         await api.post('/discord-bot/send-test');
         notify('Test message sent', 'success');
@@ -198,7 +219,29 @@ export function DiscordBotSettingsTab() {
             </TextField>
 
             <Typography variant="subtitle1" sx={{ fontWeight: 600, pt: 1 }}>
-              Who can use it
+              Players and roles
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Players who sign in on the website and prove their character is theirs (an in-game code, or staff) get roles here. Only verified links are ever used, so a claimed name alone can never
+              earn a role or get someone banned. The bot needs <strong>Manage Roles</strong> (and its own role must sit above the roles below), plus <strong>Manage Nicknames</strong> and <strong>Ban Members</strong> for those options.
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField label="Verified player role ID" value={form.verifiedRoleId} onChange={text('verifiedRoleId')} helperText="Given to players with a verified character" />
+            </Stack>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField label="Owner role ID" value={form.roleOwnerId} onChange={text('roleOwnerId')} />
+              <TextField label="Admin role ID" value={form.roleAdminId} onChange={text('roleAdminId')} />
+              <TextField label="Moderator role ID" value={form.roleModeratorId} onChange={text('roleModeratorId')} />
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              Panel users get the role for their panel role (matched by the Discord ID on their panel account). Roles you leave blank are not touched, and neither are any other roles people have.
+            </Typography>
+            {flag('joinOnLogin', 'Add players to the Discord server when they sign in on the website', 'They’re asked to allow it when they sign in. The bot needs Create Invite. Nobody is added without agreeing.')}
+            {flag('syncNicknames', 'Set members’ nicknames to their verified character name', 'The bot can’t change the server owner’s nickname')}
+            {flag('syncBans', 'Keep bans in step', 'Banning a player in game also bans their verified Discord account, and banning or unbanning someone on Discord does the same to their verified character. Panel users are never banned on Discord this way.')}
+
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, pt: 1 }}>
+              Who can use commands
             </Typography>
             {flag('publicInfo', 'Anyone in the Discord server can use /status and /players', 'Everything else needs a linked panel account')}
 
@@ -214,6 +257,9 @@ export function DiscordBotSettingsTab() {
               </Button>
               <Button variant="outlined" type="button" loading={busy === 'send'} onClick={() => run('send')} disabled={!s.hasToken || !s.eventsChannelId}>
                 Send test message
+              </Button>
+              <Button variant="outlined" type="button" loading={busy === 'roles'} onClick={() => run('roles')} disabled={!s.enabled}>
+                Sync roles now
               </Button>
             </Stack>
             {checks?.map((c) => (
@@ -245,7 +291,7 @@ export function DiscordBotSettingsTab() {
                 Under <strong>Bot</strong>, reset the token and paste it here. No privileged intents are needed.
               </li>
               <li>
-                Invite it with the scopes <Mono>bot</Mono> and <Mono>applications.commands</Mono>, and the permissions View Channel and Send Messages.
+                Invite it with the scopes <Mono>bot</Mono> and <Mono>applications.commands</Mono>, and the permissions View Channels and Send Messages. Add Manage Roles, Manage Nicknames, Ban Members, Manage Channels and Create Invite only for the features you switch on.
               </li>
               <li>
                 Save here <em>first</em>, then set <strong>Interactions Endpoint URL</strong> in the portal to:
