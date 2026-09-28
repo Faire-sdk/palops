@@ -34,6 +34,14 @@ const playerTimer = setInterval(() => {
 }, 60 * 1000);
 playerTimer.unref();
 
+// PalDefender (optional): keep player addresses current, including offline players.
+// Does nothing unless an owner has switched the integration on.
+const paldefenderTimer = setInterval(() => {
+  if (!services.servers.getPrimary() || !services.paldefender.enabled()) return;
+  services.paldefender.syncPlayers().catch((err) => app.log.debug({ err }, 'PalDefender sync failed'));
+}, 60 * 1000);
+paldefenderTimer.unref();
+
 // World snapshot: guilds, bases, the live map, cheat signals and lag hotspots.
 if (config.worldPollSeconds > 0) {
   const worldTimer = setInterval(() => {

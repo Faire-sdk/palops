@@ -272,3 +272,42 @@ export interface MapImage {
   updatedAt: string;
   updatedBy: string | null;
 }
+
+// ---- PalDefender (optional plugin integration) ----
+
+export interface PalDefenderSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  useTls: boolean;
+  hasToken: boolean;
+  updatedAt: string;
+}
+
+export interface PalDefenderStatus {
+  enabled: boolean;
+  version: string | null;
+  lastSyncAt: string | null;
+  error: string | null;
+}
+
+export interface PalDefenderCheck {
+  name: string;
+  permission: string;
+  ok: boolean;
+  message: string | null;
+}
+
+/** How mirroring an action to PalDefender went. Null when the integration is off. */
+export type PalDefenderResult = { ok: boolean; message: string | null } | null;
+
+export interface PalDefenderBan {
+  kind: 'user' | 'ip';
+  id: string;
+  active: boolean;
+  reason: string | null;
+  bannedBy: string | null;
+  bannedVia: string | null;
+  bannedAt: string | null;
+  unbannedAt: string | null;
+}

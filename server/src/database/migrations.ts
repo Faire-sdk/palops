@@ -328,4 +328,21 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 9,
+    name: 'paldefender',
+    sql: `
+      -- The optional PalDefender plugin integration (one row). Off unless an
+      -- owner enables it. The API token is encrypted at rest.
+      CREATE TABLE paldefender (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        host TEXT NOT NULL DEFAULT '127.0.0.1',
+        port INTEGER NOT NULL DEFAULT 17993,
+        use_tls INTEGER NOT NULL DEFAULT 0,
+        token_encrypted TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
 ];

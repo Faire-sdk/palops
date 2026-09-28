@@ -35,6 +35,12 @@ From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 sec
 - Cheat signals: unusual movement, level jumps, players sharing an address and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.
 - Lag hotspots: FPS over time and the busiest 500 m areas, kept for 7 days.
 
+## PalDefender (optional)
+
+An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin for Windows servers, off unless an owner turns it on
+in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, and player addresses (including offline players)
+synced from it. See [paldefender.md](paldefender.md).
+
 ## Discord bot (planned)
 
 Panel users are linked to Discord ids, so a bot in `server/src/services/discord/` can resolve the Discord user

@@ -52,13 +52,12 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
 
   app.post('/ip-bans', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
     const { ip, reason } = parse(z.object({ ip: z.string().trim().min(2).max(64) }).extend({ reason: reasonBody.shape.reason }), request.body);
-    return { ipBan: await moderation.banIp(actorOf(request), ip, reason) };
+    return moderation.banIp(actorOf(request), ip, reason);
   });
 
   app.delete('/ip-bans/:id', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
     const { id } = parse(z.object({ id: z.coerce.number().int().positive() }), request.params);
-    moderation.unbanIp(actorOf(request), id);
-    return { ok: true };
+    return { ok: true, paldefender: await moderation.unbanIp(actorOf(request), id) };
   });
 
   app.get('/:userId', { preHandler: requirePermission(services, 'players.view') }, async (request) => {
@@ -96,7 +95,7 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
   app.post('/:userId/unban', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
     const { userId } = parse(userIdParams, request.params);
     const { reason } = parse(reasonBody, request.body);
-    return { record: await moderation.unban(actorOf(request), userId, reason) };
+    return moderation.unban(actorOf(request), userId, reason);
   });
 
   app.post('/:userId/notes', { preHandler: requirePermission(services, 'players.note') }, async (request) => {

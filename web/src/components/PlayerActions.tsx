@@ -17,7 +17,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { IpBan, ModerationAction, PlayerProfile } from '../api/types';
+import type { IpBan, ModerationAction, PalDefenderResult, PlayerProfile } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
@@ -26,6 +26,14 @@ import { useToast } from './Toast';
 import { formatMapPoint, palLabel, SignalChip } from './world';
 
 type Action = 'kick' | 'ban' | 'unban';
+
+/**
+ * The official API did the action; with PalDefender switched on the panel also
+ * mirrors it there. Say so when that part failed, so it isn't a silent gap.
+ */
+export function warnIfPalDefenderFailed(notify: (message: string, tone?: 'warning') => void, result: PalDefenderResult | undefined) {
+  if (result && !result.ok && result.message) notify(`${result.message}. The action itself worked; PalDefender’s own list wasn’t updated.`, 'warning');
+}
 
 const ACTION_COPY: Record<Action, { title: string; button: string; hint: string; done: string }> = {
   kick: { title: 'Kick', button: 'Kick player', hint: 'Shown to the player and kept in their history. They can rejoin right away.', done: 'kicked' },
@@ -52,9 +60,10 @@ export function ModerationDialog({ action, userId, name, onClose }: { action: Ac
     if (!action || !copy) return;
     setBusy(true);
     try {
-      const res = await api.post<{ ipBan?: IpBan | null; ipSkipped?: string | null }>(`/players/${encodeURIComponent(userId)}/${action}`, action === 'ban' ? { reason, banIp } : { reason });
+      const res = await api.post<{ ipBan?: IpBan | null; ipSkipped?: string | null; paldefender?: PalDefenderResult }>(`/players/${encodeURIComponent(userId)}/${action}`, action === 'ban' ? { reason, banIp } : { reason });
       notify(`${name} was ${copy.done}${res?.ipBan ? ` and ${res.ipBan.ip} was banned` : ''}`, 'success');
       if (res?.ipSkipped) notify(res.ipSkipped, 'warning');
+      warnIfPalDefenderFailed(notify, res?.paldefender);
       setReason('');
       refreshAll();
       onClose();
@@ -124,8 +133,9 @@ export function IpBanDialog({ ip, open, onClose }: { ip: string; open: boolean; 
   const submit = async () => {
     setBusy(true);
     try {
-      await api.post('/players/ip-bans', { ip, reason });
+      const res = await api.post<{ paldefender?: PalDefenderResult }>('/players/ip-bans', { ip, reason });
       notify(`${ip} was banned`, 'success');
+      warnIfPalDefenderFailed(notify, res?.paldefender);
       refreshAll();
       onClose();
     } catch (err) {

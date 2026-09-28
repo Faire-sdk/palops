@@ -1,5 +1,6 @@
 import type { DB } from '../../database/db.js';
 import type { AuditActor, AuditLog } from '../audit/audit-log.js';
+import type { Mirror, PalDefenderService } from '../paldefender/paldefender-service.js';
 import type { PalworldService } from '../palworld/index.js';
 import { PalworldError } from '../palworld/index.js';
 import type { ServerRegistry } from '../servers/server-registry.js';
@@ -77,6 +78,7 @@ export class ModerationService {
     private readonly players: PlayerDirectory,
     private readonly servers: ServerRegistry,
     private readonly audit: AuditLog,
+    private readonly paldefender: PalDefenderService,
   ) {
     players.onSeen((seen) => this.enforceIpBans(seen));
   }
@@ -94,29 +96,44 @@ export class ModerationService {
   /**
    * Bans the account. With banIp, also bans the address they last connected
    * from (unless it's a shared range), so a new account from there is banned too.
+   * With PalDefender switched on, the ban is mirrored there too (`paldefender`).
    */
-  async ban(actor: AuditActor, userId: string, reason: string, options: { banIp?: boolean } = {}): Promise<{ record: ModerationRecord; ipBan: IpBan | null; ipSkipped: string | null }> {
+  async ban(
+    actor: AuditActor,
+    userId: string,
+    reason: string,
+    options: { banIp?: boolean } = {},
+  ): Promise<{ record: ModerationRecord; ipBan: IpBan | null; ipSkipped: string | null; paldefender: Mirror | null }> {
     await this.palworld.ban(userId, reason);
     this.players.markOffline(userId);
     const record = this.store(actor, userId, 'ban', reason);
-    if (!options.banIp) return { record, ipBan: null, ipSkipped: null };
-    const latest = this.players.ipsOf(userId)[0];
-    if (!latest) return { record, ipBan: null, ipSkipped: 'PalOps has no address on record for this player yet.' };
-    if (isSharedRangeIp(latest.ip)) {
-      return { record, ipBan: null, ipSkipped: `${latest.ip} is a private or loopback address shared by many players, so it wasn't banned.` };
+    let ipBan: IpBan | null = null;
+    let ipSkipped: string | null = null;
+    if (options.banIp) {
+      const latest = this.players.ipsOf(userId)[0];
+      if (!latest) ipSkipped = 'PalOps has no address on record for this player yet.';
+      else if (isSharedRangeIp(latest.ip)) ipSkipped = `${latest.ip} is a private or loopback address shared by many players, so it wasn't banned.`;
+      else ipBan = this.addIpBan(actor, latest.ip, reason, userId);
     }
-    return { record, ipBan: this.addIpBan(actor, latest.ip, reason, userId), ipSkipped: null };
+    // PalDefender resolves the address itself, so only ask it to ban one when the panel did.
+    const paldefender = await this.paldefender.mirrorBanPlayer(userId, reason, !!ipBan);
+    return { record, ipBan, ipSkipped, paldefender };
   }
 
   /** Unbanning a player also lifts the addresses banned along with them, or they'd be banned again on their next join. */
-  async unban(actor: AuditActor, userId: string, reason: string): Promise<ModerationRecord> {
+  async unban(actor: AuditActor, userId: string, reason: string): Promise<{ record: ModerationRecord; paldefender: Mirror | null }> {
     await this.palworld.unban(userId);
     const serverId = this.servers.getPrimary()?.id;
+    const lifted: string[] = [];
     if (serverId !== undefined) {
-      const lifted = this.db.prepare('DELETE FROM ip_bans WHERE server_id = ? AND source_user_id = ? RETURNING ip').all(serverId, userId) as Array<{ ip: string }>;
-      for (const { ip } of lifted) this.audit.record(actor, { category: 'players', action: 'ip_unban', target: ip, details: { withPlayer: userId } });
+      const rows = this.db.prepare('DELETE FROM ip_bans WHERE server_id = ? AND source_user_id = ? RETURNING ip').all(serverId, userId) as Array<{ ip: string }>;
+      for (const { ip } of rows) {
+        lifted.push(ip);
+        this.audit.record(actor, { category: 'players', action: 'ip_unban', target: ip, details: { withPlayer: userId } });
+      }
     }
-    return this.store(actor, userId, 'unban', reason);
+    const results = [await this.paldefender.mirrorUnbanPlayer(userId, reason), ...(await Promise.all(lifted.map((ip) => this.paldefender.mirrorUnbanAddress(ip, reason))))];
+    return { record: this.store(actor, userId, 'unban', reason), paldefender: combine(results) };
   }
 
   // ---- IP bans ----
@@ -134,7 +151,7 @@ export class ModerationService {
   }
 
   /** Bans an address by hand. Accounts seen on it later are banned when they connect. */
-  async banIp(actor: AuditActor, rawIp: string, reason: string): Promise<IpBan> {
+  async banIp(actor: AuditActor, rawIp: string, reason: string): Promise<{ ipBan: IpBan; paldefender: Mirror | null }> {
     const ip = normalizeIp(rawIp);
     if (!ip || !isIP(ip)) throw badRequest('Enter a valid IPv4 or IPv6 address', 'invalid_ip');
     if (isSharedRangeIp(ip)) throw badRequest('That is a private or loopback address. Banning it could block every player behind the same network or proxy.', 'shared_ip_range');
@@ -146,15 +163,16 @@ export class ModerationService {
         .filter((p) => this.players.liveOf(p.userId))
         .map((p) => ({ userId: p.userId, name: p.name, ip })),
     );
-    return ban;
+    return { ipBan: ban, paldefender: await this.paldefender.mirrorBanAddress(ip, reason) };
   }
 
-  unbanIp(actor: AuditActor, id: number): void {
+  async unbanIp(actor: AuditActor, id: number): Promise<Mirror | null> {
     const serverId = this.servers.getPrimary()?.id;
     const row = serverId !== undefined ? (this.db.prepare('SELECT * FROM ip_bans WHERE id = ? AND server_id = ?').get(id, serverId) as IpBanRow | undefined) : undefined;
     if (!row) throw notFound('IP ban not found');
     this.db.prepare('DELETE FROM ip_bans WHERE id = ?').run(id);
     this.audit.record(actor, { category: 'players', action: 'ip_unban', target: row.ip });
+    return this.paldefender.mirrorUnbanAddress(row.ip);
   }
 
   private addIpBan(actor: AuditActor, ip: string, reason: string, sourceUserId: string | null): IpBan {
@@ -275,6 +293,13 @@ export class ModerationService {
     if (!server) throw new PalworldError('not_configured', 'No Palworld server is configured');
     return server.id;
   }
+}
+
+/** One result for several mirrored calls: ok only if all were, with the first failure's message. */
+function combine(results: Array<Mirror | null>): Mirror | null {
+  const present = results.filter((r): r is Mirror => r !== null);
+  if (present.length === 0) return null;
+  return present.find((r) => !r.ok) ?? { ok: true, message: null };
 }
 
 function toRecord(row: ModerationRow): ModerationRecord {

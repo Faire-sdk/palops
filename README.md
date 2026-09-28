@@ -241,6 +241,11 @@ counts, and only when `SITE_SHOW_ONLINE_PLAYERS` is on.
 The REST API can't start a stopped server, change settings, list bans made elsewhere, or give console or log access; those need PalOps on the game machine
 (see [docs/deployment.md](docs/deployment.md)).
 
+### Optional: PalDefender
+
+If your Windows server runs the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin, PalOps can mirror bans (including IP bans) to it, show its ban list
+and read player addresses from it. It's off by default and PalOps doesn't need it. See [docs/paldefender.md](docs/paldefender.md).
+
 ### Keep the API private
 
 **Never expose the REST API port to the internet.** Anyone who reaches it with the admin password can kick, ban or shut down the server, and it has no TLS.
@@ -335,8 +340,14 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/players/known`, `/players/bans`, `/players/:userId` | `players.view` (everyone seen, panel bans, a player's profile and history) |
 | POST | `/players/:userId/kick` | `players.kick` |
 | POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` |
+| POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (ban and unban an address; listed with `/players/bans` for `world.view`) |
 | POST | `/players/:userId/notes` | `players.note` |
 | POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
+| GET/PUT | `/paldefender/settings` | `server.connection` (optional PalDefender integration; the token is never returned) |
+| POST | `/paldefender/test` | `server.connection` |
+| GET | `/paldefender/status` | `players.view` |
+| GET | `/paldefender/banlist` | `world.view` (PalDefender's ban list) |
+| POST | `/paldefender/unban`, `/paldefender/unbanip` | `players.ban` (lift an entry from PalDefender's list) |
 | GET | `/config` | `config.view` (live settings from the REST API) |
 | GET | `/world/status`, `/world/guilds`, `/world/guilds/:guildId` | `players.view` (world data state, guilds and their members) |
 | GET | `/world/map`, `/world/bases`, `/world/signals`, `/world/performance` | `world.view` (positions, bases, cheat signals, FPS and hotspots) |

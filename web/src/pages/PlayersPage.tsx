@@ -16,12 +16,12 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage } from '../api/client';
-import type { IpBan, KnownPlayer, ModerationRecord, Player, PlayerSignal } from '../api/types';
+import type { IpBan, KnownPlayer, ModerationRecord, PalDefenderBan, PalDefenderResult, PalDefenderStatus, Player, PlayerSignal } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { DataTable } from '../components/DataTable';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { IpBanDialog, ModerationDialog, PlayerProfileDialog } from '../components/PlayerActions';
+import { IpBanDialog, ModerationDialog, PlayerProfileDialog, warnIfPalDefenderFailed } from '../components/PlayerActions';
 import { useToast } from '../components/Toast';
 import { SignalChip } from '../components/world';
 import { formatDateTime } from '../format';
@@ -325,6 +325,7 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
           />
         </Section>
       )}
+      {can('world.view') && <PalDefenderBans onOpen={onOpen} />}
       {can('players.ban') && can('world.view') && (
         <Section title="Ban an IP address">
           <Stack
@@ -369,8 +370,9 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         onClose={() => setIpToLift(null)}
         onConfirm={async () => {
           try {
-            await api.delete(`/players/ip-bans/${ipToLift!.id}`);
+            const res = await api.delete<{ paldefender?: PalDefenderResult }>(`/players/ip-bans/${ipToLift!.id}`);
             notify(`${ipToLift!.ip} was unbanned`, 'success');
+            warnIfPalDefenderFailed(notify, res?.paldefender);
             reload();
           } catch (err) {
             notify(errorMessage(err), 'error');
@@ -405,6 +407,79 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         </Section>
       )}
     </Stack>
+  );
+}
+
+/**
+ * PalDefender's own ban list, when that optional integration is on. It includes
+ * bans made in-game, by its anti-cheat and by other tools, which the official
+ * REST API can't list.
+ */
+function PalDefenderBans({ onOpen }: { onOpen: (userId: string) => void }) {
+  const { can } = useAuth();
+  const notify = useToast();
+  const { data: status } = useApi<PalDefenderStatus>('/paldefender/status');
+  const enabled = !!status?.enabled;
+  const { data, error, loading, reload } = useApi<{ bans: PalDefenderBan[] }>('/paldefender/banlist', { enabled });
+  const [lift, setLift] = useState<PalDefenderBan | null>(null);
+
+  if (!enabled) return null;
+
+  let body;
+  if (loading && !data) body = <Loading />;
+  else if (error && !data) body = <ErrorState error={error} onRetry={reload} />;
+  else {
+    body = (
+      <DataTable
+        rows={data?.bans ?? []}
+        rowKey={(b) => `${b.kind}:${b.id}`}
+        empty={<EmptyState icon={PeopleOutlinedIcon} title="No active bans in PalDefender" />}
+        columns={[
+          { key: 'kind', header: 'Type', render: (b) => <Chip label={b.kind === 'ip' ? 'Address' : 'Player'} variant="outlined" /> },
+          { key: 'id', header: 'Who', render: (b) => (b.kind === 'user' ? <PlayerName name={b.id} userId={b.id} onOpen={onOpen} /> : <Mono>{b.id}</Mono>) },
+          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
+          { key: 'by', header: 'Banned by', render: (b) => (b.bannedBy ? `${b.bannedBy}${b.bannedVia ? ` (${b.bannedVia})` : ''}` : (b.bannedVia ?? '—')) },
+          { key: 'at', header: 'When', nowrap: true, render: (b) => (b.bannedAt ? formatDateTime(b.bannedAt) : '—') },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            render: (b) =>
+              can('players.ban') && (
+                <Button size="small" variant="outlined" onClick={() => setLift(b)}>
+                  Unban
+                </Button>
+              ),
+          },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <Section title={data ? `PalDefender ban list (${data.bans.length})` : 'PalDefender ban list'} disablePadding>
+      <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+        Straight from PalDefender, so it includes bans made in-game, by its anti-cheat and by other tools. Unbanning here only changes PalDefender’s list; to fully
+        unban someone banned from PalOps, use Unban in the first list above.
+      </Typography>
+      {body}
+      <ConfirmDialog
+        open={!!lift}
+        title={`Unban ${lift?.id ?? ''} in PalDefender?`}
+        message={lift?.kind === 'ip' ? 'Accounts on this address can connect again unless PalOps also bans it.' : 'They can connect again unless the game’s own ban list or a PalOps address ban still stops them.'}
+        confirmLabel="Unban"
+        onClose={() => setLift(null)}
+        onConfirm={async () => {
+          try {
+            await api.post(lift!.kind === 'ip' ? '/paldefender/unbanip' : '/paldefender/unban', lift!.kind === 'ip' ? { ip: lift!.id } : { userId: lift!.id });
+            notify(`${lift!.id} was unbanned in PalDefender`, 'success');
+            reload();
+          } catch (err) {
+            notify(errorMessage(err), 'error');
+          }
+        }}
+      />
+    </Section>
   );
 }
 

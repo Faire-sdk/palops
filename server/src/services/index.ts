@@ -8,6 +8,7 @@ import { UserService } from './authentication/users.js';
 import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
 import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
+import { PalDefenderService } from './paldefender/paldefender-service.js';
 import { PalworldService } from './palworld/index.js';
 import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
@@ -31,6 +32,8 @@ export interface Services {
   oauthStates: OAuthStateStore;
   players: PlayerDirectory;
   moderation: ModerationService;
+  /** Optional PalDefender plugin integration; does nothing until an owner enables it. */
+  paldefender: PalDefenderService;
   siteAccounts: SiteAccountService;
   world: WorldService;
   mapImage: MapImageService;
@@ -71,6 +74,7 @@ export function createServices(config: Config, db: DB): Services {
   const palworld = new PalworldService(servers);
   const audit = new AuditLog(db);
   const players = new PlayerDirectory(db, palworld, servers);
+  const paldefender = new PalDefenderService(db, new SecretBox(config.secret, 'paldefender-token'), players, servers);
   return {
     config,
     db,
@@ -88,7 +92,8 @@ export function createServices(config: Config, db: DB): Services {
         : null,
     oauthStates: new OAuthStateStore(),
     players,
-    moderation: new ModerationService(db, palworld, players, servers, audit),
+    moderation: new ModerationService(db, palworld, players, servers, audit, paldefender),
+    paldefender,
     siteAccounts: new SiteAccountService(db, config.sessionMaxMs),
     world: new WorldService(db, palworld, players, servers, audit),
     mapImage: new MapImageService(db, config.databasePath, audit),
