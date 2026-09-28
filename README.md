@@ -109,13 +109,84 @@ platform ID to see their level, guild, first/last seen and online status.
 
 ## Connecting to Palworld
 
-The panel talks to the server through the official REST API:
+PalOps talks to your server through Palworld's official REST API, which is built into current versions of the dedicated server.
+It's plain HTTP, and it authenticates with Basic auth as user `admin` with the server's `AdminPassword`.
 
-1. In `PalWorldSettings.ini` set `RESTAPIEnabled=True` and an `AdminPassword`.
-2. Note `RESTAPIPort` (default `8212`) and restart the Palworld server.
-3. In the panel, open **Settings → Server connection**, enter host, port and the admin password, and click **Test connection**.
+### 1. Turn on the REST API
 
-**Do not expose the REST API port to the internet.** Allow it only from the panel's host.
+Stop the Palworld server and edit `PalWorldSettings.ini`:
+
+| Platform | File |
+| --- | --- |
+| Linux | `Pal/Saved/Config/LinuxServer/PalWorldSettings.ini` |
+| Windows | `Pal\Saved\Config\WindowsServer\PalWorldSettings.ini` |
+
+If the file is empty, copy `DefaultPalWorldSettings.ini` from the server's root folder into it first.
+Then, inside the `OptionSettings=(...)` line, set these three values (leave the rest as they are):
+
+```ini
+AdminPassword="<a long random password>",RESTAPIEnabled=True,RESTAPIPort=8212
+```
+
+Start the server again. Palworld only reads the file on start, so edits made while it runs are lost.
+
+### 2. Check it answers
+
+From the machine PalOps runs on:
+
+```bash
+curl -u admin:<AdminPassword> http://127.0.0.1:8212/v1/api/info
+```
+
+You should get JSON with the server name and version. Replace `127.0.0.1` with the game server's address if PalOps runs elsewhere.
+A `401` means the password is wrong; no answer means the API is off, the port is different, or a firewall is in the way.
+
+### 3. Add the connection in the panel
+
+Sign in as the owner or an admin, open **Settings → Server connection** and fill in:
+
+| Field | Value |
+| --- | --- |
+| Connection type | **Palworld REST API** |
+| Host | `127.0.0.1` when PalOps runs on the game machine (recommended), otherwise the server's IP or hostname. No `http://` and no port. |
+| REST API port | `RESTAPIPort`, `8212` by default |
+| Username | `admin` |
+| Admin password | The `AdminPassword` from step 1 |
+
+Click **Test connection**, then **Save**. The header badge turns green and the dashboard, players page and public website start showing live data.
+The password is stored encrypted with `PANEL_SECRET`; if you change that secret, enter the password again.
+
+### What PalOps uses the API for
+
+| Endpoint | Used for |
+| --- | --- |
+| `GET /v1/api/info` | Server name, version and description |
+| `GET /v1/api/metrics` | Online status, player count, FPS, uptime, in-game day |
+| `GET /v1/api/players` | Online players (name, level, location, ping); also recorded once a minute for player history |
+| `POST /v1/api/announce` | Broadcasts from the dashboard |
+
+The adapter also supports `kick`, `ban`, `unban`, `save`, `shutdown` and `stop` for the upcoming moderation and control pages.
+The REST API can't start a stopped server, has no console or log access, and doesn't report guilds; those need PalOps on the game machine
+(see [docs/deployment.md](docs/deployment.md)).
+
+### Keep the API private
+
+**Never expose the REST API port to the internet.** Anyone who reaches it with the admin password can kick, ban or shut down the server, and it has no TLS.
+
+- **Same machine (recommended):** use host `127.0.0.1` and block `8212` in the firewall. See [docs/deploy-same-host.md](docs/deploy-same-host.md).
+- **Palworld in Docker:** publish the port as `127.0.0.1:8212:8212`, never `8212:8212`.
+- **PalOps elsewhere (e.g. Railway):** reach the server over Tailscale, WireGuard or another private tunnel, or allow only PalOps' fixed outbound IP. See [docs/deploy-railway.md](docs/deploy-railway.md#reaching-your-palworld-server-from-railway).
+
+### Troubleshooting
+
+| Panel message | What to check |
+| --- | --- |
+| Could not reach the server | `RESTAPIEnabled=True`, the server restarted after the edit, the host and port are right, and the firewall allows PalOps' machine |
+| The server did not respond in time | The server is still starting, or a firewall is silently dropping the port (5 second timeout) |
+| The server rejected the admin credentials | The password doesn't match `AdminPassword`, or the username isn't `admin` |
+| The server returned HTTP 404 | The port belongs to something else, or the Palworld server is too old to have the REST API (update it) |
+
+To try the panel without a server, choose **Mock server** as the connection type (or run `npm run dev`, which connects it for you).
 
 ## Roles
 

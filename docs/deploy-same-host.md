@@ -68,7 +68,7 @@ so the app only listens locally and Caddy is the only way in.
 
 1. Get the setup token: the `PANEL_SETUP_TOKEN` you set, or `docker compose logs palops | grep -i token`.
 2. Open `https://<domain>/panel`, paste the token and click **Continue with Discord**. You're now the owner.
-3. Go to **Settings → Server connection** and enter `http://127.0.0.1:8212` with user `admin` and your admin password.
+3. Go to **Settings → Server connection** and enter host `127.0.0.1`, port `8212`, user `admin` and your admin password (details in the [README](../README.md#connecting-to-palworld)).
 4. Add staff under **Settings → Users** by Discord user ID.
 
 The public website at `https://<domain>/` is live once the connection test passes.
@@ -78,7 +78,7 @@ The public website at `https://<domain>/` is live once the connection test passe
 Many servers use a Palworld container (for example `thijsvanloef/palworld-server-docker`). Two ways to connect:
 
 - **Publish the REST API on localhost only.** In the Palworld service, map it as `"127.0.0.1:8212:8212"`,
-  and keep the panel on `http://127.0.0.1:8212` as above.
+  and keep the panel on host `127.0.0.1`, port `8212` as above.
 - **Share a Docker network.** Drop `network_mode: host` from the `palops` service, put it on the Palworld container's network,
   and use `http://<palworld service name>:8212`. Then publish `127.0.0.1:8080:8080` for the panel so Caddy can still reach it.
 
