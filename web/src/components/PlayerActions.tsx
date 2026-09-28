@@ -23,6 +23,8 @@ import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
+import { usePalDefender } from '../hooks/usePalDefender';
+import { PalDefenderPlayerDialog } from './PalDefenderPlayer';
 import { formatMapPoint, palLabel, SignalChip } from './world';
 
 type Action = 'kick' | 'ban' | 'unban';
@@ -191,6 +193,8 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
   const { data, error, loading, reload } = useApi<PlayerProfile>(`/players/${encodeURIComponent(userId ?? '')}`, { enabled: !!userId });
   const [action, setAction] = useState<Action | null>(null);
   const [ipToBan, setIpToBan] = useState<string | null>(null);
+  const [pdOpen, setPdOpen] = useState(false);
+  const paldefender = usePalDefender();
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -238,8 +242,13 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
         />
         {!player && <Alert severity="info">PalOps hasn’t seen this player online yet.</Alert>}
 
-        {(can('players.kick') || can('players.ban')) && (
-          <Stack direction="row" spacing={1}>
+        {(can('players.kick') || can('players.ban') || (paldefender && can('world.view') && player?.online)) && (
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            {paldefender && can('world.view') && player?.online && (
+              <Button variant="outlined" onClick={() => setPdOpen(true)} title="Inventory, pals, technologies and progression from PalDefender">
+                PalDefender
+              </Button>
+            )}
             {can('players.kick') && player?.online && (
               <Button variant="outlined" onClick={() => setAction('kick')}>
                 Kick
@@ -382,6 +391,7 @@ export function PlayerProfileDialog({ userId, onClose }: { userId: string | null
           <Button onClick={onClose}>Close</Button>
         </DialogActions>
       </Dialog>
+      <PalDefenderPlayerDialog userId={pdOpen ? userId : null} name={name} onClose={() => setPdOpen(false)} />
       <IpBanDialog
         ip={ipToBan ?? ''}
         open={!!ipToBan}

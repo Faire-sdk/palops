@@ -32,6 +32,38 @@ const BANLIST = {
   },
 };
 
+const READS: Record<string, unknown> = {
+  pals: {
+    Meta: { PlayerUID: 'uid-1', Player: 'Anubis', TeamCount: 1 },
+    Pals: {
+      Team: { 'pal-a': { PalID: 'Anubis', Nickname: 'Big A', Gender: 'Male', Level: 40, Shiny: true, HP: 5200, Passives: ['Legend'], ActiveSkills: ['Sand Tornado'], team_slot_index: 0 } },
+      Palbox: { 'pal-b': { PalID: 'Lamball', Level: 3, page: 1, slot: 4 }, 'pal-c': { PalID: 'Cattiva', Level: 5, page: 0, slot: 2 } },
+      BaseCamps: [{ id: 'camp-1', level: 4, state: 'Active', map_pos: { x: 10, y: 20, z: 0 }, pals: { 'pal-d': { PalID: 'Penking', Level: 22, base_camp_slot_index: 3 } } }],
+    },
+  },
+  items: {
+    Meta: { PlayerUID: 'uid-1', Player: 'Anubis' },
+    Inventory: {
+      Items: { Available: true, UsedSlots: 2, MaxSlots: 42, Slots: { '3': { ItemID: 'Money', Count: 900 }, '0': { ItemID: 'Wood', Count: 50 } } },
+      Weapons: { Available: false },
+    },
+  },
+  techs: { Meta: { PlayerUID: 'uid-1', Player: 'Anubis', UnlockedCount: 2, LockedCount: 8, TotalCount: 10 }, Techs: { Unlocked: ['Technology_A', 'Technology_B'] } },
+  progression: { Meta: { PlayerUID: 'uid-1', Player: 'Anubis' }, Progression: { Player: { level: 47, exp: 1000, unusedStatusPoints: 3 }, Currencies: { technologyPoints: 12 } } },
+};
+const GUILDS = { Meta: { GuildCount: 1 }, Guilds: { 'guild-1': { name: 'Desert Kings', Level: 6, admin: { id: 'uid-1', name: 'Anubis' }, camp_count: 1, camps: [{ id: 'camp-1', map_pos: { x: 10, y: 20, z: 0 } }], member_count: 2, members: ['Anubis', 'Sandy'] } } };
+const GUILD = {
+  Guild: {
+    name: 'Desert Kings',
+    Level: 6,
+    admin: { id: 'uid-1', name: 'Anubis' },
+    members: [{ player_uid: 'uid-1', player_name: 'Anubis', status: 'Online' }],
+    camps: [{ id: 'camp-1', level: 4, state: 'Active', map_pos: { x: 10, y: 20, z: 0 } }],
+    items: { container_id: 'c', current: 30, max: 100 },
+    laboratory: { current_research: 'Research_Speed' },
+  },
+};
+
 beforeAll(async () => {
   fake = createServer((req, res) => {
     let raw = '';
@@ -58,6 +90,23 @@ beforeAll(async () => {
       if (path.startsWith('ban/')) return send(200, { Success: true, UserId: decodeURIComponent(path.slice(4)), IP: true, BannedIP: '198.51.100.23', Kicked: 1 });
       if (path.startsWith('banip/')) return send(200, { Success: true, IP: decodeURIComponent(path.slice(6)), UserId: '', Kicked: 0 });
       if (path.startsWith('unban')) return send(200, { Success: true });
+      if (/^(pals|items|techs|progression)\//.test(path)) {
+        if (path.endsWith('steam_offline')) return send(404, { Error: { Code: 'PLAYER_NOT_FOUND', Message: 'No online player matches', Details: {} } });
+        return send(200, READS[path.split('/')[0]!]);
+      }
+      if (path === 'guilds') return send(200, GUILDS);
+      if (path.startsWith('guild/')) return path.endsWith('nope') ? send(404, { Error: { Code: 'GUILD_NOT_FOUND', Message: 'no guild', Details: {} } }) : send(200, GUILD);
+      if (path.startsWith('give/items/')) return send(200, { Granted: { Items: (calls.at(-1)!.body!.Items as unknown[]).length } });
+      if (path.startsWith('give/pals/')) return send(200, { Granted: { Pals: (calls.at(-1)!.body!.Pals as unknown[]).length } });
+      if (path.startsWith('give/paleggs/')) return send(200, { Granted: { PalEggs: 1 } });
+      if (path.startsWith('give/paltemplate/')) return send(200, { Granted: { PalTemplates: 1 } });
+      if (path.startsWith('give/progression/')) return send(200, { Granted: { EXP: 100 }, Totals: { TechnologyPoints: 50 } });
+      if (path.startsWith('learntech/')) return send(200, { UnlockedCount: 1, Unlocked: ['Technology_ElecBaton'], Skipped: [] });
+      if (path.startsWith('forgettech/')) return send(200, { ForgottenCount: 1, Forgotten: 'All', Skipped: [] });
+      if (path.startsWith('summon/')) return send(200, { Summoned: { Type: path.endsWith('npc') ? 'NPC' : 'Pal', Level: 30 } });
+      if (path.startsWith('deletebase/')) return send(200, { BaseCamp: { Id: path.slice(11), Summary: 'Base of Desert Kings' }, Deleted: { Buildings: 12, PalBox: true, Note: 'x' }, Archive: 'Archive/base.json' });
+      if (path === 'SendPlayerMessage') return send(200, { Success: true, SentCount: 1 });
+      if (['Alert', 'Broadcast', 'ReloadConfig'].includes(path)) return send(200, { Success: true });
       return send(404, { Error: { Code: 'NOT_FOUND', Message: 'no such endpoint', Details: {} } });
     });
   });
@@ -170,6 +219,7 @@ describe('PalDefender integration is optional', () => {
       ['REST.Version.Read', true],
       ['REST.Players.Read', true],
       ['REST.Banlist.Read', false],
+      ['REST.Guilds.Read', true],
     ]);
     expect(res.checks[2].message).toContain('REST.Banlist.Read');
 
@@ -278,5 +328,189 @@ describe('with PalDefender switched on', () => {
     failing.set('players', { status: 500, code: 'REQUEST_FAILED' });
     await expect(ctx.services.paldefender.syncPlayers()).rejects.toThrow();
     expect(ctx.services.paldefender.status().error).toContain('REQUEST_FAILED');
+  });
+});
+
+describe('PalDefender player data, guilds and world changes', () => {
+  const OLLIE = 'steam_ollie';
+  const body = (call: Call | undefined) => call?.body as Record<string, unknown>;
+  let owner: string;
+  let admin: string;
+  let mod: string;
+  beforeEach(async () => {
+    owner = await loginAs(ctx.app, ctx.services, 'owner');
+    await enable(owner);
+    admin = await loginAs(ctx.app, ctx.services, 'admin');
+    mod = await loginAs(ctx.app, ctx.services, 'moderator');
+  });
+  const client = () => new PalDefenderClient({ host: '127.0.0.1', port, useTls: false, token: TOKEN });
+
+  it('reads pals, items, techs, progression and guilds into panel types', async () => {
+    const pals = await client().pals(ANUBIS);
+    expect(pals.player).toEqual({ uid: 'uid-1', name: 'Anubis' });
+    expect(pals.team[0]).toMatchObject({ instanceId: 'pal-a', palId: 'Anubis', nickname: 'Big A', level: 40, shiny: true, passives: ['Legend'], slot: 0 });
+    // Box pals are ordered by page, then slot.
+    expect(pals.palbox.map((p) => p.palId)).toEqual(['Cattiva', 'Lamball']);
+    expect(pals.baseCamps[0]).toMatchObject({ id: 'camp-1', level: 4, mapPos: { x: 10, y: 20, z: 0 }, pals: [{ palId: 'Penking', slot: 3 }] });
+
+    const items = await client().items(ANUBIS);
+    expect(items.containers.find((c) => c.name === 'Items')).toMatchObject({ usedSlots: 2, maxSlots: 42, slots: [{ slot: 0, itemId: 'Wood', count: 50 }, { slot: 3, itemId: 'Money', count: 900 }] });
+    expect(items.containers.find((c) => c.name === 'Weapons')).toMatchObject({ available: false, slots: [] });
+
+    expect(await client().techs(ANUBIS)).toMatchObject({ unlocked: ['Technology_A', 'Technology_B'], unlockedCount: 2, lockedCount: 8, totalCount: 10 });
+    expect((await client().progression(ANUBIS)).progression).toMatchObject({ Player: { level: 47 }, Currencies: { technologyPoints: 12 } });
+
+    expect(await client().guilds()).toEqual([
+      { id: 'guild-1', name: 'Desert Kings', level: 6, admin: { id: 'uid-1', name: 'Anubis' }, memberCount: 2, campCount: 1, members: ['Anubis', 'Sandy'], camps: [{ id: 'camp-1', mapPos: { x: 10, y: 20, z: 0 } }] },
+    ]);
+    expect(await client().guild('guild-1')).toMatchObject({ name: 'Desert Kings', storage: { used: 30, max: 100 }, currentResearch: 'Research_Speed', camps: [{ id: 'camp-1', level: 4 }] });
+  });
+
+  it('shows player data to staff, and says so when the player is offline', async () => {
+    expect((await get(mod, `/api/v1/paldefender/players/${ANUBIS}/items`)).json().containers).toHaveLength(2);
+    expect((await get(mod, `/api/v1/paldefender/players/${ANUBIS}/pals`)).json().team).toHaveLength(1);
+    expect((await get(mod, '/api/v1/paldefender/guilds')).json().guilds[0].name).toBe('Desert Kings');
+    expect((await get(mod, '/api/v1/paldefender/guilds/guild-1')).json().guild.name).toBe('Desert Kings');
+
+    const offline = await get(mod, '/api/v1/paldefender/players/steam_offline/techs');
+    expect(offline.statusCode).toBe(404);
+    expect(offline.json().error.code).toBe('paldefender_not_found');
+
+    const viewer = await loginAs(ctx.app, ctx.services, 'viewer');
+    expect((await get(viewer, `/api/v1/paldefender/players/${ANUBIS}/items`)).statusCode).toBe(403);
+    expect((await get(viewer, '/api/v1/paldefender/guilds')).statusCode).toBe(403);
+  });
+
+  it('lets only admins change the game world', async () => {
+    const attempts: Array<[string, Record<string, unknown>]> = [
+      [`/api/v1/paldefender/players/${ANUBIS}/give/items`, { items: [{ itemId: 'Money', count: 5 }] }],
+      [`/api/v1/paldefender/players/${ANUBIS}/give/pals`, { pals: [{ palId: 'Anubis', level: 10 }] }],
+      [`/api/v1/paldefender/players/${ANUBIS}/tech/learn`, { technology: 'All' }],
+      ['/api/v1/paldefender/summon/npc', { npcId: 'PIDF_Soldier', x: 1, y: 2, z: 3 }],
+      ['/api/v1/paldefender/bases/11111111-2222-3333-4444-555555555555/delete', { confirm: true }],
+      ['/api/v1/paldefender/reload-config', {}],
+    ];
+    for (const [url, payload] of attempts) {
+      expect((await post(mod, url, payload)).statusCode, url).toBe(403);
+      expect((await post(admin, url, payload)).statusCode, url).toBe(200);
+    }
+  });
+
+  it('gives items, pals, eggs, templates and progression, and audits each', async () => {
+    const items = await post(admin, `/api/v1/paldefender/players/${ANUBIS}/give/items`, { items: [{ itemId: 'ExplosiveBullet', count: 500 }, { itemId: 'Money', count: 10 }] });
+    expect(items.json()).toEqual({ granted: 2 });
+    expect(body(calls.find((c) => c.path === `give/items/${ANUBIS}`))).toEqual({ Items: [{ ItemID: 'ExplosiveBullet', Count: 500 }, { ItemID: 'Money', Count: 10 }] });
+
+    await post(admin, `/api/v1/paldefender/players/${ANUBIS}/give/pals`, { pals: [{ palId: 'Anubis', level: 35 }] });
+    expect(body(calls.find((c) => c.path.startsWith('give/pals/')))).toEqual({ Pals: [{ PalID: 'Anubis', Level: 35 }] });
+
+    await post(admin, `/api/v1/paldefender/players/${ANUBIS}/give/eggs`, { eggs: [{ eggId: 'PalEgg_Fire_01', palId: 'Foxparks', level: 12 }] });
+    expect(body(calls.find((c) => c.path.startsWith('give/paleggs/')))).toEqual({ PalEggs: [{ EggID: 'PalEgg_Fire_01', PalID: 'Foxparks', Level: 12 }] });
+
+    await post(admin, `/api/v1/paldefender/players/${ANUBIS}/give/templates`, { templates: ['starter_pengullet.json'] });
+    expect(body(calls.find((c) => c.path.startsWith('give/paltemplate/')))).toEqual({ PalTemplates: ['starter_pengullet.json'] });
+
+    const prog = await post(admin, `/api/v1/paldefender/players/${ANUBIS}/give/progression`, { exp: 100, relics: { CapturePower: 5 } });
+    expect(prog.json()).toEqual({ granted: { EXP: 100 }, totals: { TechnologyPoints: 50 } });
+    expect(body(calls.find((c) => c.path.startsWith('give/progression/')))).toEqual({ EXP: 100, Relics: { CapturePower: 5 } });
+
+    const actions = ctx.services.audit.list({ category: 'players', limit: 20, offset: 0 }).entries.map((e) => e.action);
+    expect(actions).toEqual(expect.arrayContaining(['paldefender_give_items', 'paldefender_give_pals', 'paldefender_give_eggs', 'paldefender_give_templates', 'paldefender_give_progression']));
+    expect(ctx.services.audit.list({ category: 'players', limit: 1, offset: 0 }).entries[0]).toMatchObject({ actorUsername: 'admin-user', target: ANUBIS, details: { exp: 100 } });
+  });
+
+  it('teaches and forgets technologies', async () => {
+    const learn = await post(admin, `/api/v1/paldefender/players/${ANUBIS}/tech/learn`, { technology: ['Technology_ElecBaton'] });
+    expect(learn.json()).toEqual({ unlocked: ['Technology_ElecBaton'], skipped: [] });
+    expect(body(calls.at(-1))).toEqual({ Technology: ['Technology_ElecBaton'] });
+    const forget = await post(admin, `/api/v1/paldefender/players/${ANUBIS}/tech/forget`, { technology: 'All' });
+    expect(forget.json()).toEqual({ forgotten: ['All'], skipped: [] });
+    expect(body(calls.at(-1))).toEqual({ Technology: 'All' });
+  });
+
+  it('summons pals and NPCs', async () => {
+    const pal = await post(admin, '/api/v1/paldefender/summon/pal', { palId: 'Anubis', x: 230, y: -486, z: 4097, level: 30, uncapturable: true, disableStatuses: ['Burn'] });
+    expect(pal.json().summoned).toMatchObject({ Type: 'Pal' });
+    expect(body(calls.at(-1))).toEqual({ PalID: 'Anubis', X: 230, Y: -486, Z: 4097, Level: 30, Uncapturable: true, DisableAI: false, DisableDamageMeter: false, DisableStatuses: ['Burn'] });
+
+    await post(admin, '/api/v1/paldefender/summon/pal', { palTemplate: 'ArenaBoss.json', x: 1, y: 2, z: 3 });
+    expect(body(calls.at(-1))).toMatchObject({ PalTemplate: 'ArenaBoss.json' });
+    expect(body(calls.at(-1))).not.toHaveProperty('PalID');
+
+    await post(admin, '/api/v1/paldefender/summon/npc', { npcId: 'PIDF_Soldier_AssaultRifle', level: 30, x: 230, y: -486, z: 4097 });
+    expect(body(calls.at(-1))).toEqual({ NPCID: 'PIDF_Soldier_AssaultRifle', X: 230, Y: -486, Z: 4097, Level: 30, Uncapturable: false, DisableAI: false });
+  });
+
+  it('deletes a base only when confirmed, and audits what was removed', async () => {
+    const url = '/api/v1/paldefender/bases/11111111-2222-3333-4444-555555555555/delete';
+    expect((await post(admin, url, {})).statusCode).toBe(400);
+    expect(calls.some((c) => c.path.startsWith('deletebase/'))).toBe(false);
+
+    const res = (await post(admin, url, { confirm: true })).json();
+    expect(res).toEqual({ id: '11111111-2222-3333-4444-555555555555', summary: 'Base of Desert Kings', deleted: { Buildings: 12, PalBox: true }, archive: 'Archive/base.json' });
+    const entry = ctx.services.audit.list({ category: 'server', limit: 1, offset: 0 }).entries[0]!;
+    expect(entry.action).toBe('paldefender_base_deleted');
+  });
+
+  it('rejects bad input before it reaches PalDefender', async () => {
+    const bad: Array<[string, Record<string, unknown>]> = [
+      [`/players/${ANUBIS}/give/items`, { items: [{ itemId: 'Money', count: 0 }] }],
+      [`/players/${ANUBIS}/give/items`, { items: [{ itemId: '../etc', count: 1 }] }],
+      [`/players/${ANUBIS}/give/items`, { items: [] }],
+      [`/players/${ANUBIS}/give/pals`, { pals: [{ palId: 'Anubis', level: 0 }] }],
+      [`/players/${ANUBIS}/give/eggs`, { eggs: [{ eggId: 'Egg', palId: 'A', palTemplate: 'b.json' }] }],
+      [`/players/${ANUBIS}/give/progression`, {}],
+      [`/players/${ANUBIS}/give/progression`, { relics: { NotARelic: 1 } }],
+      [`/players/${ANUBIS}/tech/learn`, { technology: ['All'] }],
+      [`/players/${ANUBIS}/tech/wipe`, { technology: 'All' }],
+      ['/summon/pal', { palId: 'A', palTemplate: 'b.json', x: 0, y: 0, z: 0 }],
+      ['/summon/pal', { x: 0, y: 0, z: 0 }],
+      ['/summon/npc', { npcId: 'N', x: 'far', y: 0, z: 0 }],
+      ['/message', { sendType: 'Shout', message: 'hi', userIds: [ANUBIS] }],
+    ];
+    for (const [url, payload] of bad) expect((await post(admin, `/api/v1/paldefender${url}`, payload)).statusCode, url).toBe(400);
+    expect(calls).toEqual([]);
+  });
+
+  it('passes PalDefender refusals on with its own explanation', async () => {
+    failing.set('give', { status: 400, code: 'VALIDATION_FAILED' });
+    const res = await post(admin, `/api/v1/paldefender/players/${ANUBIS}/give/items`, { items: [{ itemId: 'Nonsense', count: 1 }] });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toMatchObject({ code: 'paldefender_rejected', message: 'VALIDATION_FAILED happened' });
+    // Nothing was granted, so nothing is audited as given.
+    expect(ctx.services.audit.list({ category: 'players', limit: 5, offset: 0 }).entries.some((e) => e.action === 'paldefender_give_items')).toBe(false);
+  });
+
+  it('sends alerts, chat broadcasts and player messages with the right permissions', async () => {
+    expect((await post(mod, '/api/v1/paldefender/alert', { message: 'Restart soon' })).statusCode).toBe(403);
+    expect((await post(admin, '/api/v1/paldefender/alert', { message: 'Restart soon' })).statusCode).toBe(200);
+    expect(body(calls.at(-1))).toEqual({ Message: 'Restart soon' });
+    expect((await post(admin, '/api/v1/paldefender/broadcast', { message: 'Hello all' })).statusCode).toBe(200);
+    expect(calls.at(-1)!.path).toBe('Broadcast');
+
+    // Moderators can message players, one or several.
+    expect((await post(mod, '/api/v1/paldefender/message', { sendType: 'PlayerLogImportant', message: 'Please move your base', userIds: [ANUBIS] })).json()).toEqual({ sent: 1 });
+    expect(body(calls.at(-1))).toEqual({ SendType: 'PlayerLogImportant', Message: 'Please move your base', UserID: ANUBIS });
+    await post(mod, '/api/v1/paldefender/message', { sendType: 'PlayerChat', message: 'hi', userIds: [ANUBIS, OLLIE] });
+    expect(body(calls.at(-1))).toEqual({ SendType: 'PlayerChat', Message: 'hi', UserIDs: [ANUBIS, OLLIE] });
+
+    // A token without the message-type permission is told which one.
+    failing.set('SendPlayerMessage', { status: 403, code: 'MISSING_PERMISSION' });
+    const denied = await post(mod, '/api/v1/paldefender/message', { sendType: 'PlayerGuildChat', message: 'x', userIds: [ANUBIS] });
+    expect(denied.statusCode).toBe(502);
+    expect(denied.json().error.message).toContain('REST.Messages.Send.GuildChat');
+  });
+
+  it('reloads the PalDefender config', async () => {
+    expect((await post(admin, '/api/v1/paldefender/reload-config')).json()).toEqual({ ok: true });
+    expect(calls.at(-1)).toMatchObject({ method: 'POST', path: 'ReloadConfig' });
+  });
+
+  it('is unavailable while the integration is switched off', async () => {
+    await put(owner, '/api/v1/paldefender/settings', { enabled: false, host: '127.0.0.1', port, useTls: false });
+    calls = [];
+    expect((await get(mod, `/api/v1/paldefender/players/${ANUBIS}/items`)).statusCode).toBe(409);
+    expect((await post(admin, '/api/v1/paldefender/reload-config')).statusCode).toBe(409);
+    expect(calls).toEqual([]);
   });
 });

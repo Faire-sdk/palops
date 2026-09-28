@@ -11,7 +11,7 @@ import { PalworldError } from './services/palworld/index.js';
 import { HttpError } from './utils/errors.js';
 
 const PALWORLD_STATUS: Record<string, number> = { not_configured: 409, unreachable: 503 };
-const PALDEFENDER_STATUS: Record<string, number> = { not_configured: 409, unreachable: 503, not_found: 404 };
+const PALDEFENDER_STATUS: Record<string, number> = { not_configured: 409, unreachable: 503, not_found: 404, rejected: 422 };
 
 export async function buildApp(services: Services): Promise<FastifyInstance> {
   const { config } = services;

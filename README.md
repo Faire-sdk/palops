@@ -243,8 +243,8 @@ The REST API can't start a stopped server, change settings, list bans made elsew
 
 ### Optional: PalDefender
 
-If your Windows server runs the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin, PalOps can mirror bans (including IP bans) to it, show its ban list
-and read player addresses from it. It's off by default and PalOps doesn't need it. See [docs/paldefender.md](docs/paldefender.md).
+If your Windows server runs the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin, PalOps can mirror bans (including IP bans) to it, show its ban list,
+player inventories, pals, guilds and bases, and let admins give items and pals, teach technologies, summon, delete bases and send messages. It's off by default and PalOps doesn't need it. See [docs/paldefender.md](docs/paldefender.md).
 
 ### Keep the API private
 
@@ -348,6 +348,11 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/paldefender/status` | `players.view` |
 | GET | `/paldefender/banlist` | `world.view` (PalDefender's ban list) |
 | POST | `/paldefender/unban`, `/paldefender/unbanip` | `players.ban` (lift an entry from PalDefender's list) |
+| GET | `/paldefender/players/:userId/pals`, `/items`, `/techs`, `/progression`; `/paldefender/guilds`, `/guilds/:id` | `world.view` (online players only) |
+| POST | `/paldefender/players/:userId/give/{items,pals,eggs,templates,progression}`, `/tech/{learn,forget}` | `paldefender.manage` |
+| POST | `/paldefender/summon/{pal,npc}`, `/paldefender/bases/:id/delete`, `/paldefender/reload-config` | `paldefender.manage` |
+| POST | `/paldefender/alert`, `/paldefender/broadcast` | `server.broadcast` |
+| POST | `/paldefender/message` | `players.kick` (chat or log messages to chosen players) |
 | GET | `/config` | `config.view` (live settings from the REST API) |
 | GET | `/world/status`, `/world/guilds`, `/world/guilds/:guildId` | `players.view` (world data state, guilds and their members) |
 | GET | `/world/map`, `/world/bases`, `/world/signals`, `/world/performance` | `world.view` (positions, bases, cheat signals, FPS and hotspots) |

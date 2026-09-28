@@ -26,7 +26,13 @@ const TOKEN_FILE = `{
     "REST.Punishments.Ban",
     "REST.Punishments.Unban",
     "REST.Punishments.BanIP",
-    "REST.Punishments.UnbanIP"
+    "REST.Punishments.UnbanIP",
+    "REST.Guilds.Read",
+    "REST.Guild.Read",
+    "REST.Pals.Read",
+    "REST.Items.Read",
+    "REST.Techs.Read",
+    "REST.Progression.Read"
   ]
 }`;
 
@@ -133,7 +139,7 @@ export function PalDefenderSettingsTab() {
                   </Alert>
                 ))}
                 <Typography variant="body2" color="text.secondary">
-                  Banning and unbanning can’t be tested without doing it, so make sure the token also has the four <Mono>REST.Punishments.*</Mono> permissions below.
+                  Banning, giving and the other actions can’t be tested without doing them, so make sure the token has the permissions for the features you use (listed in the setup guide).
                 </Typography>
               </Stack>
             )}
@@ -156,7 +162,7 @@ export function PalDefenderSettingsTab() {
               In <Mono>Win64/PalDefender/RESTAPI/RESTConfig.json</Mono>, set <Mono>"Enabled": true</Mono> and restart the server. The API listens on port <Mono>17993</Mono>.
             </li>
             <li>
-              Add a token file in <Mono>Win64/PalDefender/RESTAPI/Tokens/</Mono> with only what PalOps needs:
+              Add a token file in <Mono>Win64/PalDefender/RESTAPI/Tokens/</Mono>. This gives PalOps the reads and bans; add more (give, summon, messages…) only for what you’ll use, see the setup guide:
               <Box component="pre" sx={{ m: 0, mt: 1, p: 1.5, borderRadius: 1, bgcolor: 'action.hover', fontSize: 12, overflowX: 'auto' }}>
                 {TOKEN_FILE}
               </Box>
@@ -164,8 +170,8 @@ export function PalDefenderSettingsTab() {
             <li>Keep the port private. PalDefender’s API is meant for the same machine; for anything else, put a TLS reverse proxy in front.</li>
           </Box>
           <Typography variant="body2" color="text.secondary">
-            When on, bans made in PalOps are also made in PalDefender (including IP bans), PalDefender’s ban list appears on the Players → Bans tab, and player
-            addresses (including offline players) are read from it. The official REST API stays the source of truth: if PalDefender is unreachable, PalOps still bans
+            When on, bans made in PalOps are also made in PalDefender (including IP bans), PalDefender’s ban list appears on the Players → Bans tab, player
+            addresses (including offline players) are read from it, and a PalDefender page and player panel add inventories, pals, guilds and bases, giving, summoning and messages. The official REST API stays the source of truth: if PalDefender is unreachable, PalOps still bans
             and tells you PalDefender didn’t. The token is encrypted at rest and never sent back to the browser.
           </Typography>
         </Section>

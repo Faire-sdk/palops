@@ -19,6 +19,7 @@ export type Permission =
   | 'logs.view'
   | 'audit.view'
   | 'backups.manage'
+  | 'paldefender.manage'
   | 'users.manage';
 
 export interface User {
@@ -311,3 +312,70 @@ export interface PalDefenderBan {
   bannedAt: string | null;
   unbannedAt: string | null;
 }
+
+export interface PdPal {
+  instanceId: string;
+  palId: string;
+  nickname: string | null;
+  gender: string | null;
+  level: number | null;
+  shiny: boolean;
+  hp: number | null;
+  passives: string[];
+  activeSkills: string[];
+  slot: number | null;
+  page: number | null;
+}
+
+export interface PdPals {
+  player: { uid: string | null; name: string | null };
+  team: PdPal[];
+  palbox: PdPal[];
+  baseCamps: Array<{ id: string; level: number | null; state: string | null; mapPos: MapPoint | null; pals: PdPal[] }>;
+}
+
+export interface PdItems {
+  player: { uid: string | null; name: string | null };
+  containers: Array<{ name: string; available: boolean; usedSlots: number | null; maxSlots: number | null; slots: Array<{ slot: number; itemId: string; count: number }> }>;
+}
+
+export interface PdTechs {
+  unlocked: string[];
+  unlockedCount: number;
+  lockedCount: number;
+  totalCount: number;
+}
+
+export interface PdProgression {
+  progression: Record<string, unknown>;
+}
+
+export interface PdGuildSummary {
+  id: string;
+  name: string;
+  level: number | null;
+  admin: { id: string; name: string } | null;
+  memberCount: number;
+  campCount: number;
+}
+
+export interface PdGuild {
+  name: string;
+  level: number | null;
+  admin: { id: string; name: string } | null;
+  members: Array<{ uid: string; name: string; status: string | null }>;
+  camps: Array<{ id: string; level: number | null; state: string | null; mapPos: MapPoint | null }>;
+  storage: { used: number; max: number } | null;
+  currentResearch: string | null;
+}
+
+export const PD_RELICS = ['CapturePower', 'HungerReduction', 'SwimSpeed', 'FoodDecayReduction', 'JumpPower', 'GliderSpeed', 'ClimbSpeed', 'StatusAilmentResist', 'StaminaReduction', 'SphereHoming', 'ExpBonus', 'RainbowPassiveRate', 'MoveSpeed'] as const;
+
+export const PD_MESSAGE_TYPES = [
+  { id: 'PlayerChat', label: 'Chat message to them' },
+  { id: 'PlayerGlobalChat', label: 'Global chat message' },
+  { id: 'PlayerGuildChat', label: 'Guild chat message' },
+  { id: 'PlayerLogNormal', label: 'Log line (normal)' },
+  { id: 'PlayerLogImportant', label: 'Log line (important)' },
+  { id: 'PlayerLogVeryImportant', label: 'Log line (very important)' },
+] as const;

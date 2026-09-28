@@ -151,6 +151,7 @@ export class PalDefenderService {
       await run('Version', 'REST.Version.Read', async () => (version = await client.version())),
       await run('Player list', 'REST.Players.Read', () => client.players()),
       await run('Ban list', 'REST.Banlist.Read', () => client.banlist({ activeOnly: true })),
+      await run('Guild list', 'REST.Guilds.Read', () => client.guilds()),
     ];
     return { version, checks };
   }

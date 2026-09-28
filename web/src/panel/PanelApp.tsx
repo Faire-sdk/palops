@@ -11,6 +11,7 @@ import { ComingSoonPage } from '../pages/ComingSoonPage';
 import { ConfigurationPage } from '../pages/ConfigurationPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { LogsPage } from '../pages/LogsPage';
+import { PalDefenderPage } from '../pages/PalDefenderPage';
 import { PlayersPage } from '../pages/PlayersPage';
 import { ServerPage } from '../pages/ServerPage';
 import { SettingsPage } from '../pages/SettingsPage';
@@ -45,6 +46,7 @@ function PanelRoutes() {
           path="console"
           element={<Guard permission="console.view"><ComingSoonPage title="Console" icon={TerminalIcon} description="The Palworld REST API has no console. Commands will come with RCON support or PalOps running on the game machine." /></Guard>}
         />
+        <Route path="paldefender" element={<Guard permission="world.view"><PalDefenderPage /></Guard>} />
         <Route path="server" element={<Guard permission="server.control"><ServerPage /></Guard>} />
         <Route path="configuration" element={<Guard permission="config.view"><ConfigurationPage /></Guard>} />
         <Route path="logs" element={<Guard permission="audit.view"><LogsPage /></Guard>} />

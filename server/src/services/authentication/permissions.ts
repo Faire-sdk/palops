@@ -22,6 +22,8 @@ export const PERMISSIONS = [
   'logs.view',
   'audit.view',
   'backups.manage',
+  /** Changes to the game world through the optional PalDefender integration: give, summon, techs, base deletion. */
+  'paldefender.manage',
   'users.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];

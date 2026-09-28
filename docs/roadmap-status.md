@@ -38,8 +38,8 @@ From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 sec
 ## PalDefender (optional)
 
 An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin for Windows servers, off unless an owner turns it on
-in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, and player addresses (including offline players)
-synced from it. See [paldefender.md](paldefender.md).
+in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, player addresses synced from it, and a PalDefender page
+and player panel for inventories, pals, technologies, progression, guilds and bases, giving, summoning, base deletion, config reload and messages. See [paldefender.md](paldefender.md).
 
 ## Discord bot (planned)
 
