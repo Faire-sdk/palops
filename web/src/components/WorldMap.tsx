@@ -8,7 +8,7 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import { useTheme } from '@mui/material/styles';
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
-import type { MapPoint, WorldMapData } from '../api/types';
+import type { MapImage, MapPoint, WorldMapData } from '../api/types';
 import { palLabel, useGuildColor } from './world';
 
 export type Layer = 'players' | 'bases' | 'basePals' | 'partyPals' | 'wildPals' | 'npcs';
@@ -34,6 +34,8 @@ const GRID = 200;
 const MIN_WIDTH = 40;
 const MAX_WIDTH = 3000;
 
+export const mapImageUrl = (image: MapImage) => `/api/v1/world/map-image/file?v=${encodeURIComponent(image.updatedAt)}`;
+
 /** Fits a view around the given points, never smaller than the main island. */
 function fit(points: MapPoint[]): View {
   const xs = [-WORLD, WORLD, ...points.map((p) => p.x)];
@@ -43,8 +45,8 @@ function fit(points: MapPoint[]): View {
 }
 
 /**
- * A live map drawn in in-game map coordinates (north up). There's no terrain
- * image: the game's map art isn't PalOps's to ship. Scroll or pinch to zoom,
+ * A live map drawn in in-game map coordinates (north up), over the map image
+ * an owner uploaded (PalOps doesn't ship the game's map art). Scroll to zoom,
  * drag to pan; markers keep their size at any zoom.
  */
 export function WorldMap({
@@ -52,8 +54,10 @@ export function WorldMap({
   focus,
   onPlayer,
   onBase,
+  background,
 }: {
   map: WorldMapData;
+  background?: MapImage | null;
   focus?: MapPoint | null;
   onPlayer?: (userId: string) => void;
   onBase?: (baseId: number) => void;
@@ -63,7 +67,11 @@ export function WorldMap({
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [layers, setLayers] = useState<Set<Layer>>(new Set(['players', 'bases', 'partyPals', 'basePals']));
-  const allPoints = useMemo(() => [...map.players, ...map.bases].map((p) => p.at), [map]);
+  const allPoints = useMemo(() => {
+    const points = [...map.players, ...map.bases].map((p) => p.at);
+    if (background) points.push({ x: background.bounds.left, y: background.bounds.top }, { x: background.bounds.right, y: background.bounds.bottom });
+    return points;
+  }, [map, background]);
   const [view, setView] = useState<View>(() => (focus ? { cx: focus.x, cy: focus.y, width: 300 } : fit(allPoints)));
   const drag = useRef<{ x: number; y: number; view: View; moved: boolean } | null>(null);
 
@@ -195,7 +203,17 @@ export function WorldMap({
         }}
       >
         <svg width="100%" height="100%" viewBox={viewBox} role="img" aria-label="World map">
-          {gridLines}
+          {background && (
+            <image
+              href={mapImageUrl(background)}
+              x={background.bounds.left}
+              y={-background.bounds.top}
+              width={background.bounds.right - background.bounds.left}
+              height={background.bounds.top - background.bounds.bottom}
+              preserveAspectRatio="none"
+            />
+          )}
+          <g opacity={background ? 0.35 : 1}>{gridLines}</g>
           {layers.has('wildPals') &&
             pal('WildPal').map((p, i) => (
               <circle key={`w${i}`} cx={p.at.x} cy={-p.at.y} r={r(2.5)} fill={theme.vars!.palette.text.disabled}>

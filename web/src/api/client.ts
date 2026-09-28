@@ -29,9 +29,10 @@ export async function request<T>(method: string, path: string, body?: unknown): 
         Accept: 'application/json',
         // Required by the server on state-changing requests (CSRF defence).
         'X-PalOps-CSRF': '1',
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        // Files go up as the raw body with their own type; everything else is JSON.
+        ...(body instanceof Blob ? { 'Content-Type': body.type } : body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body instanceof Blob ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
     throw new ApiError(0, 'network', 'Could not reach the panel. Check your connection.');
@@ -51,6 +52,7 @@ export const api = {
   post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  delete: <T>(path: string) => request<T>('DELETE', path),
 };
 
 export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong');

@@ -29,7 +29,7 @@ Character links are unverified for now; verification needs staff review or an in
 From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 seconds:
 
 - Guilds with members and bases, also filling in guilds on player lists, profiles and the public site.
-- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates. There's no terrain image, since the game's map art isn't ours to ship.
+- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
 - Bases with their worker pals, levels and HP, and injured workers flagged.
 - Pals seen with each player, kept for 30 days.
 - Cheat signals: unusual movement, level jumps and players sharing an address, with dismissal recorded in the audit log.

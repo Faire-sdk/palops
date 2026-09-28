@@ -1,3 +1,4 @@
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import Box from '@mui/material/Box';
@@ -22,10 +23,11 @@ import { useTheme } from '@mui/material/styles';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import type { Base, GuildDetail, Guild, MapPoint, WorkerPal, WorldMapData, WorldPerformance, WorldStatus } from '../api/types';
+import type { Base, GuildDetail, Guild, MapImage, MapPoint, WorkerPal, WorldMapData, WorldPerformance, WorldStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, PageHeader, Section, Stat } from '../components/common';
 import { DataTable } from '../components/DataTable';
+import { MapImageDialog } from '../components/MapImageDialog';
 import { PlayerProfileDialog } from '../components/PlayerActions';
 import { useToast } from '../components/Toast';
 import { WorldMap } from '../components/WorldMap';
@@ -105,17 +107,47 @@ export function WorldPage() {
 }
 
 function MapTab({ focus, onPlayer, onBase }: { focus: MapPoint | null; onPlayer: (id: string) => void; onBase: (id: number) => void }) {
+  const { can } = useAuth();
   const { data, error, loading, reload } = useApi<{ status: WorldStatus; map: WorldMapData | null }>('/world/map', { pollMs: 20000 });
+  const { data: imageData } = useApi<{ image: MapImage | null }>('/world/map-image');
+  const [editing, setEditing] = useState(false);
+  const image = imageData?.image ?? null;
+  const editor = can('config.edit') && (
+    <>
+      <Button variant="outlined" startIcon={<ImageOutlinedIcon />} onClick={() => setEditing(true)}>
+        {image ? 'Map image' : 'Add map image'}
+      </Button>
+      <MapImageDialog open={editing} onClose={() => setEditing(false)} image={image} map={data?.map ?? null} />
+    </>
+  );
   if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorState error={error} onRetry={reload} />;
-  if (!data?.map) return <Section><EmptyState icon={MapOutlinedIcon} title="No world snapshot yet" /></Section>;
+  if (!data?.map) {
+    return (
+      <Section action={editor}>
+        <EmptyState icon={MapOutlinedIcon} title="No world snapshot yet" />
+      </Section>
+    );
+  }
   const map = data.map;
   return (
     <Grid container spacing={2}>
       <Grid size={{ xs: 12, lg: 9 }}>
         <Section disablePadding>
           <Box sx={{ p: 2 }}>
-            <WorldMap map={map} focus={focus} onPlayer={onPlayer} onBase={onBase} />
+            {(editor || (image && !image.aligned)) && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5, alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">
+                  {!image
+                    ? 'Upload a picture of the Palworld map to draw it under the markers.'
+                    : image.aligned
+                      ? ''
+                      : 'The map image isn’t lined up yet, so markers may not match it.'}
+                </Typography>
+                {editor}
+              </Stack>
+            )}
+            <WorldMap map={map} focus={focus} onPlayer={onPlayer} onBase={onBase} background={image} />
             {map.truncated && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 Only the first 3,000 wild pals are drawn.

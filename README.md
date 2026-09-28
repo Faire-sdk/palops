@@ -217,6 +217,11 @@ Guilds, bases, the live map, pals, cheat signals and lag hotspots come from the 
 PalOps reads a snapshot every 20 seconds (`WORLD_POLL_SECONDS`, `0` turns it off). Without the flag everything else
 keeps working, and the **World** page explains how to switch it on.
 
+**Map image.** PalOps doesn't ship the game's map art, so the live map starts as a coordinate grid. An owner or admin can
+add a picture of the Palworld map (a screenshot of the in-game map works) with **World → Map → Add map image**, then
+line it up by clicking two spots on it and giving their in-game coordinates, or picking a base or player PalOps knows.
+The image is stored next to the database and only staff who can see the map can load it.
+
 Positions and IP addresses from the snapshot are staff-only. The public website shows guild names with member and base
 counts, and only when `SITE_SHOW_ONLINE_PLAYERS` is on.
 
@@ -337,6 +342,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/world/map`, `/world/bases`, `/world/signals`, `/world/performance` | `world.view` (positions, bases, cheat signals, FPS and hotspots) |
 | POST | `/world/refresh` | `world.view` (read a snapshot now) |
 | POST | `/world/signals/:id/dismiss` | `players.note` |
+| GET | `/world/map-image`, `/world/map-image/file` | `world.view` (the live map's background and its alignment) |
+| PUT/PATCH/DELETE | `/world/map-image` | `config.edit` (upload as a raw PNG/JPEG/WebP body up to 25 MB, align, remove) |
 | GET | `/logs/audit` | `audit.view` |
 | GET | `/public/server`, `/public/players`, `/public/guilds` | public, CORS open, no IPs, platform IDs or positions |
 | GET | `/site/me` | player signed in on the website |
