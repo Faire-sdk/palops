@@ -11,6 +11,7 @@ import { api, errorMessage } from '../api/client';
 import type { ConsoleSettings, LoggerStatus, PathCheck, TailStatus } from '../api/types';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
+import { usePalDefender } from '../hooks/usePalDefender';
 import { ErrorState, Loading, Mono, Section } from './common';
 import { useToast } from './Toast';
 
@@ -24,6 +25,7 @@ interface Form {
 /** Where the Console page reads the game's and PalDefender's log files from. Owners only. */
 export function ConsoleSettingsTab() {
   const notify = useToast();
+  const pd = usePalDefender();
   const { data, error, loading, reload } = useApi<{ settings: ConsoleSettings; sources: TailStatus[]; logger: LoggerStatus }>('/console/settings', { pollMs: 10000 });
   const [form, setForm] = useState<Form>({ tailEnabled: false, gameLogPath: '', paldefenderLogPath: '', logger: { enabled: false, host: '127.0.0.1', port: '8765', tls: false, token: '' } });
   const [checks, setChecks] = useState<PathCheck[]>();
@@ -85,7 +87,7 @@ export function ConsoleSettingsTab() {
             }}
           >
             <Typography variant="body2" color="text.secondary">
-              The Console page always shows what the panel sees. To add the game’s own log and PalDefender’s log, point PalOps at where they’re written. This needs PalOps to run on the
+              The Console page always shows what the panel sees. To add the game’s own log{pd ? ' and PalDefender’s log' : ''}, point PalOps at where {pd ? 'they’re' : 'it’s'} written. This needs PalOps to run on the
               game machine (or to have the folders mounted).
             </Typography>
             <FormControlLabel control={<Switch checked={form.tailEnabled} onChange={(e) => setForm({ ...form, tailEnabled: e.target.checked })} />} label="Follow these log files" />
@@ -96,13 +98,15 @@ export function ConsoleSettingsTab() {
               placeholder="C:\PalServer\Pal\Saved\Logs"
               helperText="Palworld usually writes Pal.log in Pal/Saved/Logs"
             />
-            <TextField
-              label="PalDefender log folder"
-              value={form.paldefenderLogPath}
-              onChange={(e) => setForm({ ...form, paldefenderLogPath: e.target.value })}
-              placeholder="C:\PalServer\Pal\Binaries\Win64\PalDefender\Logs"
-              helperText="PalDefender’s docs place its logs in Pal/Binaries/Win64/PalDefender/Logs"
-            />
+            {pd && (
+              <TextField
+                label="PalDefender log folder"
+                value={form.paldefenderLogPath}
+                onChange={(e) => setForm({ ...form, paldefenderLogPath: e.target.value })}
+                placeholder="C:\PalServer\Pal\Binaries\Win64\PalDefender\Logs"
+                helperText="PalDefender’s docs place its logs in Pal/Binaries/Win64/PalDefender/Logs"
+              />
+            )}
             <Stack direction="row" spacing={1}>
               <Button variant="contained" type="submit" loading={busy === 'save'}>
                 Save
@@ -150,13 +154,13 @@ export function ConsoleSettingsTab() {
                   : (data.logger.message ?? 'connecting…')}
               </Alert>
             )}
-            {checks?.map((c) => (
+            {checks?.filter((c) => c.source === 'game' || pd).map((c) => (
               <Alert key={c.source} severity={c.ok ? 'success' : 'error'}>
                 {c.source === 'game' ? 'Game log' : 'PalDefender log'}: {c.ok ? `found a ${c.kind}` : c.message}
               </Alert>
             ))}
             {data?.settings.tailEnabled &&
-              data.sources.map((s) => (
+              data.sources.filter((s) => s.source === 'game' || pd).map((s) => (
                 <Alert key={s.source} severity={s.state === 'watching' ? 'info' : 'warning'} icon={false}>
                   {s.source === 'game' ? 'Game log' : 'PalDefender log'}:{' '}
                   {s.state === 'watching'
@@ -172,7 +176,7 @@ export function ConsoleSettingsTab() {
           <Typography variant="body2" color="text.secondary" component="div">
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               <li>
-                It’s <strong>view only</strong>. Palworld has deprecated RCON, so there’s no command box; use the Players, Server and PalDefender pages instead.
+                It’s <strong>view only</strong>. Palworld has deprecated RCON, so there’s no command box; use the Players and Server pages{pd ? ' and PalDefender’s' : ''} instead.
               </li>
               <li>
                 Only <Mono>.log</Mono>, <Mono>.txt</Mono> and <Mono>.out</Mono> files are read. Point at a folder to follow every one changed in the last day.
@@ -181,7 +185,7 @@ export function ConsoleSettingsTab() {
               <li>
                 In Docker, mount the log folders read-only into the PalOps container and enter the path as the container sees it, e.g. <Mono>/logs/palworld</Mono>.
               </li>
-              <li>Anyone who can see the Console (admins and owners) can read what these files contain, including player names and addresses PalDefender logs.</li>
+              <li>Anyone who can see the Console (admins and owners) can read what these files contain, including player names{pd ? ' and the addresses PalDefender logs' : ''}.</li>
             </ul>
           </Typography>
         </Section>

@@ -19,6 +19,7 @@ import { api } from '../api/client';
 import type { ConsoleLevel, ConsoleLine, ConsoleSource, LoggerStatus, TailStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { PageHeader, Section } from '../components/common';
+import { usePalDefender } from '../hooks/usePalDefender';
 
 const SOURCES: Array<{ id: ConsoleSource; label: string }> = [
   { id: 'game', label: 'Game log' },
@@ -41,6 +42,8 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour
  * what people usually type.
  */
 export function ConsolePage() {
+  const pd = usePalDefender();
+  const sourceLabel = (source: ConsoleSource) => (source === 'paldefender' && !pd ? 'log' : SOURCE_LABEL[source]);
   const { can } = useAuth();
   const [sources, setSources] = useState<Set<ConsoleSource>>(new Set(['game', 'paldefender', 'panel']));
   const [level, setLevel] = useState<'all' | ConsoleLevel>('all');
@@ -135,7 +138,7 @@ export function ConsolePage() {
   };
 
   const download = () => {
-    const text = lines.filter(matches).map((l) => `${l.at} [${SOURCE_LABEL[l.source]}] ${l.message}`).join('\n');
+    const text = lines.filter(matches).map((l) => `${l.at} [${sourceLabel(l.source)}] ${l.message}`).join('\n');
     const url = URL.createObjectURL(new Blob([text + '\n'], { type: 'text/plain' }));
     const a = document.createElement('a');
     a.href = url;
@@ -158,20 +161,20 @@ export function ConsolePage() {
 
   return (
     <>
-      <PageHeader title="Console" description="A view-only feed of the server’s logs and what the panel sees. To act on the server, use Players, Server and PalDefender." />
+      <PageHeader title="Console" description={`A view-only feed of the server’s logs and what the panel sees. To act on the server, use Players, Server${pd ? ' and PalDefender' : ''}.`} />
       {noFiles && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Only panel events (joins, bans, signals, admin actions) are shown so far.{' '}
           {can('server.connection') ? (
             <>
-              To see the game’s and PalDefender’s log files too, set their locations in{' '}
+              To see the game’s{pd ? ' and PalDefender’s' : ''} log file too, set its location in{' '}
               <Link component={RouterLink} to="/settings?tab=console">
                 Settings → Console logs
               </Link>
               .
             </>
           ) : (
-            'An owner can point PalOps at the game and PalDefender log files in Settings.'
+            `An owner can point PalOps at the game${pd ? ' and PalDefender' : ''} log file in Settings.`
           )}
         </Alert>
       )}
@@ -182,13 +185,13 @@ export function ConsolePage() {
       )}
       {missing.map((t) => (
         <Alert key={t.source} severity="warning" sx={{ mb: 2 }}>
-          The {SOURCE_LABEL[t.source]} log location can’t be read right now. Check that the server is running on this machine and the path still exists.
+          The {sourceLabel(t.source)} log location can’t be read right now. Check that the server is running on this machine and the path still exists.
         </Alert>
       ))}
       <Section disablePadding>
         <Stack spacing={1.5} sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
-            {SOURCES.map((s) => (
+            {SOURCES.filter((s) => s.id !== 'paldefender' || pd).map((s) => (
               <Chip key={s.id} label={s.label} color={sources.has(s.id) ? 'primary' : 'default'} variant={sources.has(s.id) ? 'filled' : 'outlined'} onClick={() => toggle(s.id)} />
             ))}
             <Chip
@@ -238,7 +241,7 @@ export function ConsolePage() {
               visible.map((l) => (
                 <Box key={l.id} sx={{ display: 'flex', gap: 1.5, alignItems: 'baseline', color: l.level === 'error' ? 'error.main' : l.level === 'warn' ? 'warning.main' : 'text.primary' }}>
                   <Box component="span" sx={{ color: 'text.secondary', flexShrink: 0 }}>{time(l.at)}</Box>
-                  <Box component="span" sx={{ width: 84, flexShrink: 0, color: l.source === 'paldefender' ? 'secondary.main' : l.source === 'panel' ? 'primary.main' : 'text.secondary' }}>{SOURCE_LABEL[l.source]}</Box>
+                  <Box component="span" sx={{ width: 84, flexShrink: 0, color: l.source === 'paldefender' ? 'secondary.main' : l.source === 'panel' ? 'primary.main' : 'text.secondary' }}>{sourceLabel(l.source)}</Box>
                   <Box component="span" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', minWidth: 0 }}>{l.message}</Box>
                 </Box>
               ))

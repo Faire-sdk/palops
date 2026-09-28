@@ -11,6 +11,7 @@ import serverRoutes from './server.js';
 import siteRoutes from './site.js';
 import userRoutes from './users.js';
 import paldefenderRoutes from './paldefender.js';
+import palbanRoutes from './palban.js';
 import worldRoutes from './world.js';
 
 export default async function v1(app: FastifyInstance, opts: { services: Services }) {
@@ -24,6 +25,7 @@ export default async function v1(app: FastifyInstance, opts: { services: Service
   await app.register(configRoutes, { ...opts, prefix: '/config' });
   await app.register(worldRoutes, { ...opts, prefix: '/world' });
   await app.register(paldefenderRoutes, { ...opts, prefix: '/paldefender' });
+  await app.register(palbanRoutes, { ...opts, prefix: '/palban' });
   await app.register(logRoutes, { ...opts, prefix: '/logs' });
   await app.register(publicRoutes, { ...opts, prefix: '/public' });
   await app.register(siteRoutes, { ...opts, prefix: '/site' });

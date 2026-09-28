@@ -70,6 +70,7 @@ export interface Player {
   buildingCount: number | null;
   guild: string | null;
   playtimeSeconds?: number;
+  sessions?: number;
   /** Whether a website account is linked to this character, and whether that link is proven. */
   link?: 'verified' | 'claimed' | null;
 }
@@ -88,6 +89,7 @@ export interface KnownPlayer {
   online: boolean;
   banned?: boolean;
   playtimeSeconds?: number;
+  sessions?: number;
   link?: 'verified' | 'claimed' | null;
 }
 
@@ -132,11 +134,27 @@ export interface LinkRequest {
   linkedAt: string | null;
 }
 
+export interface ServerMetrics {
+  knownPlayers: number;
+  newPlayers7d: number;
+  uniquePlayers: { day: number; week: number; month: number };
+  playtimeSeconds: { day: number; week: number; month: number };
+  averageSessionSeconds: number;
+  sessions30d: number;
+  peakConcurrent: { count: number; at: string | null };
+  busiestHours: Array<{ hour: number; seconds: number }>;
+  daily: Array<{ day: string; seconds: number; players: number }>;
+}
+
 export interface PlayerActivity {
   seconds: number;
   sessions: number;
   longestSeconds: number;
   averageSeconds: number;
+  seconds7d: number;
+  seconds30d: number;
+  /** Playtime per UTC day, oldest first, for the last 14 days. */
+  daily: Array<{ day: string; seconds: number }>;
   recent: Array<{ startedAt: string; endedAt: string | null; seconds: number }>;
 }
 
@@ -504,4 +522,60 @@ export interface BotCheck {
   name: string;
   ok: boolean;
   message: string | null;
+}
+
+// ---- PalBan Network (optional shared banlist integration) ----
+
+export interface PalBanSettings {
+  enabled: boolean;
+  baseUrl: string;
+  hasKey: boolean;
+  sendEvents: boolean;
+  checkJoins: boolean;
+  sendLogs: boolean;
+  sendLogAddresses: boolean;
+  serverName: string | null;
+  updatedAt: string;
+}
+
+export interface PalBanStatus {
+  enabled: boolean;
+  serverName: string | null;
+  lastSyncAt: string | null;
+  error: string | null;
+  bans: { total: number; active: number };
+  notInGame: number;
+  queued: number;
+  logsQueued: number;
+}
+
+export interface PalBanBan {
+  id: string;
+  gameId: string;
+  playerName: string | null;
+  discordId: string | null;
+  reason: string | null;
+  category: string | null;
+  status: string;
+  active: boolean;
+  banDate: string | null;
+  expiresAt: string | null;
+  unbanDate: string | null;
+  inGame: boolean;
+  applied: boolean;
+}
+
+export interface PalBanPlayer {
+  gameId: string;
+  playerName: string | null;
+  linkedDiscordId: string | null;
+  localBanStatus: 'BANNED' | 'PREVIOUSLY_BANNED' | 'NOT_BANNED';
+  localBans: Array<{ id: string; reason: string | null; category: string | null; status: string; banDate: string | null; expiresAt: string | null }>;
+  network: {
+    serversReporting: number;
+    reportCount: number;
+    activeReportCount: number;
+    reports: Array<{ server: string; reason: string | null; status: string; banDate: string | null; expiresAt: string | null }>;
+  };
+  detections: Array<{ provider: string | null; type: string | null; severity: string | null; confidence: number | null; message: string | null; detectedAt: string | null }>;
 }

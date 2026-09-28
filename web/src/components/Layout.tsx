@@ -4,6 +4,7 @@ import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
+import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TerminalIcon from '@mui/icons-material/Terminal';
@@ -37,6 +38,7 @@ const DRAWER_WIDTH = 248;
 const NAV: Array<{ to: string; label: string; icon: IconComponent; permission?: Permission; /** Only shown when the optional PalDefender integration is on. */ paldefender?: boolean }> = [
   { to: '/', label: 'Dashboard', icon: DashboardOutlinedIcon, permission: 'server.view' },
   { to: '/players', label: 'Players', icon: PeopleOutlinedIcon, permission: 'players.view' },
+  { to: '/bans', label: 'Bans', icon: GavelOutlinedIcon, permission: 'players.view' },
   { to: '/world', label: 'World', icon: MapOutlinedIcon, permission: 'players.view' },
   { to: '/paldefender', label: 'PalDefender', icon: ShieldOutlinedIcon, permission: 'world.view', paldefender: true },
   { to: '/console', label: 'Console', icon: TerminalIcon, permission: 'console.view' },
@@ -54,7 +56,7 @@ export function Layout() {
   const navigate = useNavigate();
   const { data: status } = useApi<ServerStatus>('/server/status', { pollMs: 15000 });
   const paldefender = usePalDefender();
-  const current = NAV.find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)));
+  const current = NAV.filter((n) => !n.paldefender || paldefender).find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)));
   const user = session?.user;
   const avatar = user?.discord ? discordAvatarUrl(user.discord) : null;
 
@@ -77,7 +79,7 @@ export function Layout() {
             end={n.to === '/'}
             onClick={() => setMobileOpen(false)}
             sx={{
-              borderRadius: 999,
+              borderRadius: '8px',
               mb: 0.5,
               '&.active': { bgcolor: 'action.selected', color: 'primary.main', '& .MuiListItemIcon-root': { color: 'primary.main' } },
             }}

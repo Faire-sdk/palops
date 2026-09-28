@@ -8,7 +8,7 @@ Tracks progress against the development priority order in the project roadmap.
 | 2 | Authentication & roles | Done: Discord OAuth2 as main sign-in (owners add users by Discord ID), optional password sign-in, first-run owner setup, sessions, owner-issued reset links, 4 roles enforced server-side, user management |
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
 | 4 | Dashboard | Status, info, player count, FPS/frame time, broadcast, and the server FPS graph with average and lowest (from world snapshots, staff only). Host CPU/RAM pending |
-| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every address a player has connected from is recorded (staff with `players.ip` only), shown on profiles with the other accounts that share it, and can be banned, alone or as a CIDR range. The game only bans accounts, so PalOps enforces address bans itself: anyone connecting from one is kicked at the next check (about 20 seconds). Bans made outside PalOps can't be listed through the API |
+| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every address a player has connected from is recorded (staff with `players.ip` only), shown on profiles with the other accounts that share it, and can be banned, alone or as a CIDR range. The game only bans accounts, so PalOps enforces address bans itself: anyone connecting from one is kicked at the next check (about 20 seconds). Bans have their own page and, with the players list, can be exported as CSV (audited; addresses only for staff with `players.ip`). The Players page has an Activity tab (unique players, playtime, average visit, peak online, busiest hours) and profiles show playtime windows and a daily chart. Bans made outside PalOps can't be listed through the API |
 | 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. Optionally the PalServerLogger websocket for the game's real console output |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
 | 8 | Logs | Audit log with category filter and pagination; the Console page covers the game and PalDefender log files |
@@ -41,6 +41,12 @@ From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 sec
 An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin for Windows servers, off unless an owner turns it on
 in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, player addresses synced from it, and a PalDefender page
 and player panel for inventories, pals, technologies, progression, guilds and bases, giving, summoning, base deletion, config reload and messages. See [paldefender.md](paldefender.md).
+
+## PalBan Network (optional)
+
+An opt-in integration with [PalBan Network](https://github.com/Faire-sdk/PalBanNetwork)'s shared banlists, off unless an owner turns it on: your server's PalBan banlist next to the
+game's with banning in the game one player at a time on a person's confirmation (never automatic), a CSV export for adding local bans to PalBan, network lookups on player profiles and at join, and joins and bans
+reported to PalBan. Reports from other servers are leads, never bans. See [palban.md](palban.md).
 
 ## Discord bot (optional)
 

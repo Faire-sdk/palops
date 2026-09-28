@@ -6,6 +6,7 @@ import type { AuditActor, AuditLog } from '../audit/audit-log.js';
 import { hasPermission, type Permission } from '../authentication/permissions.js';
 import type { User, UserService } from '../authentication/users.js';
 import type { ConsoleLevel, ConsoleLine, ConsoleService } from '../console/console-service.js';
+import type { PalBanService } from '../palban/palban-service.js';
 import type { PalDefenderService } from '../paldefender/paldefender-service.js';
 import { PalworldError, type PalworldService } from '../palworld/index.js';
 import type { ModerationService } from '../players/moderation.js';
@@ -282,9 +283,16 @@ export class DiscordBotService {
       console: ConsoleService;
       siteAccounts: SiteAccountService;
       paldefender: PalDefenderService;
+      palban: PalBanService;
     },
   ) {
     deps.audit.onRecord((actor, entry) => this.onAudit(actor, entry));
+    deps.palban.onFlag((f) =>
+      this.notify(
+        'notify_signals',
+        `🚩 **${escapeMd(f.name)}** joined ${f.localBanned ? 'and is banned on your PalBan list' : `with ${f.activeReports} active ban${f.activeReports === 1 ? '' : 's'} on ${f.serversReporting} other server${f.serversReporting === 1 ? '' : 's'} of PalBan Network`}. Review, don’t assume: reports are leads.`,
+      ),
+    );
     deps.world.onSignal((s) => this.notify('notify_signals', `⚠️ Signal for **${escapeMd(s.playerName)}**: ${escapeMd(s.summary)}`));
     deps.players.onPresence(({ joined, left }) => {
       for (const n of joined) this.notify('notify_joins', `${escapeMd(n)} joined`);

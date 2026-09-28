@@ -31,7 +31,8 @@ export const theme = createTheme({
     button: { textTransform: 'none', fontWeight: 600 },
   },
   components: {
-    MuiButton: { defaultProps: { disableElevation: true } },
+    // Rounded rectangles, never pills.
+    MuiButton: { defaultProps: { disableElevation: true }, styleOverrides: { root: { borderRadius: 8 } } },
     MuiCard: { defaultProps: { variant: 'outlined' } },
     MuiPaper: { defaultProps: { elevation: 0 } },
     MuiTextField: { defaultProps: { size: 'small', fullWidth: true } },
@@ -45,7 +46,9 @@ export const theme = createTheme({
         }),
       },
     },
-    MuiChip: { defaultProps: { size: 'small' } },
+    MuiChip: { defaultProps: { size: 'small' }, styleOverrides: { root: { borderRadius: 6 } } },
+    MuiPagination: { defaultProps: { shape: 'rounded' } },
+    MuiPaginationItem: { styleOverrides: { root: { borderRadius: 8 } } },
   },
 });
 

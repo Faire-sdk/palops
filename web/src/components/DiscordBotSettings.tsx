@@ -19,6 +19,7 @@ import { api, errorMessage } from '../api/client';
 import type { BotCheck, ConsoleLevel, DiscordBotSettings, GatewayStatus } from '../api/types';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
+import { usePalDefender } from '../hooks/usePalDefender';
 import { ErrorState, Loading, Mono, Section } from './common';
 import { useToast } from './Toast';
 
@@ -60,6 +61,7 @@ const blank = (v: string) => v.trim() || null;
 /** The optional Discord bot: slash commands and channel notifications. Owners only. */
 export function DiscordBotSettingsTab() {
   const notify = useToast();
+  const pd = usePalDefender();
   const { data, error, loading, reload } = useApi<{ settings: DiscordBotSettings; gateway: GatewayStatus; interactionsUrl: string; commands: Array<{ name: string; description: string }> }>('/discord-bot/settings', { pollMs: 10000 });
   const [form, setForm] = useState<Form | null>(null);
   const [checks, setChecks] = useState<BotCheck[]>();
@@ -222,7 +224,7 @@ export function DiscordBotSettingsTab() {
             </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField label="Events channel ID" value={form.eventsChannelId} onChange={text('eventsChannelId')} helperText="Bans, signals and server status" />
-              <TextField label="Log channel ID" value={form.logChannelId} onChange={text('logChannelId')} helperText="Game and PalDefender log lines (optional)" />
+              <TextField label="Log channel ID" value={form.logChannelId} onChange={text('logChannelId')} helperText={pd ? 'Game and PalDefender log lines (optional)' : 'Game log lines (optional)'} />
             </Stack>
             <Stack>
               {flag('notifyBans', 'Bans, unbans and kicks')}
@@ -269,11 +271,11 @@ export function DiscordBotSettingsTab() {
             <TextField label="Chat channel ID" value={form.relayChannelId} onChange={text('relayChannelId')} helperText="The channel for the relay. The bot needs View Channel, Send Messages and Read Message History." />
             <Stack>
               {flag('relayToDiscord', 'Game chat goes to Discord')}
-              {flag('relayToGame', 'Discord messages go to the game', 'Shown to everyone in the game as a chat message (through PalDefender when it’s on) or a server announcement')}
+              {flag('relayToGame', 'Discord messages go to the game', pd ? 'Shown to everyone in the game as a chat message (through PalDefender) or a server announcement' : 'Shown to everyone in the game as a server announcement')}
             </Stack>
             <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
               <Typography variant="body2">Read game chat from:</Typography>
-              {([['game', 'Game log'], ['paldefender', 'PalDefender log']] as const).map(([id, label]) => (
+              {([['game', 'Game log'], ...(pd ? ([['paldefender', 'PalDefender log']] as const) : [])] as const).map(([id, label]) => (
                 <FormControlLabel
                   key={id}
                   control={

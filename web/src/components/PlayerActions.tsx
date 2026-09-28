@@ -22,9 +22,12 @@ import type { IpBan, ModerationAction, PalDefenderResult, PlayerProfile } from '
 import { useAuth } from '../auth/AuthContext';
 import { formatDateTime, formatDuration } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
+import { DailyPlaytime } from './ActivityMetrics';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
+import { usePalBan } from '../hooks/usePalBan';
 import { usePalDefender } from '../hooks/usePalDefender';
+import { PalBanPlayerSection } from './PalBan';
 import { PalDefenderPlayerDialog } from './PalDefenderPlayer';
 import { formatMapPoint, palLabel, SignalChip } from './world';
 
@@ -159,6 +162,7 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
   const [action, setAction] = useState<Action | null>(null);
   const [pdOpen, setPdOpen] = useState(false);
   const paldefender = usePalDefender();
+  const palban = usePalBan();
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -229,6 +233,8 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
                 [
                   ['Playtime', formatDuration(data.activity.seconds)],
                   ['Visits', data.activity.sessions],
+                  ['Last 7 days', formatDuration(data.activity.seconds7d)],
+                  ['Last 30 days', formatDuration(data.activity.seconds30d)],
                   ['Average visit', formatDuration(data.activity.averageSeconds)],
                   ['Longest visit', formatDuration(data.activity.longestSeconds)],
                 ] as const
@@ -243,6 +249,7 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
                 </Box>
               ))}
             </Stack>
+            <DailyPlaytime daily={data.activity.daily} />
             <Typography variant="body2" color="text.secondary">
               Recent visits:{' '}
               {data.activity.recent
@@ -354,6 +361,8 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
             )}
           </>
         )}
+
+        {palban && can('world.view') && <PalBanPlayerSection userId={data.userId} />}
 
         {data.pals.length > 0 && (
           <>
