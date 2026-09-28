@@ -85,7 +85,9 @@ function resolveSecret(env: z.infer<typeof envSchema>): string {
 }
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = envSchema.safeParse(source);
+  // `KEY=` with no value (as in .env.example) means "not set", so defaults apply.
+  const defined = Object.fromEntries(Object.entries(source).filter(([, value]) => value !== ''));
+  const parsed = envSchema.safeParse(defined);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid environment configuration:\n${problems}`);

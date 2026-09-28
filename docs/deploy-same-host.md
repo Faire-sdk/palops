@@ -13,7 +13,7 @@ You'll end up with:
 ## What you need
 
 - The machine that runs your Palworld server, with shell access, Docker and the Compose plugin.
-  The files in [`deploy/same-host/`](../deploy/same-host) use host networking, which works on Linux.
+  The files in [`deploy/same-host/`](../deploy/same-host) use host networking, which works on Linux. For a Windows server, see [Windows server](#windows-server).
 - A domain (or subdomain) whose DNS `A` record points at the machine, e.g. `play.example.com`.
 - A Discord application for sign-in (step 3).
 
@@ -68,7 +68,7 @@ so the app only listens locally and Caddy is the only way in.
 
 1. Get the setup token: the `PANEL_SETUP_TOKEN` you set, or `docker compose logs palops | grep -i token`.
 2. Open `https://<domain>/panel`, paste the token and click **Continue with Discord**. You're now the owner.
-3. Go to **Settings → Server connection** and enter `http://127.0.0.1:8212` with user `admin` and your admin password.
+3. Go to **Settings → Server connection** and enter host `127.0.0.1`, port `8212`, user `admin` and your admin password (details in the [README](../README.md#connecting-to-palworld)).
 4. Add staff under **Settings → Users** by Discord user ID.
 
 The public website at `https://<domain>/` is live once the connection test passes.
@@ -78,7 +78,7 @@ The public website at `https://<domain>/` is live once the connection test passe
 Many servers use a Palworld container (for example `thijsvanloef/palworld-server-docker`). Two ways to connect:
 
 - **Publish the REST API on localhost only.** In the Palworld service, map it as `"127.0.0.1:8212:8212"`,
-  and keep the panel on `http://127.0.0.1:8212` as above.
+  and keep the panel on host `127.0.0.1`, port `8212` as above.
 - **Share a Docker network.** Drop `network_mode: host` from the `palops` service, put it on the Palworld container's network,
   and use `http://<palworld service name>:8212`. Then publish `127.0.0.1:8080:8080` for the panel so Caddy can still reach it.
 
@@ -111,6 +111,40 @@ Database migrations run automatically on start.
 If you'd rather not open 80 and 443 on the game machine, run `cloudflared` on it instead of Caddy
 and point the tunnel's public hostname at `http://127.0.0.1:8080`. Remove the `caddy` service from the Compose file
 and close 80 and 443. Everything else stays the same, including `DISCORD_REDIRECT_URI` on your tunnel's domain.
+
+## Windows server
+
+The Compose files above are for Linux. If your Palworld server runs on Windows, run PalOps directly with Node on the same PC:
+
+1. Install [Node.js 22 LTS](https://nodejs.org/) and [Git](https://git-scm.com/download/win).
+2. In PowerShell:
+
+   ```powershell
+   git clone https://github.com/Faire-sdk/palops.git
+   cd palops
+   npm ci
+   npm run build
+   copy .env.example server\.env
+   notepad server\.env
+   ```
+
+3. In `server\.env` set `NODE_ENV=production`, `HOST=127.0.0.1`, `PORT=8080`, `TRUST_PROXY=true`, `COOKIE_SECURE=true`,
+   a `PANEL_SECRET` (any 64 random hex characters; keep it) and the Discord values for your domain.
+4. Start it with `npm start` from the `palops` folder. To keep it running after sign-out, register it as a service
+   with a tool such as [NSSM](https://nssm.cc/) or [Servy](https://github.com/aelassas/servy), with `palops\server` as the working directory and `node dist\index.js` as the command.
+5. For HTTPS, install [Caddy for Windows](https://caddyserver.com/download) and run it with a `Caddyfile` containing:
+
+   ```text
+   play.example.com {
+   	reverse_proxy 127.0.0.1:8080
+   }
+   ```
+
+   Allow inbound TCP 80 and 443 in Windows Firewall for Caddy.
+6. In the panel, connect to host `127.0.0.1`, port `8212` (see the [README](../README.md#connecting-to-palworld)).
+
+Back up `server\data\panel.db` and `server\.env` somewhere off the machine, along with the Palworld save folder
+(`Pal\Saved\SaveGames`).
 
 ## Troubleshooting
 
