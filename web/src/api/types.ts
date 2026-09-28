@@ -70,6 +70,7 @@ export interface Player {
   buildingCount: number | null;
   guild: string | null;
   playtimeSeconds?: number;
+  sessions?: number;
   /** Whether a website account is linked to this character, and whether that link is proven. */
   link?: 'verified' | 'claimed' | null;
 }
@@ -88,6 +89,7 @@ export interface KnownPlayer {
   online: boolean;
   banned?: boolean;
   playtimeSeconds?: number;
+  sessions?: number;
   link?: 'verified' | 'claimed' | null;
 }
 
@@ -132,11 +134,27 @@ export interface LinkRequest {
   linkedAt: string | null;
 }
 
+export interface ServerMetrics {
+  knownPlayers: number;
+  newPlayers7d: number;
+  uniquePlayers: { day: number; week: number; month: number };
+  playtimeSeconds: { day: number; week: number; month: number };
+  averageSessionSeconds: number;
+  sessions30d: number;
+  peakConcurrent: { count: number; at: string | null };
+  busiestHours: Array<{ hour: number; seconds: number }>;
+  daily: Array<{ day: string; seconds: number; players: number }>;
+}
+
 export interface PlayerActivity {
   seconds: number;
   sessions: number;
   longestSeconds: number;
   averageSeconds: number;
+  seconds7d: number;
+  seconds30d: number;
+  /** Playtime per UTC day, oldest first, for the last 14 days. */
+  daily: Array<{ day: string; seconds: number }>;
   recent: Array<{ startedAt: string; endedAt: string | null; seconds: number }>;
 }
 

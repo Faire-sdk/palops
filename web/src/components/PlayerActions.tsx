@@ -22,6 +22,7 @@ import type { IpBan, ModerationAction, PalDefenderResult, PlayerProfile } from '
 import { useAuth } from '../auth/AuthContext';
 import { formatDateTime, formatDuration } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
+import { DailyPlaytime } from './ActivityMetrics';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
 import { usePalDefender } from '../hooks/usePalDefender';
@@ -229,6 +230,8 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
                 [
                   ['Playtime', formatDuration(data.activity.seconds)],
                   ['Visits', data.activity.sessions],
+                  ['Last 7 days', formatDuration(data.activity.seconds7d)],
+                  ['Last 30 days', formatDuration(data.activity.seconds30d)],
                   ['Average visit', formatDuration(data.activity.averageSeconds)],
                   ['Longest visit', formatDuration(data.activity.longestSeconds)],
                 ] as const
@@ -243,6 +246,7 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
                 </Box>
               ))}
             </Stack>
+            <DailyPlaytime daily={data.activity.daily} />
             <Typography variant="body2" color="text.secondary">
               Recent visits:{' '}
               {data.activity.recent

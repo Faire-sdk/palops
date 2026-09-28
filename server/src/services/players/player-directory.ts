@@ -34,6 +34,49 @@ interface PlayerRow {
 
 const ONLINE_CACHE_MS = 5000;
 
+const HOUR_MS = 3600 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+export interface PlayerActivity {
+  seconds: number;
+  sessions: number;
+  longestSeconds: number;
+  averageSeconds: number;
+  seconds7d: number;
+  seconds30d: number;
+  /** Playtime per UTC day, oldest first, for the last 14 days. */
+  daily: Array<{ day: string; seconds: number }>;
+  recent: Array<{ startedAt: string; endedAt: string | null; seconds: number }>;
+}
+
+export interface ServerMetrics {
+  knownPlayers: number;
+  newPlayers7d: number;
+  uniquePlayers: { day: number; week: number; month: number };
+  playtimeSeconds: { day: number; week: number; month: number };
+  averageSessionSeconds: number;
+  sessions30d: number;
+  peakConcurrent: { count: number; at: string | null };
+  /** Total playtime by UTC hour of day over the last 30 days. */
+  busiestHours: Array<{ hour: number; seconds: number }>;
+  daily: Array<{ day: string; seconds: number; players: number }>;
+}
+
+/** Seconds of the given [start, end] spans (ms) that fall between from and to. */
+function secondsWithin(spans: ReadonlyArray<readonly [number, number]>, from: number, to: number): number {
+  return spans.reduce((sum, [a, b]) => sum + Math.max(0, Math.round((Math.min(b, to) - Math.max(a, from)) / 1000)), 0);
+}
+
+/** Playtime per UTC day for the last `days` days ending today, oldest first. */
+function dailySeries(spans: ReadonlyArray<readonly [number, number]>, now: number, days: number) {
+  const today = Math.floor(now / DAY_MS) * DAY_MS;
+  return Array.from({ length: days }, (_, i) => {
+    const startMs = today - (days - 1 - i) * DAY_MS;
+    const endMs = startMs + DAY_MS;
+    return { day: new Date(startMs).toISOString().slice(0, 10), startMs, endMs, seconds: secondsWithin(spans, startMs, endMs) };
+  });
+}
+
 /** An address a player has connected from. Staff with players.ip only. */
 export interface PlayerAddress {
   ip: string;
@@ -239,22 +282,124 @@ export class PlayerDirectory {
     })();
   }
 
-  /** Total time on the server, how many visits, and the latest visits. Open visits count up to now. */
-  playtime(userId: string): { seconds: number; sessions: number; longestSeconds: number; averageSeconds: number; recent: Array<{ startedAt: string; endedAt: string | null; seconds: number }> } {
+  /** Total time on the server, how many visits, recent windows, a daily series and the latest visits. Open visits count up to now. */
+  playtime(userId: string): PlayerActivity {
     const server = this.servers.getPrimary();
-    if (!server) return { seconds: 0, sessions: 0, longestSeconds: 0, averageSeconds: 0, recent: [] };
+    if (!server) return { seconds: 0, sessions: 0, longestSeconds: 0, averageSeconds: 0, seconds7d: 0, seconds30d: 0, daily: [], recent: [] };
     const now = Date.now();
     const rows = this.db
       .prepare('SELECT started_at, ended_at FROM player_sessions WHERE server_id = ? AND user_id = ? ORDER BY id DESC')
       .all(server.id, userId) as Array<{ started_at: string; ended_at: string | null }>;
     const spans = rows.map((r) => ({ startedAt: r.started_at, endedAt: r.ended_at, seconds: Math.max(0, Math.round(((r.ended_at ? Date.parse(r.ended_at) : now) - Date.parse(r.started_at)) / 1000)) }));
     const seconds = spans.reduce((sum, s) => sum + s.seconds, 0);
+    const within = (days: number) => secondsWithin(spans.map((s) => [Date.parse(s.startedAt), s.endedAt ? Date.parse(s.endedAt) : now] as const), now - days * DAY_MS, now);
+    const daily = dailySeries(
+      spans.map((s) => [Date.parse(s.startedAt), s.endedAt ? Date.parse(s.endedAt) : now] as const),
+      now,
+      14,
+    ).map((d) => ({ day: d.day, seconds: d.seconds }));
     return {
       seconds,
       sessions: spans.length,
       longestSeconds: spans.reduce((m, s) => Math.max(m, s.seconds), 0),
       averageSeconds: spans.length ? Math.round(seconds / spans.length) : 0,
+      seconds7d: within(7),
+      seconds30d: within(30),
+      daily,
       recent: spans.slice(0, 20),
+    };
+  }
+
+  /** Playtime, visit count and last visit for several players at once, for lists and exports. */
+  activityOf(userIds: string[]): Map<string, { seconds: number; sessions: number }> {
+    const server = this.servers.getPrimary();
+    const result = new Map<string, { seconds: number; sessions: number }>();
+    if (!server || userIds.length === 0) return result;
+    const rows = this.db
+      .prepare(
+        `SELECT user_id, COUNT(*) AS sessions, SUM(CAST(strftime('%s', COALESCE(ended_at, @now)) AS INTEGER) - CAST(strftime('%s', started_at) AS INTEGER)) AS seconds
+         FROM player_sessions WHERE server_id = @serverId AND user_id IN (${userIds.map((_, i) => `@u${i}`).join(', ')}) GROUP BY user_id`,
+      )
+      .all({ serverId: server.id, now: new Date().toISOString(), ...Object.fromEntries(userIds.map((u, i) => [`u${i}`, u])) }) as Array<{ user_id: string; sessions: number; seconds: number }>;
+    for (const r of rows) result.set(r.user_id, { seconds: Math.max(0, r.seconds), sessions: r.sessions });
+    return result;
+  }
+
+  /**
+   * Server-wide numbers from the recorded visits: who played, for how long, when the server is busiest.
+   * Visits are kept a year; the windows here are 24 hours, 7 and 30 days.
+   */
+  metrics(): ServerMetrics {
+    const server = this.servers.getPrimary();
+    const empty: ServerMetrics = {
+      knownPlayers: 0,
+      newPlayers7d: 0,
+      uniquePlayers: { day: 0, week: 0, month: 0 },
+      playtimeSeconds: { day: 0, week: 0, month: 0 },
+      averageSessionSeconds: 0,
+      sessions30d: 0,
+      peakConcurrent: { count: 0, at: null },
+      busiestHours: Array.from({ length: 24 }, (_, hour) => ({ hour, seconds: 0 })),
+      daily: [],
+    };
+    if (!server) return empty;
+    const now = Date.now();
+    const since = now - 30 * DAY_MS;
+    const rows = this.db
+      .prepare('SELECT user_id, started_at, ended_at FROM player_sessions WHERE server_id = ? AND COALESCE(ended_at, ?) >= ?')
+      .all(server.id, new Date(now).toISOString(), new Date(since).toISOString()) as Array<{ user_id: string; started_at: string; ended_at: string | null }>;
+    const spans = rows.map((r) => ({ userId: r.user_id, start: Date.parse(r.started_at), end: r.ended_at ? Date.parse(r.ended_at) : now, open: !r.ended_at }));
+
+    const windows = { day: 1, week: 7, month: 30 } as const;
+    const unique = { day: 0, week: 0, month: 0 };
+    const playtime = { day: 0, week: 0, month: 0 };
+    for (const [key, days] of Object.entries(windows) as Array<[keyof typeof windows, number]>) {
+      const from = now - days * DAY_MS;
+      const who = new Set<string>();
+      for (const s of spans) {
+        if (s.end < from) continue;
+        who.add(s.userId);
+        playtime[key] += Math.max(0, Math.round((Math.min(s.end, now) - Math.max(s.start, from)) / 1000));
+      }
+      unique[key] = who.size;
+    }
+
+    // Peak concurrency: sweep the visit starts and ends in order.
+    const events = spans.flatMap((s) => [[Math.max(s.start, since), 1] as const, [s.end, -1] as const]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    let current = 0;
+    let peak = { count: 0, at: null as string | null };
+    for (const [at, delta] of events) {
+      current += delta;
+      if (current > peak.count) peak = { count: current, at: new Date(at).toISOString() };
+    }
+
+    const closed = spans.filter((s) => !s.open && s.start >= since);
+    const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, seconds: 0 }));
+    for (const s of spans) {
+      // Spread each visit over the UTC hours it covers.
+      for (let t = Math.max(s.start, since); t < s.end; ) {
+        const next = Math.min(s.end, (Math.floor(t / HOUR_MS) + 1) * HOUR_MS);
+        hours[new Date(t).getUTCHours()]!.seconds += Math.round((next - t) / 1000);
+        t = next;
+      }
+    }
+
+    const daily = dailySeries(
+      spans.map((s) => [s.start, s.end] as const),
+      now,
+      14,
+    ).map((d) => ({ ...d, players: new Set(spans.filter((s) => s.start < d.endMs && s.end >= d.startMs).map((s) => s.userId)).size }));
+
+    return {
+      knownPlayers: (this.db.prepare('SELECT COUNT(*) AS n FROM players WHERE server_id = ?').get(server.id) as { n: number }).n,
+      newPlayers7d: (this.db.prepare('SELECT COUNT(*) AS n FROM players WHERE server_id = ? AND first_seen_at >= ?').get(server.id, new Date(now - 7 * DAY_MS).toISOString()) as { n: number }).n,
+      uniquePlayers: unique,
+      playtimeSeconds: playtime,
+      averageSessionSeconds: closed.length ? Math.round(closed.reduce((sum, s) => sum + (s.end - s.start), 0) / closed.length / 1000) : 0,
+      sessions30d: spans.filter((s) => s.start >= since).length,
+      peakConcurrent: peak,
+      busiestHours: hours,
+      daily: daily.map(({ day, seconds, players }) => ({ day, seconds, players })),
     };
   }
 

@@ -352,6 +352,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/players/:userId/kick` | `players.kick` |
 | POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` (`banAddress: true` also bans the player's last IP) |
 | POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (IP address or CIDR range bans, enforced by PalOps) |
+| GET | `/players/metrics` | `players.view` (unique players, playtime, average visit, peak online, busiest hours, daily series) |
+| GET | `/players/export.csv`, `/players/bans/export.csv` | `players.view` (CSV downloads, audited; addresses only with `players.ip`) |
 | POST | `/players/:userId/notes` | `players.note` |
 | POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
 | GET/PUT | `/paldefender/settings` | `server.connection` (optional PalDefender integration; the token is never returned) |

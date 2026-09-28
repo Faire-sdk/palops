@@ -11,6 +11,7 @@ import { ConfigurationPage } from '../pages/ConfigurationPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { LogsPage } from '../pages/LogsPage';
 import { PalDefenderPage } from '../pages/PalDefenderPage';
+import { BansPage } from '../pages/BansPage';
 import { PlayersPage } from '../pages/PlayersPage';
 import { ServerPage } from '../pages/ServerPage';
 import { SettingsPage } from '../pages/SettingsPage';
@@ -39,6 +40,7 @@ function PanelRoutes() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Guard permission="server.view"><DashboardPage /></Guard>} />
+        <Route path="bans" element={<Guard permission="players.view"><BansPage /></Guard>} />
         <Route path="players" element={<Guard permission="players.view"><PlayersPage /></Guard>} />
         <Route path="world" element={<Guard permission="players.view"><WorldPage /></Guard>} />
         <Route path="console" element={<Guard permission="console.view"><ConsolePage /></Guard>} />
