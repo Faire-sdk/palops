@@ -45,7 +45,7 @@ export function GuildDot({ guildId }: { guildId: string | null }) {
 
 export const formatMapPoint = (p: { x: number; y: number }) => `${Math.round(p.x)}, ${Math.round(p.y)}`;
 
-const SIGNAL_LABELS: Record<SignalKind, string> = { movement: 'Movement', level: 'Level jump', shared_ip: 'Shared address', base_intrusion: 'Base intrusion' };
+const SIGNAL_LABELS: Record<SignalKind, string> = { movement: 'Movement', level: 'Level jump', shared_ip: 'Shared IP', base_intrusion: 'Base intrusion' };
 
 export function SignalChip({ kind }: { kind: SignalKind }) {
   return <Chip label={SIGNAL_LABELS[kind]} color={kind === 'shared_ip' ? 'info' : kind === 'base_intrusion' ? 'error' : 'warning'} variant="outlined" />;

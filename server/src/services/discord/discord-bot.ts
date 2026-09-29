@@ -853,7 +853,7 @@ export class DiscordBotService {
       case 'ban': {
         const { game, member } = this.targets(i, options, text('player'), true);
         const banAddress = options.get('ban_ip') === true;
-        if (banAddress && !hasPermission(user!.role, 'players.ip')) throw new CommandError('Banning an address needs a role that can see player addresses.');
+        if (banAddress && !hasPermission(user!.role, 'players.ip')) throw new CommandError('Banning an IP needs a role that can see player IPs.');
         const lines: string[] = [];
         if (member) {
           this.guardMemberAction(user!, member.id);
@@ -863,7 +863,7 @@ export class DiscordBotService {
         if (game) {
           const result = await this.acting(member?.id ?? '', () => this.deps.moderation.ban(actor, game.userId, text('reason'), { banAddress }));
           lines.push(`Banned **${escapeMd(game.name)}** in game.`);
-          if (result.ipBan) lines.push(`Also banned the address ${result.ipBan.ip}.`);
+          if (result.ipBan) lines.push(`Also banned the IP ${result.ipBan.ip}.`);
           if (result.ipSkipped) lines.push(result.ipSkipped);
           if (!member && this.syncBansActive && this.deps.siteAccounts.byPlayerUserId(game.userId, true)) lines.push('Their linked Discord account is being banned too.');
         } else if (member) {
@@ -1030,7 +1030,7 @@ export class DiscordBotService {
     if (entry.category !== 'players') return;
     const who = escapeMd(actor.username ?? 'system');
     const target = entry.target ? escapeMd(entry.target) : 'a player';
-    const verbs: Record<string, string> = { ban: 'banned', unban: 'unbanned', kick: 'kicked', ip_ban: 'banned the address', ip_unban: 'unbanned the address' };
+    const verbs: Record<string, string> = { ban: 'banned', unban: 'unbanned', kick: 'kicked', ip_ban: 'banned the IP', ip_unban: 'unbanned the IP' };
     const verb = verbs[entry.action];
     if (verb) this.notify('notify_bans', `🔨 **${who}** ${verb} ${target}`);
   }

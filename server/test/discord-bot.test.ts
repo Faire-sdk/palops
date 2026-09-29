@@ -288,7 +288,7 @@ describe('slash commands', () => {
     expect(actors).toContain('admin-user (via Discord)');
   });
 
-  it('will not ban an address for someone who cannot see addresses', async () => {
+  it('will not ban an IP for someone who cannot see IPs', async () => {
     await setup();
     // Moderators can't ban at all; this checks the role gate stays in front.
     const res = await run('ban', MOD_DISCORD, [{ name: 'player', type: 3, value: 'Anubis' }, { name: 'ban_ip', type: 5, value: true }]);

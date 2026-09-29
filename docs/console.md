@@ -35,7 +35,7 @@ Use **Check paths**, then switch **Follow these log files** on and save.
 - Rotated or truncated files are followed from the top again.
 - Lines are decoded as UTF-8, with colour codes and control characters removed. PalDefender's line format isn't documented, so its lines are shown as written.
 
-Anyone who can open the Console can read whatever these files contain, including player names and the addresses PalDefender logs. Only point PalOps at logs you're
+Anyone who can open the Console can read whatever these files contain, including player names and the IPs PalDefender logs. Only point PalOps at logs you're
 comfortable admins seeing.
 
 ### Docker

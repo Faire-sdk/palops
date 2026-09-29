@@ -148,7 +148,7 @@ export function PalDefenderSettingsTab() {
                 {status.error
                   ? `Last sync failed: ${status.error}`
                   : status.lastSyncAt
-                    ? `PalDefender ${status.version ?? ''} · player addresses last synced ${formatDateTime(status.lastSyncAt)}`
+                    ? `PalDefender ${status.version ?? ''} · player IPs last synced ${formatDateTime(status.lastSyncAt)}`
                     : 'Waiting for the first sync (runs every minute).'}
               </Alert>
             )}
@@ -171,7 +171,7 @@ export function PalDefenderSettingsTab() {
           </Box>
           <Typography variant="body2" color="text.secondary">
             When on, bans made in PalOps are also made in PalDefender (including IP bans), PalDefender’s ban list appears on the Players → Bans tab, player
-            addresses (including offline players) are read from it, and a PalDefender page and player panel add inventories, pals, guilds and bases, giving, summoning and messages. The official REST API stays the source of truth: if PalDefender is unreachable, PalOps still bans
+            IPs (including offline players) are read from it, and a PalDefender page and player panel add inventories, pals, guilds and bases, giving, summoning and messages. The official REST API stays the source of truth: if PalDefender is unreachable, PalOps still bans
             and tells you PalDefender didn’t. The token is encrypted at rest and never sent back to the browser.
           </Typography>
         </Section>

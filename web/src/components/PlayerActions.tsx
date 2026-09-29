@@ -47,14 +47,25 @@ const ACTION_COPY: Record<Action, { title: string; button: string; hint: string;
   unban: {
     title: 'Unban',
     button: 'Unban player',
-    hint: 'Kept in their history. Address bans made with their ban are lifted too. They can join again straight away.',
+    hint: 'Kept in their history. IP bans made with their ban are lifted too. They can join again straight away.',
     done: 'unbanned',
   },
 };
 
+/** Private and loopback IPs: many players can share one, so PalOps won't ban it. */
+function isPrivateIp(ip: string): boolean {
+  if (ip.includes(':')) return ip === '::1' || /^(fc|fd|fe80)/i.test(ip);
+  const [a = 0, b = 0] = ip.split('.').map(Number);
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+
+const BAN_REASONS = ['Cheating', 'Exploiting or duping', 'Griefing', 'Harassment', 'Ban evasion'];
+
 /**
- * Kick, ban or unban one player, with a reason. When the player's address is
- * known, a ban can include it so a new account from there is kicked too.
+ * Kick, ban or unban one player, with a reason (required for a ban). A ban can
+ * include the player's last known IP so a new account from there is kicked
+ * too; for anyone with players.ip the IP is looked up here, so it works for
+ * players who aren't online as well.
  */
 export function ModerationDialog({
   action,
@@ -72,14 +83,19 @@ export function ModerationDialog({
   const notify = useToast();
   const { can } = useAuth();
   const [reason, setReason] = useState('');
-  const [banAddress, setBanAddress] = useState(false);
+  const [banIp, setBanIp] = useState(false);
   const [busy, setBusy] = useState(false);
   const copy = action ? ACTION_COPY[action] : null;
-  const offerAddress = action === 'ban' && !!ip && can('players.ip');
+  const isBan = action === 'ban';
+  const showIp = isBan && can('players.ip');
+  // Someone who isn't online has no IP passed in, so read the last one PalOps recorded.
+  const { data: profile, loading: lookingUp } = useApi<PlayerProfile>(`/players/${encodeURIComponent(userId)}`, { enabled: showIp && !ip && !!userId });
+  const knownIp = ip ?? profile?.live?.ip ?? profile?.addresses[0]?.ip ?? null;
+  const privateIp = !!knownIp && isPrivateIp(knownIp);
   useEffect(() => {
     if (action) {
       setReason('');
-      setBanAddress(false);
+      setBanIp(false);
     }
   }, [action, userId]);
 
@@ -89,7 +105,7 @@ export function ModerationDialog({
     try {
       const res = await api.post<{ ipBan?: IpBan | null; ipSkipped?: string | null; paldefender?: PalDefenderResult }>(
         `/players/${encodeURIComponent(userId)}/${action}`,
-        { reason, ...(offerAddress && banAddress ? { banAddress: true } : {}) },
+        { reason: reason.trim(), ...(showIp && banIp && knownIp ? { banAddress: true } : {}) },
       );
       notify(`${name} was ${copy.done}${res?.ipBan ? ` along with ${res.ipBan.ip}` : ''}`, 'success');
       if (res?.ipSkipped) notify(res.ipSkipped, 'warning');
@@ -110,25 +126,55 @@ export function ModerationDialog({
         {copy?.title} {name}
       </DialogTitle>
       <DialogContent>
-        <Stack spacing={1.5} sx={{ pt: 1 }}>
+        <Stack
+          component="form"
+          spacing={1.5}
+          sx={{ pt: 1 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!isBan || reason.trim()) void submit();
+          }}
+        >
           <TextField
             label="Reason"
-            placeholder="Optional"
+            placeholder={isBan ? 'Why is this player being banned?' : 'Optional'}
             autoFocus
+            required={isBan}
+            multiline
+            minRows={2}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             helperText={copy?.hint}
             slotProps={{ htmlInput: { maxLength: 200 } }}
           />
-          {offerAddress && (
-            <FormControlLabel
-              control={<Checkbox checked={banAddress} onChange={(e) => setBanAddress(e.target.checked)} />}
-              label={
-                <>
-                  Also ban their address <Mono>{ip}</Mono>
-                </>
-              }
-            />
+          {isBan && (
+            <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              {BAN_REASONS.map((r) => (
+                <Chip key={r} label={r} size="small" variant="outlined" onClick={() => setReason(r)} />
+              ))}
+            </Stack>
+          )}
+          {showIp && (
+            <>
+              <FormControlLabel
+                control={<Checkbox checked={banIp} disabled={!knownIp} onChange={(e) => setBanIp(e.target.checked)} />}
+                label={
+                  knownIp ? (
+                    <>
+                      Also ban their IP <Mono>{knownIp}</Mono>
+                    </>
+                  ) : (
+                    <>Also ban their IP {lookingUp ? '(looking it up…)' : '(none recorded yet)'}</>
+                  )
+                }
+              />
+              {banIp && privateIp && <Alert severity="info">This is a private IP that many players can share, so PalOps will ban the player but not this IP.</Alert>}
+              {!banIp && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: '-8px !important' }}>
+                  A new account from a banned IP is kicked when it connects. Housemates and shared networks are caught too.
+                </Typography>
+              )}
+            </>
           )}
           <Typography variant="body2" color="text.secondary">
             <Mono>{userId}</Mono>
@@ -139,7 +185,7 @@ export function ModerationDialog({
         <Button onClick={onClose} disabled={busy}>
           Cancel
         </Button>
-        <Button variant="contained" color={action === 'unban' ? 'primary' : 'error'} onClick={submit} loading={busy}>
+        <Button variant="contained" color={action === 'unban' ? 'primary' : 'error'} onClick={submit} loading={busy} disabled={isBan && !reason.trim()}>
           {copy?.button}
         </Button>
       </DialogActions>
@@ -172,7 +218,7 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
 
   const banAddress = async (ip: string) => {
     try {
-      const res = await api.post<{ paldefender?: PalDefenderResult }>('/players/ip-bans', { ip, reason: `Address used by ${name}` });
+      const res = await api.post<{ paldefender?: PalDefenderResult }>('/players/ip-bans', { ip, reason: `IP used by ${name}` });
       notify(`${ip} is banned`, 'success');
       warnIfPalDefenderFailed(notify, res?.paldefender);
       refreshAll();
@@ -210,7 +256,8 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
             ['Platform ID', <Mono>{data.userId}</Mono>],
             !!player?.accountName && ['Account name', player.accountName],
             !!player?.playerId && ['Player ID', <Mono>{player.playerId}</Mono>],
-            !!lastIp && [data.live?.ip ? 'IP address' : 'Last IP address', <Mono>{lastIp}</Mono>],
+            !!lastIp && [data.live?.ip ? 'IP' : 'Last IP', <Mono>{lastIp}</Mono>],
+            can('players.ip') && data.addresses.length > 1 && ['IPs used', data.addresses.length],
             !!player && ['Level', player.level ?? '—'],
             !!player && ['Guild', player.guild ?? '—'],
             !!data.live && ['Ping', data.live.ping !== null ? `${Math.round(data.live.ping)} ms` : '—'],
@@ -221,6 +268,60 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
           ]}
         />
         {!player && <Alert severity="info">PalOps hasn’t seen this player online yet.</Alert>}
+
+        {can('players.ip') && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
+              IPs used{data.addresses.length > 0 ? ` (${data.addresses.length})` : ''}
+            </Typography>
+            {data.addresses.length === 0 && (
+              <Typography variant="body2" color="text.secondary">
+                No IP recorded for this player yet. PalOps records a player’s IP each time it sees them online.
+              </Typography>
+            )}
+            <List dense disablePadding>
+              {data.addresses.map((a) => (
+                <ListItem
+                  key={a.ip}
+                  disableGutters
+                  secondaryAction={
+                    a.banned ? (
+                      <Chip label="Banned" color="error" variant="outlined" />
+                    ) : (
+                      can('players.ban') && (
+                        <Button size="small" color="error" onClick={() => void banAddress(a.ip)}>
+                          Ban IP
+                        </Button>
+                      )
+                    )
+                  }
+                >
+                  <ListItemText primary={<Mono>{a.ip}</Mono>} secondary={`First ${formatDateTime(a.firstSeenAt)} · last ${formatDateTime(a.lastSeenAt)}`} />
+                </ListItem>
+              ))}
+            </List>
+            {data.linkedPlayers.length > 0 && (
+              <Alert severity="warning">
+                Also seen on the same IPs:{' '}
+                {data.linkedPlayers.map((l, i) => (
+                  <span key={`${l.userId}-${l.ip}`}>
+                    {i > 0 && ', '}
+                    {onOpen ? (
+                      <Link component="button" underline="hover" onClick={() => onOpen(l.userId)} sx={{ verticalAlign: 'baseline' }}>
+                        {l.name ?? l.userId}
+                      </Link>
+                    ) : (
+                      (l.name ?? l.userId)
+                    )}{' '}
+                    (<Mono>{l.ip}</Mono>)
+                  </span>
+                ))}
+                . Could be an alt account, or just a shared home network.
+              </Alert>
+            )}
+          </>
+        )}
 
         {data.activity.sessions > 0 && (
           <>
@@ -311,55 +412,6 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
                 </Button>
               ))}
           </Stack>
-        )}
-
-        {data.addresses.length > 0 && (
-          <>
-            <Divider />
-            <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
-              Addresses
-            </Typography>
-            <List dense disablePadding>
-              {data.addresses.map((a) => (
-                <ListItem
-                  key={a.ip}
-                  disableGutters
-                  secondaryAction={
-                    a.banned ? (
-                      <Chip label="Banned" color="error" variant="outlined" />
-                    ) : (
-                      can('players.ban') && (
-                        <Button size="small" color="error" onClick={() => void banAddress(a.ip)}>
-                          Ban address
-                        </Button>
-                      )
-                    )
-                  }
-                >
-                  <ListItemText primary={<Mono>{a.ip}</Mono>} secondary={`First ${formatDateTime(a.firstSeenAt)} · last ${formatDateTime(a.lastSeenAt)}`} />
-                </ListItem>
-              ))}
-            </List>
-            {data.linkedPlayers.length > 0 && (
-              <Alert severity="warning">
-                Also seen on these addresses:{' '}
-                {data.linkedPlayers.map((l, i) => (
-                  <span key={`${l.userId}-${l.ip}`}>
-                    {i > 0 && ', '}
-                    {onOpen ? (
-                      <Link component="button" underline="hover" onClick={() => onOpen(l.userId)} sx={{ verticalAlign: 'baseline' }}>
-                        {l.name ?? l.userId}
-                      </Link>
-                    ) : (
-                      (l.name ?? l.userId)
-                    )}{' '}
-                    (<Mono>{l.ip}</Mono>)
-                  </span>
-                ))}
-                . Could be an alt account, or just a shared home network.
-              </Alert>
-            )}
-          </>
         )}
 
         {palban && can('world.view') && <PalBanPlayerSection userId={data.userId} />}

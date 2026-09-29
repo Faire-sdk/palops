@@ -60,7 +60,7 @@ describe('exports', () => {
     await api(ctx.app, { method: 'POST', url: `/api/v1/players/${ANUBIS}/ban`, cookie: admin, payload: { reason: 'Cheating, again', banAddress: true } });
     const csv = (await get(admin, '/api/v1/players/bans/export.csv')).body;
     expect(csv).toContain(`player,${ANUBIS},Anubis,"Cheating, again"`);
-    expect(csv).toContain('address,198.51.100.23');
+    expect(csv).toContain('ip,198.51.100.23');
 
     const mod = await loginAs(ctx.app, ctx.services, 'moderator');
     const modCsv = (await get(mod, '/api/v1/players/bans/export.csv')).body;

@@ -185,7 +185,7 @@ export function ConsoleSettingsTab() {
               <li>
                 In Docker, mount the log folders read-only into the PalOps container and enter the path as the container sees it, e.g. <Mono>/logs/palworld</Mono>.
               </li>
-              <li>Anyone who can see the Console (admins and owners) can read what these files contain, including player names{pd ? ' and the addresses PalDefender logs' : ''}.</li>
+              <li>Anyone who can see the Console (admins and owners) can read what these files contain, including player names{pd ? ' and the IPs PalDefender logs' : ''}.</li>
             </ul>
           </Typography>
         </Section>

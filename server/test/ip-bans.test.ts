@@ -41,20 +41,20 @@ describe('player addresses', () => {
 });
 
 describe('address bans', () => {
-  it('bans a player together with their address, and lifts both on unban', async () => {
+  it('bans a player together with their IP, and lifts both on unban', async () => {
     const admin = await loginAs(ctx.app, ctx.services, 'admin');
     const res = await post(admin, `/api/v1/players/${ANUBIS}/ban`, { reason: 'Cheating', banAddress: true });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ record: { action: 'ban' }, ipBan: { ip: '198.51.100.23', playerUserId: ANUBIS } });
 
-    // A new account from the same address is kicked on the next online check.
+    // A new account from the same IP is kicked on the next online check.
     ctx.services.palworld.mock.join({ name: 'Anubis2', userId: 'steam_76561190000000099', ip: '198.51.100.23' });
     ctx.services.players.markAllOffline();
     await ctx.services.players.refreshOnline();
     await new Promise((r) => setTimeout(r, 0));
     expect(await online()).not.toContain('steam_76561190000000099');
     const history = (await get(admin, '/api/v1/players/steam_76561190000000099')).json().history;
-    expect(history).toMatchObject([{ action: 'kick', reason: 'Connected from a banned address', actorUsername: 'PalOps' }]);
+    expect(history).toMatchObject([{ action: 'kick', reason: 'Connected from a banned IP', actorUsername: 'PalOps' }]);
 
     expect((await post(admin, `/api/v1/players/${ANUBIS}/unban`)).statusCode).toBe(200);
     expect((await get(admin, '/api/v1/players/bans')).json().ipBans).toEqual([]);
@@ -74,7 +74,7 @@ describe('address bans', () => {
     expect((await get(admin, '/api/v1/players/bans')).json().ipBans).toEqual([]);
   });
 
-  it('only lets admins ban addresses, and rejects bad input', async () => {
+  it('only lets admins ban IPs, and rejects bad input', async () => {
     const mod = await loginAs(ctx.app, ctx.services, 'moderator');
     expect((await post(mod, '/api/v1/players/ip-bans', { ip: '1.2.3.4' })).statusCode).toBe(403);
     const admin = await loginAs(ctx.app, ctx.services, 'admin');

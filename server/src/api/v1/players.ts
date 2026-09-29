@@ -119,12 +119,12 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
     const showIp = hasPermission(request.user!.role, 'players.ip');
     const rows = [
       ...moderation.activeBans().map((b) => ({ kind: 'player', target: b.playerUserId, name: b.playerName, reason: b.reason, by: b.actorUsername, at: b.createdAt })),
-      ...(showIp ? moderation.ipBans().map((b) => ({ kind: 'address', target: b.ip, name: b.playerName, reason: b.reason, by: b.actorUsername, at: b.createdAt })) : []),
+      ...(showIp ? moderation.ipBans().map((b) => ({ kind: 'ip', target: b.ip, name: b.playerName, reason: b.reason, by: b.actorUsername, at: b.createdAt })) : []),
     ];
     services.audit.record(actorOf(request), { category: 'players', action: 'export', target: 'bans', details: { rows: rows.length, addresses: showIp } });
     return sendCsv(reply, 'bans', toCsv(rows, [
       { header: 'Type', value: (r) => r.kind },
-      { header: 'Platform ID or address', value: (r) => r.target },
+      { header: 'Platform ID or IP', value: (r) => r.target },
       { header: 'Player name', value: (r) => r.name },
       { header: 'Reason', value: (r) => r.reason },
       { header: 'Banned by', value: (r) => r.by },
@@ -135,12 +135,12 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
   /** Players banned through the panel. The REST API can't list bans made elsewhere. */
   app.get('/bans', { preHandler: requirePermission(services, 'players.view') }, async (request) => ({
     bans: moderation.activeBans(),
-    /** Address bans the panel enforces. Only for staff who can see addresses. */
+    /** IP bans the panel enforces. Only for staff who can see IPs. */
     ipBans: hasPermission(request.user!.role, 'players.ip') ? moderation.ipBans() : [],
   }));
 
   app.post('/ip-bans', { preHandler: requirePermission(services, 'players.ban') }, async (request) => {
-    const { ip, reason } = parse(z.object({ ip: z.string().trim().min(1, 'Enter an address').max(64), reason: z.string().trim().max(200).default('') }), request.body);
+    const { ip, reason } = parse(z.object({ ip: z.string().trim().min(1, 'Enter an IP').max(64), reason: z.string().trim().max(200).default('') }), request.body);
     return await moderation.banIp(actorOf(request), ip, reason);
   });
 

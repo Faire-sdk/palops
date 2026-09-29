@@ -222,7 +222,7 @@ add a picture of the Palworld map (a screenshot of the in-game map works) with *
 line it up by clicking two spots on it and giving their in-game coordinates, or picking a base or player PalOps knows.
 The image is stored next to the database and only staff who can see the map can load it.
 
-Positions and IP addresses from the snapshot are staff-only. The public website shows guild names with member and base
+Positions and IPs from the snapshot are staff-only. The public website shows guild names with member and base
 counts, and only when `SITE_SHOW_ONLINE_PLAYERS` is on.
 
 ### What PalOps uses the API for
@@ -238,8 +238,8 @@ counts, and only when `SITE_SHOW_ONLINE_PLAYERS` is on.
 | `GET /v1/api/settings` | **Configuration** page (read-only view of the running settings) |
 | `GET /v1/api/game-data` | **World** page and profiles: guilds, bases and their worker pals, each player's pals, the live map, cheat signals and lag hotspots (needs `-enable-gamedata-api`) |
 
-The REST API only bans platform IDs, so PalOps enforces IP bans itself: anyone online from a banned address or range is kicked
-the next time it reads the player list (every 20 seconds). Someone can be in the world for those few seconds, and a shared address
+The REST API only bans platform IDs, so PalOps enforces IP bans itself: anyone online from a banned IP or range is kicked
+the next time it reads the player list (every 20 seconds). Someone can be in the world for those few seconds, and a shared IP
 (a household, a university) catches everyone on it.
 
 The REST API can't start a stopped server, change settings, list bans made elsewhere, or give console or log access; those need PalOps on the game machine
@@ -288,9 +288,9 @@ To try the panel without a server, choose **Mock server** as the connection type
 | View dashboard, server info, online players | ✓ | ✓ | ✓ | ✓ |
 | Guilds and their members | ✓ | ✓ | ✓ | ✓ |
 | Kick players, add moderation notes | ✓ | ✓ | ✓ | |
-| See player IP addresses and who shares them | ✓ | ✓ | ✓ | |
+| See player IPs and who shares them | ✓ | ✓ | ✓ | |
 | World map, bases, performance, cheat signals | ✓ | ✓ | ✓ | |
-| Ban/unban players and IP addresses, console, broadcast, server control, config, logs, backups | ✓ | ✓ | | |
+| Ban/unban players and IPs, console, broadcast, server control, config, logs, backups | ✓ | ✓ | | |
 | Server connection settings, manage panel users | ✓ | | | |
 
 Permissions are defined in [`server/src/services/authentication/permissions.ts`](server/src/services/authentication/permissions.ts)
@@ -357,9 +357,9 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET/POST | `/players/link-requests`, `/players/link-requests/:accountId/approve` or `reject`; POST `/players/:userId/link/verify`, DELETE `/players/:userId/link` | `players.ban` (verify players' Discord links) |
 | POST | `/players/:userId/kick` | `players.kick` |
 | POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` (`banAddress: true` also bans the player's last IP) |
-| POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (IP address or CIDR range bans, enforced by PalOps) |
+| POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (IP or CIDR range bans, enforced by PalOps) |
 | GET | `/players/metrics` | `players.view` (unique players, playtime, average visit, peak online, busiest hours, daily series) |
-| GET | `/players/export.csv`, `/players/bans/export.csv` | `players.view` (CSV downloads, audited; addresses only with `players.ip`) |
+| GET | `/players/export.csv`, `/players/bans/export.csv` | `players.view` (CSV downloads, audited; IPs only with `players.ip`) |
 | POST | `/players/:userId/notes` | `players.note` |
 | GET/PUT | `/palban/settings` | `server.connection` (optional PalBan Network integration; the key is never returned) |
 | POST | `/palban/test` | `server.connection` (which PalBan server a key is for and its permissions) |

@@ -117,7 +117,7 @@ export function PalBanSettingsTab() {
               helperText={hasKey ? 'A key is saved. Leave blank to keep it.' : 'Made on your server’s Integrations tab in PalBan Network (choose “Another tool”). It’s shown once.'}
             />
             <FormControlLabel control={<Switch checked={form.checkJoins} onChange={(e) => setForm({ ...form, checkJoins: e.target.checked })} />} label="Look players up on the network when they join" />
-            <FormControlLabel control={<Switch checked={form.sendEvents} onChange={(e) => setForm({ ...form, sendEvents: e.target.checked })} />} label="Tell PalBan about joins, leaves and bans (never addresses)" />
+            <FormControlLabel control={<Switch checked={form.sendEvents} onChange={(e) => setForm({ ...form, sendEvents: e.target.checked })} />} label="Tell PalBan about joins, leaves and bans (never IPs)" />
             {pd && (
               <>
                 <FormControlLabel
@@ -135,7 +135,7 @@ export function PalBanSettingsTab() {
                 {form.sendLogs && (
                   <FormControlLabel
                     control={<Switch checked={form.sendLogAddresses} onChange={(e) => setForm({ ...form, sendLogAddresses: e.target.checked })} />}
-                    label="Include player addresses in those lines (removed by default)"
+                    label="Include player IPs in those lines (removed by default)"
                     sx={{ ml: 3 }}
                   />
                 )}

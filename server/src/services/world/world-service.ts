@@ -502,7 +502,7 @@ export class WorldService {
       const key = `shared_ip:${unique.map((p) => p.userId).join(',')}`;
       for (const p of unique) {
         const others = names.filter((n) => n !== p.name).join(', ');
-        raise(p.userId!, p.name, 'shared_ip', `Playing from the same address as ${others}. Housemates and shared networks also do this.`, `${key}:${p.userId}`, {
+        raise(p.userId!, p.name, 'shared_ip', `Playing from the same IP as ${others}. Housemates and shared networks also do this.`, `${key}:${p.userId}`, {
           ip,
           players: unique.map((u) => ({ userId: u.userId, name: u.name })),
         });

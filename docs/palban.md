@@ -27,10 +27,10 @@ The key is stored encrypted and never returned or written to the audit log. Redi
 | | |
 | --- | --- |
 | **Banlist** | Reads your server's PalBan banlist every 5 minutes (and on **Read now**): everything the first time and once a day, then only what changed. Lifted and expired bans come through too. |
-| **Bans page** | Shows the PalBan banlist next to the game: which active bans are **not banned in the game yet**, with **Ban in game** for each (it asks you to confirm and reminds you that a ban may have been merged from another server, so check the reason first). A ban lifted on PalBan that PalOps applied earlier shows **Unban in game**, also on your confirmation. A second list shows players banned here but not on PalBan, with **Export for PalBan**, a CSV PalBan's importer reads without mapping (addresses only for staff who can see them, Discord only for verified links). |
+| **Bans page** | Shows the PalBan banlist next to the game: which active bans are **not banned in the game yet**, with **Ban in game** for each (it asks you to confirm and reminds you that a ban may have been merged from another server, so check the reason first). A ban lifted on PalBan that PalOps applied earlier shows **Unban in game**, also on your confirmation. A second list shows players banned here but not on PalBan, with **Export for PalBan**, a CSV PalBan's importer reads without mapping (IPs only for staff who can see them, Discord only for verified links). |
 | **Player lookup** | A **PalBan Network** section on player profiles (moderators and up): your bans of the player, how many other servers have active bans on them, and their reasons, plus anticheat detections your integrations sent. |
 | **Join checks** | Looks each player up when they join (at most once every 6 hours). If they have an active ban on your list or on other servers, it's written to the audit log and posted to Discord's staff heads-up channel (the "signals" notifications) when the Discord bot is on. |
-| **PalDefender log lines** | Optional, and only when the PalDefender integration is on and its log folder is set under Settings, Console logs. PalOps forwards the lines PalDefender writes about suspected cheaters (`... may be a cheater! Reason: ...`, `... is a cheater! Reason: ...`) to PalBan's logs API, so they fill its Reports tab. Chat and the rest of the log never leave the server. Player addresses are removed from the lines unless you allow them. Each line goes with the time PalOps saw it (PalDefender's lines have a time but no date), and lines that fail are kept and retried. |
+| **PalDefender log lines** | Optional, and only when the PalDefender integration is on and its log folder is set under Settings, Console logs. PalOps forwards the lines PalDefender writes about suspected cheaters (`... may be a cheater! Reason: ...`, `... is a cheater! Reason: ...`) to PalBan's logs API, so they fill its Reports tab. Chat and the rest of the log never leave the server. Player IPs are removed from the lines unless you allow them. Each line goes with the time PalOps saw it (PalDefender's lines have a time but no date), and lines that fail are kept and retried. |
 | **Events out** | Tells PalBan about joins, leaves and bans/unbans made here, so they show up in its event history. Events are queued and retried if PalBan is unreachable. **Addresses are never sent.** |
 
 ## Permissions
@@ -39,7 +39,7 @@ The key is stored encrypted and never returned or written to the audit log. Redi
 | --- | --- |
 | Settings, test | `server.connection` (owner), under Settings, Integrations |
 | See the banlist comparison | `players.view` |
-| Read now, Ban in game, export | `players.ban` (admin and up); addresses in the export also need `players.ip` |
+| Read now, Ban in game, export | `players.ban` (admin and up); IPs in the export also need `players.ip` |
 | Player lookup on a profile | `world.view` (moderator and up) |
 
 ## Alternative: the banlist link

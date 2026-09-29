@@ -21,7 +21,7 @@ import { refreshAll, useApi } from '../hooks/useApi';
 
 type Target = { action: 'kick' | 'ban' | 'unban'; userId: string; name: string; ip?: string | null };
 
-/** Every ban in one place: players banned from the panel, banned addresses, and PalDefender's own list. */
+/** Every ban in one place: players banned from the panel, banned IPs, and PalDefender's own list. */
 export function BansPage() {
   const pd = usePalDefender();
   const [profile, setProfile] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export function BansPage() {
     <>
       <PageHeader
         title="Bans"
-        description={pd ? 'Players and addresses banned from the panel, and PalDefender’s own list.' : 'Players and addresses banned from the panel.'}
+        description={pd ? 'Players and IPs banned from the panel, and PalDefender’s own list.' : 'Players and IPs banned from the panel.'}
         actions={<ExportButton path="/players/bans/export.csv" />}
       />
       <Stack spacing={2}>
@@ -119,17 +119,17 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         {body}
       </Section>
       {can('players.ip') && (
-        <Section title={data ? `Address bans (${data.ipBans.length})` : 'Address bans'} disablePadding>
+        <Section title={data ? `IP bans (${data.ipBans.length})` : 'IP bans'} disablePadding>
           <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
-            The game can only ban platform IDs, so PalOps enforces these itself: anyone who connects from a banned address is kicked within about 20 seconds.
+            The game can only ban platform IDs, so PalOps enforces these itself: anyone who connects from a banned IP is kicked within about 20 seconds.
           </Typography>
           {data && (
             <DataTable
               rows={data.ipBans}
               rowKey={(b) => b.id}
-              empty={<EmptyState title="No address bans" />}
+              empty={<EmptyState title="No IP bans" />}
               columns={[
-                { key: 'ip', header: 'Address', render: (b) => <Mono>{b.ip}</Mono> },
+                { key: 'ip', header: 'IP', render: (b) => <Mono>{b.ip}</Mono> },
                 {
                   key: 'player',
                   header: 'From player',
@@ -156,7 +156,7 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
       )}
       {can('players.ip') && <PalDefenderBans onOpen={onOpen} />}
       {can('players.ban') && can('players.ip') && (
-        <Section title="Ban an address">
+        <Section title="Ban an IP">
           <Stack
             component="form"
             direction={{ xs: 'column', sm: 'row' }}
@@ -168,7 +168,7 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
             }}
           >
             <TextField
-              label="IP address or range"
+              label="IP or range"
               helperText="e.g. 203.0.113.7, or 203.0.113.0/24 for a whole range"
               value={ip}
               onChange={(e) => setIp(e.target.value)}
@@ -239,7 +239,7 @@ function PalDefenderBans({ onOpen }: { onOpen: (userId: string) => void }) {
         rowKey={(b) => `${b.kind}:${b.id}`}
         empty={<EmptyState icon={PeopleOutlinedIcon} title="No active bans in PalDefender" />}
         columns={[
-          { key: 'kind', header: 'Type', render: (b) => <Chip label={b.kind === 'ip' ? 'Address' : 'Player'} variant="outlined" /> },
+          { key: 'kind', header: 'Type', render: (b) => <Chip label={b.kind === 'ip' ? 'IP' : 'Player'} variant="outlined" /> },
           { key: 'id', header: 'Who', render: (b) => (b.kind === 'user' ? <PlayerName name={b.id} userId={b.id} onOpen={onOpen} /> : <Mono>{b.id}</Mono>) },
           { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
           { key: 'by', header: 'Banned by', render: (b) => (b.bannedBy ? `${b.bannedBy}${b.bannedVia ? ` (${b.bannedVia})` : ''}` : (b.bannedVia ?? '—')) },
@@ -270,7 +270,7 @@ function PalDefenderBans({ onOpen }: { onOpen: (userId: string) => void }) {
       <ConfirmDialog
         open={!!lift}
         title={`Unban ${lift?.id ?? ''} in PalDefender?`}
-        message={lift?.kind === 'ip' ? 'Accounts on this address can connect again unless PalOps also bans it.' : 'They can connect again unless the game’s own ban list or a PalOps address ban still stops them.'}
+        message={lift?.kind === 'ip' ? 'Accounts on this IP can connect again unless PalOps also bans it.' : 'They can connect again unless the game’s own ban list or a PalOps address ban still stops them.'}
         confirmLabel="Unban"
         onClose={() => setLift(null)}
         onConfirm={async () => {

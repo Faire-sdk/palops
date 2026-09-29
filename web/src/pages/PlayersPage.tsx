@@ -145,7 +145,7 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
           { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : '—') },
           { key: 'sessions', header: 'Visits', render: (p) => p.sessions ?? 0 },
           { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
-          ...(can('players.ip') ? [{ key: 'ip', header: 'IP address', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : '—') }] : []),
+          ...(can('players.ip') ? [{ key: 'ip', header: 'IP', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : '—') }] : []),
           { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
           { key: 'ping', header: 'Ping', nowrap: true, render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : '—') },
           {
@@ -338,7 +338,7 @@ function LinkRequests({ onOpen }: { onOpen: (userId: string) => void }) {
   );
 }
 
-/** Unusual movement, level jumps and shared addresses, from the world snapshot. */
+/** Unusual movement, level jumps and shared IPs, from the world snapshot. */
 function Signals({ onOpen }: { onOpen: (userId: string) => void }) {
   const { can } = useAuth();
   const notify = useToast();

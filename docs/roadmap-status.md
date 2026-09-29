@@ -8,7 +8,7 @@ Tracks progress against the development priority order in the project roadmap.
 | 2 | Authentication & roles | Done: Discord OAuth2 as main sign-in (owners add users by Discord ID), optional password sign-in, first-run owner setup, sessions, owner-issued reset links, 4 roles enforced server-side, user management |
 | 3 | Server connection layer | Done: `PalworldAdapter` interface, official REST API adapter, mock adapter, encrypted connection settings, connection test, status endpoint |
 | 4 | Dashboard | Status, info, player count, FPS/frame time, broadcast, and the server FPS graph with average and lowest (from world snapshots, staff only). Host CPU/RAM pending |
-| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every address a player has connected from is recorded (staff with `players.ip` only), shown on profiles with the other accounts that share it, and can be banned, alone or as a CIDR range. The game only bans accounts, so PalOps enforces address bans itself: anyone connecting from one is kicked at the next check (about 20 seconds). Bans have their own page and, with the players list, can be exported as CSV (audited; addresses only for staff with `players.ip`). The Players page has an Activity tab (unique players, playtime, average visit, peak online, busiest hours) and profiles show playtime windows and a daily chart. Bans made outside PalOps can't be listed through the API |
+| 5 | Player management | Done for the REST API: online list, all known players with search, profiles, kick/ban/unban with reasons, ban by platform ID, staff notes, moderation history. Every IP a player has connected from is recorded (staff with `players.ip` only), shown on profiles with the other accounts that share it, and can be banned, alone or as a CIDR range. The game only bans accounts, so PalOps enforces IP bans itself: anyone connecting from one is kicked at the next check (about 20 seconds). Bans have their own page and, with the players list, can be exported as CSV (audited; IPs only for staff with `players.ip`). The Players page has an Activity tab (unique players, playtime, average visit, peak online, busiest hours) and profiles show playtime windows and a daily chart. Bans made outside PalOps can't be listed through the API |
 | 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. Optionally the PalServerLogger websocket for the game's real console output |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
 | 8 | Logs | Audit log with category filter and pagination; the Console page covers the game and PalDefender log files |
@@ -33,13 +33,13 @@ From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 sec
 - A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, with names on players, bases, pals and NPCs (labels thin out when crowded, and details show on hover), over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
 - Bases with their worker pals, levels and HP, and injured workers flagged.
 - Pals seen with each player, kept for 30 days.
-- Cheat signals: unusual movement, level jumps, players sharing an address and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.
+- Cheat signals: unusual movement, level jumps, players sharing an IP and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.
 - Lag hotspots: FPS over time and the busiest 500 m areas, kept for 7 days.
 
 ## PalDefender (optional)
 
 An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin for Windows servers, off unless an owner turns it on
-in Settings: bans and address bans mirrored to PalDefender, its ban list shown on the Bans tab, player addresses synced from it, and a PalDefender page
+in Settings: bans and IP bans mirrored to PalDefender, its ban list shown on the Bans tab, player IPs synced from it, and a PalDefender page
 and player panel for inventories, pals, technologies, progression, guilds and bases, giving, summoning, base deletion, config reload and messages. See [paldefender.md](paldefender.md).
 
 ## PalBan Network (optional)
