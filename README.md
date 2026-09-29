@@ -255,11 +255,11 @@ person's panel role. Off by default and PalOps doesn't need it. See [docs/discor
 If your Windows server runs the [PalDefender](https://ultimeit.github.io/PalDefender/) plugin, PalOps can mirror bans (including IP bans) to it, show its ban list,
 player inventories, pals, guilds and bases, and let admins give items and pals, teach technologies, summon, delete bases and send messages. It's off by default and PalOps doesn't need it. See [docs/paldefender.md](docs/paldefender.md).
 
-### Optional: PalBan Network
+### Optional: shared banlist network
 
-[PalBan Network](https://github.com/Faire-sdk/PalBanNetwork) shares banlists between Palworld servers. PalOps can read your server's PalBan banlist next to the game's (banning in the game
-one player at a time, after you confirm), export local bans for PalBan to import, look players up on the network, and report joins and bans. Reports from other servers are leads,
-never bans. A shared banlist can be abused and gives whoever runs it power over many servers, so read the risks in the doc first. Off by default. See [docs/palban.md](docs/palban.md).
+PalOps can connect to a shared banlist network for Palworld servers, such as PalBan Network, that shares information about cheaters, with proof, between servers. It can read your
+server's banlist there next to the game's (banning in the game one player at a time, after you confirm), export local bans for the network to import, look players up, and report
+joins and bans. Nothing acts by itself, and it's never meant to control another server's ban decisions. Off by default. See [docs/palban.md](docs/palban.md).
 
 ### Keep the API private
 

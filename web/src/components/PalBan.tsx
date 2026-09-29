@@ -114,7 +114,7 @@ export function PalBanSettingsTab() {
               value={form.key}
               onChange={(e) => setForm({ ...form, key: e.target.value })}
               required={!hasKey}
-              helperText={hasKey ? 'A key is saved. Leave blank to keep it.' : 'Made on your server’s Integrations tab in PalBan Network (choose “Another tool”). It’s shown once.'}
+              helperText={hasKey ? 'A key is saved. Leave blank to keep it.' : 'The integration key for your server, from your account on the network. It’s shown once.'}
             />
             <FormControlLabel control={<Switch checked={form.checkJoins} onChange={(e) => setForm({ ...form, checkJoins: e.target.checked })} />} label="Look players up on the network when they join" />
             <FormControlLabel control={<Switch checked={form.sendEvents} onChange={(e) => setForm({ ...form, sendEvents: e.target.checked })} />} label="Tell PalBan about joins, leaves and bans (never addresses)" />
