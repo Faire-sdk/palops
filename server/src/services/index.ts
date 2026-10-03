@@ -16,6 +16,7 @@ import { DiscordBotService } from './discord/discord-bot.js';
 import { ConsoleService } from './console/console-service.js';
 import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
+import { ScheduleService } from './schedule/schedule-service.js';
 import { SiteAccountService } from './site/site-accounts.js';
 import { ServerRegistry } from './servers/server-registry.js';
 import { MapImageService } from './world/map-image.js';
@@ -47,6 +48,8 @@ export interface Services {
   siteAccounts: SiteAccountService;
   world: WorldService;
   mapImage: MapImageService;
+  /** Scheduled world saves and restarts. */
+  schedule: ScheduleService;
 }
 
 /**
@@ -126,5 +129,6 @@ export function createServices(config: Config, db: DB): Services {
     console: consoleLog,
     discordBot,
     mapImage: new MapImageService(db, config.databasePath, audit),
+    schedule: new ScheduleService(db, palworld, servers, audit, consoleLog),
   };
 }

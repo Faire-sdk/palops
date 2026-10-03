@@ -550,4 +550,29 @@ export const migrations: Migration[] = [
       ALTER TABLE palban ADD COLUMN send_log_addresses INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    id: 19,
+    name: 'server_schedule',
+    sql: `
+      -- Scheduled world saves and restarts (one row). Restarts are off by default:
+      -- they shut the server down and rely on its service manager to start it again.
+      CREATE TABLE server_schedule (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        restart_enabled INTEGER NOT NULL DEFAULT 0,
+        restart_every_hours INTEGER NOT NULL DEFAULT 4,
+        restart_at TEXT NOT NULL DEFAULT '00:00',
+        restart_warn_minutes INTEGER NOT NULL DEFAULT 5,
+        restart_message TEXT NOT NULL DEFAULT '',
+        save_enabled INTEGER NOT NULL DEFAULT 1,
+        save_every_minutes INTEGER NOT NULL DEFAULT 15,
+        last_restart_slot TEXT,
+        last_restart_at TEXT,
+        last_save_at TEXT,
+        last_error TEXT,
+        last_error_at TEXT,
+        updated_at TEXT
+      );
+      INSERT INTO server_schedule (id) VALUES (1);
+    `,
+  },
 ];

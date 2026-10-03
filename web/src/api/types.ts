@@ -41,6 +41,26 @@ export interface SessionInfo {
 
 export type ServerState = 'online' | 'offline' | 'error' | 'unconfigured';
 
+export interface ScheduleSettings {
+  restartEnabled: boolean;
+  restartEveryHours: number;
+  restartAt: string;
+  restartWarnMinutes: number;
+  restartMessage: string;
+  saveEnabled: boolean;
+  saveEveryMinutes: number;
+  updatedAt: string | null;
+}
+
+export interface ScheduleStatus {
+  timeZone: string;
+  nextRestartAt: string | null;
+  nextSaveAt: string | null;
+  lastRestartAt: string | null;
+  lastSaveAt: string | null;
+  lastError: { at: string; message: string } | null;
+}
+
 export interface ServerStatus {
   state: ServerState;
   checkedAt: string;

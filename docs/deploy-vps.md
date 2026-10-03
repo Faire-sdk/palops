@@ -74,18 +74,28 @@ The first start downloads the Palworld server through SteamCMD, which takes a fe
 1. Get the setup token: the `PANEL_SETUP_TOKEN` you set, or `docker compose logs palops | grep -i token`.
 2. Open `https://<domain>/panel`, paste the token and click **Continue with Discord**. You're now the owner.
 3. In **Settings → Server connection**, enter host `127.0.0.1`, port `8212`, user `admin` and your `ADMIN_PASSWORD`.
-4. Optional: in **Settings → Console logs**, set the game log folder to `/palworld/Pal/Saved/Logs` (see [console.md](console.md)).
+4. In **Server → Restarts and saves**, switch on **Restart on a schedule**. Every 4 hours with a 5-minute warning is the default (see below).
+5. Optional: in **Settings → Console logs**, set the game log folder to `/palworld/Pal/Saved/Logs` (see [console.md](console.md)).
 
-## What the Palworld container does for you
+## Restarts, saves and backups
+
+| What | Default here | Where to change it |
+| --- | --- | --- |
+| Restart | Every 4 hours from 00:00, players warned 5 minutes before (off until you switch it on) | Panel: **Server → Restarts and saves** |
+| World save | Every 15 minutes, on top of the game's own autosave | Panel: **Server → Restarts and saves** |
+| Backup of the save folder | Every hour, kept for 3 days | `.env`: `BACKUP_CRON_EXPRESSION`, `OLD_BACKUP_DAYS` |
+| Game server update | On every start | `deploy/vps/docker-compose.yml` (`UPDATE_ON_BOOT`) |
+
+Why these values: Palworld's memory use climbs the longer the world runs, and hosts commonly recommend a restart every 2 to 6 hours
+depending on player count. Every 4 hours suits a small or medium server; with 15 or more players, or if the server gets laggy
+before a restart, try every 2 or 3 hours. Hourly backups mean you lose at most an hour if a save file is corrupted, and three days
+of them fit easily on the disk. Times use `TZ` from `.env`, so pick restart times when few people play.
+
+A restart saves the world, starts the game's own shutdown countdown with your message, and stops the server.
+Docker's restart policy starts it again, which also installs any game update.
 
 The game server runs on the community-maintained [`thijsvanloef/palworld-server-docker`](https://github.com/thijsvanloef/palworld-server-docker) image.
-This Compose file configures it to:
-
-- update the server on every start (`UPDATE_ON_BOOT`),
-- back up the world every 6 hours to `deploy/vps/palworld/backups/` and delete backups older than 7 days,
-- restart once a day at 06:00 (in `TZ`), with an in-game warning 5 minutes before, because Palworld's memory use grows the longer it runs.
-
-Change these in `.env`. The image's other settings are listed in its README and can be added to the `palworld` service's `environment`.
+Its other settings are listed in its README and can be added to the `palworld` service's `environment`.
 Game settings that the image builds from environment variables overwrite `PalWorldSettings.ini` on each start, so set them there, not in the file.
 
 ## Backups

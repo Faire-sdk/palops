@@ -33,15 +33,14 @@ services:
       REST_API_PORT: 8212
       RCON_ENABLED: "false"
       UPDATE_ON_BOOT: "true"
+      # Hourly backups of the save folder, kept for 3 days. Copy them off the VPS too (see the guide).
       BACKUP_ENABLED: "true"
-      BACKUP_CRON_EXPRESSION: ${BACKUP_CRON_EXPRESSION:-0 */6 * * *}
+      BACKUP_CRON_EXPRESSION: ${BACKUP_CRON_EXPRESSION:-0 * * * *}
       DELETE_OLD_BACKUPS: "true"
-      OLD_BACKUP_DAYS: ${OLD_BACKUP_DAYS:-7}
-      # Palworld's memory use grows over time; a daily restart keeps it in check.
-      AUTO_REBOOT_ENABLED: ${AUTO_REBOOT_ENABLED:-true}
-      AUTO_REBOOT_CRON_EXPRESSION: ${AUTO_REBOOT_CRON_EXPRESSION:-0 6 * * *}
-      AUTO_REBOOT_WARN_MINUTES: 5
-      AUTO_REBOOT_EVEN_IF_PLAYERS_ONLINE: "true"
+      OLD_BACKUP_DAYS: ${OLD_BACKUP_DAYS:-3}
+      # Restarts are scheduled in PalOps (Server → Restarts and saves). Docker's restart
+      # policy starts the server again after PalOps shuts it down.
+      AUTO_REBOOT_ENABLED: "false"
 
   palops:
     build: ../..

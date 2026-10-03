@@ -12,7 +12,7 @@ Tracks progress against the development priority order in the project roadmap.
 | 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. Optionally the PalServerLogger websocket for the game's real console output |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
 | 8 | Logs | Audit log with category filter and pagination; the Console page covers the game and PalDefender log files |
-| 9 | Server controls | Save, shutdown with countdown and message, force stop. Start/restart needs a process manager integration |
+| 9 | Server controls | Save, shutdown with countdown and message, force stop, and scheduled restarts and world saves (Server → Restarts and saves; the server's service manager starts it again). Starting a stopped server on demand needs a process manager integration |
 | 10 | Backups | Not started |
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
 | 12 | Security hardening | Baseline in place (see README) |

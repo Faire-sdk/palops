@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
+import { TIME_OF_DAY } from '../../services/schedule/schedule-service.js';
 import { ADAPTER_KINDS } from '../../services/servers/server-registry.js';
 import { parse } from '../../utils/validation.js';
 
@@ -21,6 +22,16 @@ const connectionSchema = z
     message: 'Enter a valid hostname or IP address',
     path: ['host'],
   });
+
+const scheduleSchema = z.object({
+  restartEnabled: z.boolean(),
+  restartEveryHours: z.number().int().min(1).max(24),
+  restartAt: z.string().regex(TIME_OF_DAY, 'Use a 24-hour time such as 04:00'),
+  restartWarnMinutes: z.number().int().min(1).max(30),
+  restartMessage: z.string().trim().max(200).default(''),
+  saveEnabled: z.boolean(),
+  saveEveryMinutes: z.number().int().min(5).max(24 * 60),
+});
 
 export default async function serverRoutes(app: FastifyInstance, { services }: { services: Services }) {
   const { palworld } = services;
@@ -62,6 +73,19 @@ export default async function serverRoutes(app: FastifyInstance, { services }: {
     await palworld.forceStop();
     services.audit.record(actorOf(request), { category: 'server', action: 'force_stop' });
     return { ok: true };
+  });
+
+  app.get('/schedule', { preHandler: requirePermission(services, 'server.view') }, async () => ({
+    settings: services.schedule.getSettings(),
+    status: services.schedule.getStatus(),
+  }));
+
+  app.put('/schedule', { preHandler: requirePermission(services, 'server.control') }, async (request) => {
+    const input = parse(scheduleSchema, request.body);
+    const { updatedAt: _, ...before } = services.schedule.getSettings();
+    const settings = services.schedule.saveSettings(input);
+    services.audit.record(actorOf(request), { category: 'server', action: 'schedule_updated', details: { before, after: input } });
+    return { settings, status: services.schedule.getStatus() };
   });
 
   app.get('/connection', { preHandler: requirePermission(services, 'server.connection') }, async () => ({
