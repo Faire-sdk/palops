@@ -25,9 +25,21 @@ export function authErrorMessage(code: string | null, discordId?: string | null)
   }
 }
 
-export function discordAvatarUrl(discord: NonNullable<User['discord']>): string | null {
-  return discord.avatar ? `https://cdn.discordapp.com/avatars/${discord.id}/${discord.avatar}.png?size=64` : null;
+const CDN = 'https://cdn.discordapp.com';
+
+/** Discord's picture for the user, or the default one Discord shows when they haven't set one. */
+export function discordAvatarUrl(discord: NonNullable<User['discord']>, size = 64): string | null {
+  if (discord.avatar) return `${CDN}/avatars/${discord.id}/${discord.avatar}.${discord.avatar.startsWith('a_') && size > 64 ? 'gif' : 'png'}?size=${size}`;
+  try {
+    return `${CDN}/embed/avatars/${Number((BigInt(discord.id) >> 22n) % 6n)}.png`;
+  } catch {
+    return null;
+  }
 }
+
+export const discordBannerUrl = (id: string, banner: string, size = 600) => `${CDN}/banners/${id}/${banner}.${banner.startsWith('a_') ? 'gif' : 'png'}?size=${size}`;
+
+export const discordGuildIconUrl = (id: string, icon: string, size = 64) => `${CDN}/icons/${id}/${icon}.png?size=${size}`;
 
 export function DiscordLogo(props: SvgIconProps) {
   return (

@@ -23,6 +23,8 @@ const envSchema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   DISCORD_REDIRECT_URI: z.url().optional(),
   AUTH_PASSWORD_LOGIN: booleanString.optional(),
+  /** Break-glass sign-in as the owner, e.g. when Discord sign-in is broken. Unset means off. */
+  PANEL_EMERGENCY_PASSWORD: z.string().min(16, 'PANEL_EMERGENCY_PASSWORD must be at least 16 characters').max(256).optional(),
   DEV_DISCORD_LOGIN: booleanString.default(false),
   DEV_MOCK_SERVER: booleanString.default(false),
   SITE_JOIN_ADDRESS: z.string().max(200).optional(),
@@ -50,6 +52,8 @@ export interface Config {
   discord: { clientId: string; clientSecret: string; redirectUri: string } | null;
   /** Whether username/password sign-in is offered. */
   passwordLogin: boolean;
+  /** The break-glass owner password, when set. */
+  emergencyPassword: string | undefined;
   /** Development only: a local stand-in for Discord so sign-in can be tested without a Discord app. */
   devDiscordLogin: boolean;
   /** Development only: connect the mock Palworld server on start if none is configured. */
@@ -120,6 +124,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     logLevel: env.LOG_LEVEL,
     discord,
     passwordLogin,
+    emergencyPassword: env.PANEL_EMERGENCY_PASSWORD,
     devDiscordLogin: env.DEV_DISCORD_LOGIN,
     devMockServer: env.DEV_MOCK_SERVER,
     worldPollSeconds: env.WORLD_POLL_SECONDS,

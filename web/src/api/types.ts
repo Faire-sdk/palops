@@ -12,6 +12,7 @@ export type Permission =
   | 'players.ban'
   | 'players.note'
   | 'players.ip'
+  | 'accounts.private'
   | 'world.view'
   | 'console.view'
   | 'console.execute'
@@ -40,6 +41,26 @@ export interface SessionInfo {
 }
 
 export type ServerState = 'online' | 'offline' | 'error' | 'unconfigured';
+
+export interface ScheduleSettings {
+  restartEnabled: boolean;
+  restartEveryHours: number;
+  restartAt: string;
+  restartWarnMinutes: number;
+  restartMessage: string;
+  saveEnabled: boolean;
+  saveEveryMinutes: number;
+  updatedAt: string | null;
+}
+
+export interface ScheduleStatus {
+  timeZone: string;
+  nextRestartAt: string | null;
+  nextSaveAt: string | null;
+  lastRestartAt: string | null;
+  lastSaveAt: string | null;
+  lastError: { at: string; message: string } | null;
+}
 
 export interface ServerStatus {
   state: ServerState;
@@ -117,8 +138,53 @@ export interface ModerationRecord {
 }
 
 /** The website account linked to a character. */
+/** What Discord sign-in returned. Email and servers are null without accounts.private. */
+export interface DiscordProfile {
+  connections: Array<{ type: string; id: string; name: string; verified: boolean }> | null;
+  /** false: not in the community server; null: unknown. */
+  communityMember: { joinedAt: string | null; nick: string | null; roles: string[] } | false | null;
+  email: string | null;
+  emailVerified: boolean | null;
+  guilds: DiscordGuild[] | null;
+  updatedAt: string;
+}
+
+/** A Discord server the user is in. */
+export interface DiscordGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner: boolean;
+  admin: boolean;
+  memberCount: number | null;
+  onlineCount: number | null;
+}
+
+/** A role in the community server; name is null when the bot couldn't read the server's roles. */
+export interface DiscordRole {
+  id: string;
+  name: string | null;
+  color: number;
+  position: number;
+}
+
+export interface WebsiteAccount {
+  id: number;
+  discord: { id: string; username: string | null; avatar: string | null; globalName: string | null; banner: string | null; accentColor: number | null };
+  player: { userId: string; name: string | null; level: number | null } | null;
+  verified: boolean;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  requestedAt: string | null;
+  linkedAt: string | null;
+  createdAt: string;
+  lastLoginAt: string | null;
+  profile: DiscordProfile | null;
+}
+
 export interface CharacterLink {
   discord: { id: string; username: string | null; avatar: string | null };
+  profile?: DiscordProfile | null;
   verified: boolean;
   verifiedBy: string | null;
   verifiedAt: string | null;
@@ -305,7 +371,8 @@ export interface AuditEntry {
 
 export interface AuthOptions {
   setupRequired: boolean;
-  providers: { discord: boolean; password: boolean };
+  /** emergency: the owner's break-glass password (PANEL_EMERGENCY_PASSWORD) is set. */
+  providers: { discord: boolean; password: boolean; emergency?: boolean };
 }
 
 /** The live map's background image; bounds are its edges in map coordinates. */

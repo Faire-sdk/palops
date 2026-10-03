@@ -8,6 +8,7 @@ import type { DiscordAccount, User } from '../../services/authentication/users.j
 import { DevDiscordOAuth, devDiscordPage } from '../../services/discord/dev-oauth.js';
 import { DiscordOAuthError, type DiscordSignIn } from '../../services/discord/oauth.js';
 import { OAUTH_STATE_TTL_MS, type OAuthIntent } from '../../services/discord/oauth-states.js';
+import { createHash } from 'node:crypto';
 import { safeEqual } from '../../utils/crypto.js';
 import { badRequest, forbidden, HttpError, tooManyRequests, unauthorized } from '../../utils/errors.js';
 import { RateLimiter } from '../../utils/rate-limiter.js';
@@ -29,10 +30,14 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
   const WINDOW = 15 * 60 * 1000;
   const perIp = new RateLimiter(30, WINDOW);
   const failuresPerUser = new RateLimiter(5, WINDOW);
+  // Emergency sign-in: a few tries per address, and a cap on failures from everywhere
+  // so the password can't be guessed by spreading attempts across many addresses.
+  const emergencyPerIp = new RateLimiter(5, WINDOW);
+  const emergencyFailures = new RateLimiter(10, 60 * 60 * 1000);
 
   const session = (user: User) => ({ user, permissions: permissionsFor(user.role) });
 
-  const startSession = (request: FastifyRequest, reply: FastifyReply, user: User, method: 'password' | 'discord') => {
+  const startSession = (request: FastifyRequest, reply: FastifyReply, user: User, method: 'password' | 'discord' | 'emergency') => {
     const { token } = services.sessions.create(user.id, { ip: request.ip, userAgent: request.headers['user-agent'] });
     setSessionCookie(reply, services, token);
     services.users.touchLogin(user.id);
@@ -48,7 +53,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
 
   app.get('/options', async () => ({
     setupRequired: services.setup.required,
-    providers: { discord: services.discordOAuth !== null, password: config.passwordLogin },
+    providers: { discord: services.discordOAuth !== null, password: config.passwordLogin, emergency: !!config.emergencyPassword },
   }));
 
   // ---- Username/password (optional) ----
@@ -93,6 +98,29 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
     const { passwordHash: _hash, ...user } = found;
     startSession(request, reply, user, 'password');
     return session(user);
+  });
+
+  /**
+   * Break-glass sign-in as the owner with PANEL_EMERGENCY_PASSWORD, for when Discord
+   * sign-in is broken. Works even with password sign-in off. Every attempt is audited.
+   */
+  app.post('/emergency', async (request, reply) => {
+    const expected = config.emergencyPassword;
+    if (!expected) throw forbidden('Emergency sign-in is not set up on this panel');
+    if (!emergencyPerIp.consume(request.ip) || emergencyFailures.isBlocked('all')) throw tooManyRequests();
+    const { password } = parse(z.object({ password: z.string().min(1).max(256) }), request.body);
+    // Compare fixed-length digests so the comparison takes the same time whatever was typed.
+    const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+    if (!safeEqual(digest(password), digest(expected))) {
+      emergencyFailures.consume('all');
+      services.audit.record({ userId: null, username: null, ip: request.ip }, { category: 'auth', action: 'emergency_login_failed' });
+      throw unauthorized('Invalid emergency password');
+    }
+    const owner = services.users.list().find((u) => u.role === 'owner' && !u.disabled);
+    if (!owner) throw forbidden('There is no active owner account to sign in as');
+    startSession(request, reply, owner, 'emergency');
+    services.console.add('panel', `Emergency sign-in used as ${owner.username} from ${request.ip}`, 'warn');
+    return session(owner);
   });
 
   app.post('/password', { preHandler: authenticate(services) }, async (request) => {
@@ -196,9 +224,13 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
       secure: config.cookieSecure,
       maxAge: OAUTH_STATE_TTL_MS / 1000,
     });
-    // Players signing in on the website may be added to the Discord server, which needs one extra permission from them.
-    return { url: discord.authorizeUrl(state, { joinServer: intent.kind === 'player' && services.discordBot.joinOnLoginActive }) };
+    return { url: discord.authorizeUrl(state) };
   });
+
+  /** Saves what the extra scopes returned, only for people who actually signed in. */
+  const rememberProfile = (account: DiscordSignIn) => {
+    if (account.profile) services.discordProfiles.save(account.id, account.profile, account);
+  };
 
   app.get('/discord/callback', async (request, reply) => {
     const query = parse(
@@ -219,7 +251,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
 
     let account: DiscordSignIn;
     try {
-      account = await services.discordOAuth.exchange(query.code);
+      account = await services.discordOAuth.exchange(query.code, { guildId: services.discordBot.settings().guildId });
     } catch (err) {
       request.log.warn({ err: err instanceof DiscordOAuthError ? err.message : err }, 'Discord OAuth exchange failed');
       return fail('discord_error', back);
@@ -238,6 +270,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
             return fail('not_authorized', PANEL, user ? {} : { discord_id: account.id });
           }
           const refreshed = services.users.setDiscord(user.id, account);
+          rememberProfile(account);
           startSession(request, reply, refreshed, 'discord');
           return reply.redirect(PANEL);
         }
@@ -250,6 +283,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
             discord: account,
           });
           services.setup.complete();
+          rememberProfile(account);
           services.audit.record(
             { userId: user.id, username: user.username, ip: request.ip },
             { category: 'auth', action: 'setup_completed', target: user.username, details: { method: 'discord' } },
@@ -261,6 +295,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
           const user = services.users.get(intent.userId);
           if (!user || user.disabled) return fail('invalid_state', back);
           services.users.setDiscord(user.id, account);
+          rememberProfile(account);
           services.audit.record(
             { userId: user.id, username: user.username, ip: request.ip },
             { category: 'auth', action: 'discord_linked', details: { discordId: account.id, discordUsername: account.username } },
@@ -269,6 +304,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
         }
         case 'player': {
           const player = services.siteAccounts.signIn(account);
+          rememberProfile(account);
           setPlayerCookie(reply, services, services.siteAccounts.createSession(player.id));
           // Best effort: signing in must never fail because Discord wouldn't add them. The access token is used once and dropped.
           if (account.accessToken && services.discordBot.joinOnLoginActive) {

@@ -16,6 +16,9 @@ export async function startFakeRest(token: string) {
   const failing = new Map<string, number>();
   /** Members by "guild/user", so role sync has something to read. */
   const members = new Map<string, { roles: string[]; nick?: string | null }>();
+  /** Public profiles by user ID, for GET /users/{id}. */
+  const users = new Map<string, Record<string, unknown>>();
+  const roles: Array<{ id: string; name: string; color: number; position: number }> = [];
   const server: Server = createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
@@ -54,6 +57,9 @@ export async function startFakeRest(token: string) {
         }
       }
       if (path === '/users/@me') return send(200, { id: '999', username: 'PalOpsBot' });
+      const userMatch = path.match(/^\/users\/(\d+)$/);
+      if (userMatch) return users.has(userMatch[1]!) ? send(200, { id: userMatch[1], ...users.get(userMatch[1]!) }) : send(404, { message: 'Unknown User' });
+      if (/^\/guilds\/\d+\/roles$/.test(path)) return send(200, roles);
       if (path.startsWith('/guilds/') && !path.includes('/bans') && !path.includes('/members')) return send(200, { id: path.split('/')[2], name: 'Palworld Friends' });
       if (path.startsWith('/channels/') && req.method === 'GET') return send(200, { id: path.split('/')[2], name: 'palworld' });
       if (path.startsWith('/channels/') && req.method === 'PATCH') return send(200, {});
@@ -66,7 +72,7 @@ export async function startFakeRest(token: string) {
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { url, calls, failing, members, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return { url, calls, failing, members, users, roles, close: () => new Promise<void>((r) => server.close(() => r())) };
 }
 
 export interface Frame {

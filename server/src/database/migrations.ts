@@ -550,4 +550,65 @@ export const migrations: Migration[] = [
       ALTER TABLE palban ADD COLUMN send_log_addresses INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    id: 19,
+    name: 'server_schedule',
+    sql: `
+      -- Scheduled world saves and restarts (one row). Restarts are off by default:
+      -- they shut the server down and rely on its service manager to start it again.
+      CREATE TABLE server_schedule (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        restart_enabled INTEGER NOT NULL DEFAULT 0,
+        restart_every_hours INTEGER NOT NULL DEFAULT 4,
+        restart_at TEXT NOT NULL DEFAULT '00:00',
+        restart_warn_minutes INTEGER NOT NULL DEFAULT 5,
+        restart_message TEXT NOT NULL DEFAULT '',
+        save_enabled INTEGER NOT NULL DEFAULT 1,
+        save_every_minutes INTEGER NOT NULL DEFAULT 15,
+        last_restart_slot TEXT,
+        last_restart_at TEXT,
+        last_save_at TEXT,
+        last_error TEXT,
+        last_error_at TEXT,
+        updated_at TEXT
+      );
+      INSERT INTO server_schedule (id) VALUES (1);
+    `,
+  },
+  {
+    id: 20,
+    name: 'discord_profiles',
+    sql: `
+      -- What Discord sign-in returns beyond the account itself (email, linked accounts,
+      -- servers, membership in the community server), refreshed on each sign-in.
+      -- Keyed by Discord id, so panel users and website players share it.
+      CREATE TABLE discord_profiles (
+        discord_id TEXT PRIMARY KEY,
+        email TEXT,
+        email_verified INTEGER,
+        connections TEXT,
+        guilds TEXT,
+        community_member TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
+  {
+    id: 21,
+    name: 'discord_users',
+    sql: `
+      -- Each Discord user's current name and pictures: from sign-in, and from the bot
+      -- looking them up (GET /users/{id}), so staff see today's avatar, not the one
+      -- from their last sign-in.
+      CREATE TABLE discord_users (
+        discord_id TEXT PRIMARY KEY,
+        username TEXT,
+        global_name TEXT,
+        avatar TEXT,
+        banner TEXT,
+        accent_color INTEGER,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
 ];
