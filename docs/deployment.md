@@ -8,6 +8,7 @@ Use another host only when you can't run anything next to the game server, and r
 
 Don't have a game server yet? [deploy-vps.md](deploy-vps.md) rents one cheap VPS and runs the Palworld server, PalOps and HTTPS on it together.
 Railway can't host the game server itself, because it doesn't accept UDP, which Palworld players connect over.
+To host it all on your own computer at home, including the Discord bot, see [deploy-home.md](deploy-home.md).
 
 ## Your options
 

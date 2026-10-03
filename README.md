@@ -46,6 +46,9 @@ server locally, tests, and running the production image with `docker compose`.
 the REST API stays on `127.0.0.1`, and features such as logs and backups need the game machine.
 [docs/deployment.md](docs/deployment.md) compares the options. Pick the setup for your server's operating system.
 
+**Hosting at home?** [docs/deploy-home.md](docs/deploy-home.md) runs everything on your own computer (Linux, or Windows with Docker Desktop):
+the game server, website, panel and Discord bot, with a free Cloudflare Tunnel for HTTPS so you only forward the game port.
+
 ### Linux setup
 
 For a Linux VPS or dedicated server (Ubuntu 24.04 or Debian 12 recommended), with Docker.
