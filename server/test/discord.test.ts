@@ -217,6 +217,25 @@ describe('managing users by Discord ID', () => {
     const unlink = await api(ctx.app, { method: 'PATCH', url: `/api/v1/users/${ok.json().user.id}`, cookie, payload: { discordId: null } });
     expect(unlink.statusCode).toBe(400);
   });
+
+  it('lets an owner delete users, but not themselves or the last owner', async () => {
+    const owner = await ctx.services.users.create({ username: 'boss', role: 'owner', discord: { ...ALICE, id: '999999999999999999' } });
+    const cookie = `palops_session=${ctx.services.sessions.create(owner.id).token}`;
+    const mod = await ctx.services.users.create({ username: 'gone', role: 'moderator', discord: { id: ALICE.id, username: null, avatar: null } });
+    const modCookie = `palops_session=${ctx.services.sessions.create(mod.id).token}`;
+
+    expect((await api(ctx.app, { method: 'DELETE', url: `/api/v1/users/${owner.id}`, cookie })).statusCode).toBe(400);
+    // A moderator can't manage users at all.
+    expect((await api(ctx.app, { method: 'DELETE', url: `/api/v1/users/${owner.id}`, cookie: modCookie })).statusCode).toBe(403);
+
+    expect((await api(ctx.app, { method: 'DELETE', url: `/api/v1/users/${mod.id}`, cookie })).statusCode).toBe(200);
+    expect(ctx.services.users.get(mod.id)).toBeUndefined();
+    // Their session ends with them, and their Discord account can be added again.
+    expect((await api(ctx.app, { method: 'GET', url: '/api/v1/auth/me', cookie: modCookie })).statusCode).toBe(401);
+    expect((await api(ctx.app, { method: 'POST', url: '/api/v1/users', cookie, payload: { username: 'back', role: 'viewer', discordId: ALICE.id } })).statusCode).toBe(201);
+    expect((await api(ctx.app, { method: 'DELETE', url: '/api/v1/users/9999', cookie })).statusCode).toBe(404);
+    expect(() => ctx.services.users.delete(owner.id)).toThrow('at least one active owner');
+  });
 });
 
 describe('DiscordOAuthClient', () => {

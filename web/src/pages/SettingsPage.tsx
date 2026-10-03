@@ -338,6 +338,7 @@ function UserSettings() {
   const { data, error, loading, reload } = useApi<{ users: User[] }>('/users');
   const [creating, setCreating] = useState(false);
   const [disabling, setDisabling] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState<User | null>(null);
   const [resetLink, setResetLink] = useState<string>();
 
   if (loading && !data) return <Loading />;
@@ -347,6 +348,16 @@ function UserSettings() {
     try {
       await api.patch(`/users/${user.id}`, changes);
       notify(`Updated ${user.username}`, 'success');
+      await reload();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    }
+  };
+
+  const remove = async (user: User) => {
+    try {
+      await api.delete(`/users/${user.id}`);
+      notify(`Deleted ${user.username}`, 'success');
       await reload();
     } catch (err) {
       notify(errorMessage(err), 'error');
@@ -435,6 +446,11 @@ function UserSettings() {
                       Disable
                     </Button>
                   ))}
+                {u.id !== session?.user.id && (
+                  <Button size="small" variant="contained" color="error" onClick={() => setDeleting(u)}>
+                    Delete
+                  </Button>
+                )}
               </Stack>
             ),
           },
@@ -449,6 +465,15 @@ function UserSettings() {
         message={`${disabling?.username} will be signed out and won’t be able to sign in until re-enabled.`}
         onConfirm={() => (disabling ? update(disabling, { disabled: true }) : undefined)}
         onClose={() => setDisabling(null)}
+      />
+      <ConfirmDialog
+        open={!!deleting}
+        title="Delete user"
+        danger
+        confirmLabel="Delete"
+        message={`${deleting?.username} will be signed out and removed from the panel for good. Their audit history stays. To let them back in, add them again.`}
+        onConfirm={() => (deleting ? remove(deleting) : undefined)}
+        onClose={() => setDeleting(null)}
       />
       <Dialog open={!!resetLink} onClose={() => setResetLink(undefined)} maxWidth="sm" fullWidth>
         <DialogTitle>Password reset link</DialogTitle>

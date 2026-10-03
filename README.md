@@ -425,6 +425,7 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/auth/reset` | public, requires one-time reset token |
 | GET/POST | `/users` | `users.manage` |
 | PATCH | `/users/:id` | `users.manage` |
+| DELETE | `/users/:id` | `users.manage` (not yourself, not the last active owner) |
 | POST | `/users/:id/password-reset` | `users.manage` |
 | GET | `/server/status` | `server.view` |
 | POST | `/server/announce` | `server.broadcast` |

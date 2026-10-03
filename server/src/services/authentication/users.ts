@@ -186,6 +186,19 @@ export class UserService {
     if (owner && owner.id !== exceptUserId) throw conflict('That Discord account is already linked to another panel user');
   }
 
+  /** Removes a panel user for good. Their sessions and reset links go with them; audit entries keep their name. */
+  delete(id: number): User {
+    const user = this.get(id);
+    if (!user) throw notFound('User not found');
+    if (user.role === 'owner' && !user.disabled && this.activeOwnerCount() <= 1) {
+      throw badRequest('The panel must keep at least one active owner', 'last_owner');
+    }
+    this.db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    // The bot drops their staff role in Discord.
+    this.changed(user.discord?.id);
+    return user;
+  }
+
   private activeOwnerCount(): number {
     return (this.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE role = 'owner' AND disabled = 0`).get() as { n: number }).n;
   }
