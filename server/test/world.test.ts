@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { migrate } from '../src/database/db.js';
 import { migrations } from '../src/database/migrations.js';
@@ -139,8 +139,11 @@ describe('world data', () => {
     const world = ctx.services.world;
     const crowd = (n: number, x: number) =>
       Array.from({ length: n }, (_, i): WorldCharacter => ({ ...player(`wild${x}-${i}`, '', x, 0), unitType: 'WildPal', userId: null, instanceId: `w${x}-${i}` }));
-    world.ingest({ ...snapshot([...crowd(80, 300), ...crowd(5, -300)]), fps: 30 });
-    world.ingest({ ...snapshot(crowd(5, -300)), fps: 60 });
+    const t0 = Date.now() - 60000;
+    world.ingest({ ...snapshot([...crowd(80, 300), ...crowd(5, -300)]), fps: 30 }, new Date(t0));
+    // Snapshots closer together than 20 s don't add a sample.
+    world.ingest({ ...snapshot(crowd(5, -300)), fps: 90 }, new Date(t0 + 10000));
+    world.ingest({ ...snapshot(crowd(5, -300)), fps: 60 }, new Date(t0 + 20000));
 
     const perf = world.performance(24);
     expect(perf.timeline).toHaveLength(2);
@@ -153,6 +156,50 @@ describe('world data', () => {
   it('converts between world and map coordinates', () => {
     const p = toMap(fromMap({ x: -123.4, y: 567.8 }));
     expect(p).toEqual({ x: -123.4, y: 567.8 });
+  });
+});
+
+describe('world settings', () => {
+  it('lets admins pick how often snapshots are read, and staff see it', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    const mod = await loginAs(ctx.app, ctx.services, 'moderator');
+    const put = (cookie: string, pollSeconds: number | null) => api(ctx.app, { method: 'PUT', url: '/api/v1/world/settings', cookie, payload: { pollSeconds } });
+
+    expect((await get(mod, '/api/v1/world/settings')).json().settings).toMatchObject({ pollSeconds: 10, defaultPollSeconds: 10, custom: false });
+    expect((await put(mod, 5)).statusCode).toBe(403);
+    expect((await put(admin, 7)).statusCode).toBe(400);
+
+    expect((await put(admin, 5)).json().settings).toMatchObject({ pollSeconds: 5, custom: true });
+    expect((await put(admin, 0)).json().settings).toMatchObject({ pollSeconds: 0, custom: true });
+    expect((await put(admin, null)).json().settings).toMatchObject({ pollSeconds: 10, custom: false });
+    expect(ctx.services.audit.list({ category: 'config', limit: 10, offset: 0 }).entries.map((e) => e.action)).toEqual([
+      'world_poll_updated',
+      'world_poll_updated',
+      'world_poll_updated',
+    ]);
+  });
+
+  it('reads snapshots on the chosen interval and picks up changes', async () => {
+    vi.useFakeTimers();
+    try {
+      const world = ctx.services.world;
+      const poll = vi.spyOn(world, 'poll').mockResolvedValue();
+      vi.spyOn(ctx.services.servers, 'getPrimary').mockReturnValue({ id: 1 } as never);
+      world.start(() => {});
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(poll).toHaveBeenCalledTimes(1);
+
+      world.saveSettings({ userId: null, username: 'test' }, 5);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(poll).toHaveBeenCalledTimes(3);
+
+      world.saveSettings({ userId: null, username: 'test' }, 0);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(poll).toHaveBeenCalledTimes(3);
+      world.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

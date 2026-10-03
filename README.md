@@ -290,7 +290,7 @@ Guilds, bases, the live map, pals, cheat signals and lag hotspots come from the 
 - **Windows:** add `-enable-gamedata-api` to the `PalServer.exe` launch arguments: in the Steam client under
   Properties → Launch options, or at the end of the shortcut's Target, or in your start script.
 
-PalOps reads a snapshot every 20 seconds (`WORLD_POLL_SECONDS`, `0` turns it off). Without the flag everything else
+PalOps reads a snapshot every 10 seconds, and the live map shows each one within a few seconds of it landing. Owners and admins can change the interval (off, 5 seconds to 2 minutes) with **Map updates** on **World → Map**; `WORLD_POLL_SECONDS` sets the default (`0` turns it off). Each snapshot lists every player, pal and NPC, so on a busy server a longer interval lightens the load. Lag-hotspot samples are kept at most every 20 seconds whatever the interval. Without the flag everything else
 keeps working, and the **World** page explains how to switch it on.
 
 **Map images.** PalOps doesn't ship the game's map art, so the live map starts as a coordinate grid. An owner or admin
@@ -469,6 +469,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | GET | `/world/status`, `/world/guilds`, `/world/guilds/:guildId` | `players.view` (world data state, guilds and their members) |
 | GET | `/world/map`, `/world/bases`, `/world/signals`, `/world/performance` | `world.view` (positions, bases, cheat signals, FPS and hotspots) |
 | POST | `/world/refresh` | `world.view` (read a snapshot now) |
+| GET | `/world/settings` | `world.view` (how often snapshots are read) |
+| PUT | `/world/settings` | `config.edit` (`pollSeconds`: 0, 5, 10, 20, 30, 60 or 120; `null` goes back to `WORLD_POLL_SECONDS`) |
 | POST | `/world/signals/:id/dismiss` | `players.note` |
 | GET | `/world/map-images`, `/world/map-images/:region/file` | `world.view` (the live map's background per region, `palpagos` or `world-tree`, and its alignment) |
 | PUT/PATCH/DELETE | `/world/map-images/:region` | `config.edit` (upload as a raw PNG/JPEG/WebP body up to 64 MB, align, remove) |

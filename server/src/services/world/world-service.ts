@@ -20,6 +20,20 @@ export interface WorldStatus {
   counts: { players: number; ownedPals: number; basePals: number; wildPals: number; npcs: number; palBoxes: number } | null;
 }
 
+export interface WorldSettings {
+  /** Seconds between snapshots; 0 means off. */
+  pollSeconds: number;
+  /** WORLD_POLL_SECONDS, used until someone picks an interval in the panel. */
+  defaultPollSeconds: number;
+  /** True when the interval was picked in the panel rather than the environment. */
+  custom: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+/** The choices offered on the World page, in seconds; 0 is off. */
+export const POLL_CHOICES = [0, 5, 10, 20, 30, 60, 120] as const;
+
 export interface Guild {
   guildId: string;
   name: string;
@@ -117,6 +131,8 @@ const DEDUPE_MS: Record<SignalKind, number> = { movement: 10 * 60 * 1000, level:
 /** A player from another guild this close to a Pal Box (60 m) is inside the base. */
 const INTRUSION_RANGE = 6000;
 const MAX_WILD_PALS = 3000;
+/** Lag-hotspot samples are kept for a week; one per 20 s at most, however often snapshots are read. */
+const PERF_SAMPLE_MS = 20 * 1000;
 /** When the endpoint is switched off, only re-check every 5 minutes. */
 const DISABLED_RETRY_MS = 5 * 60 * 1000;
 /** A base worker belongs to the nearest Pal Box of its guild within this range. */
@@ -146,10 +162,14 @@ export class WorldService {
   private state: WorldState = 'pending';
   private message: string | null = null;
   private lastAttempt = 0;
+  private lastPerfSample = 0;
   /** A slow server can take longer than the poll interval to answer; don't stack requests. */
   private polling = false;
   private tracked = new Map<string, Tracked>();
   private signalListeners: Array<(signal: { playerName: string; kind: SignalKind; summary: string }) => void> = [];
+  private timer: NodeJS.Timeout | undefined;
+  private running = false;
+  private onPollError: (err: unknown) => void = () => {};
 
   constructor(
     private readonly db: DB,
@@ -157,7 +177,67 @@ export class WorldService {
     private readonly players: PlayerDirectory,
     private readonly servers: ServerRegistry,
     private readonly audit: AuditLog,
+    private readonly defaultPollSeconds = 10,
   ) {}
+
+  settings(): WorldSettings {
+    const row = this.db.prepare('SELECT poll_seconds, updated_at, updated_by FROM world_settings WHERE id = 1').get() as
+      | { poll_seconds: number | null; updated_at: string | null; updated_by: string | null }
+      | undefined;
+    const custom = row?.poll_seconds !== null && row?.poll_seconds !== undefined;
+    return {
+      pollSeconds: custom ? row!.poll_seconds! : this.defaultPollSeconds,
+      defaultPollSeconds: this.defaultPollSeconds,
+      custom,
+      updatedAt: row?.updated_at ?? null,
+      updatedBy: row?.updated_by ?? null,
+    };
+  }
+
+  /** null goes back to WORLD_POLL_SECONDS. Takes effect from the next snapshot. */
+  saveSettings(actor: AuditActor, pollSeconds: number | null): WorldSettings {
+    const before = this.settings().pollSeconds;
+    this.db
+      .prepare('UPDATE world_settings SET poll_seconds = ?, updated_at = ?, updated_by = ? WHERE id = 1')
+      .run(pollSeconds, new Date().toISOString(), actor.username);
+    const after = this.settings();
+    this.audit.record(actor, { category: 'config', action: 'world_poll_updated', details: { before, after: after.pollSeconds } });
+    if (this.running) this.schedule(after.pollSeconds);
+    return after;
+  }
+
+  /** Reads snapshots on the interval from settings(), picking up changes without a restart. */
+  start(onError: (err: unknown) => void): void {
+    this.running = true;
+    this.onPollError = onError;
+    // The first snapshot right away, so the map isn't empty for a whole interval after a restart.
+    this.schedule(this.settings().pollSeconds, 1000);
+  }
+
+  stop(): void {
+    this.running = false;
+    clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+
+  /** Waits `delayMs` (default: the full interval), polls, then schedules the next one from when this one started. */
+  private schedule(seconds: number, delayMs = seconds * 1000): void {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    if (!this.running || seconds <= 0) return;
+    const timer = setTimeout(() => {
+      const startedAt = Date.now();
+      const run = this.servers.getPrimary() ? this.poll().catch(this.onPollError) : Promise.resolve();
+      void run.finally(() => {
+        // A settings change while this poll ran has already scheduled the next one.
+        if (this.timer !== timer) return;
+        const interval = this.settings().pollSeconds;
+        this.schedule(interval, Math.max(1000, interval * 1000 - (Date.now() - startedAt)));
+      });
+    }, delayMs);
+    timer.unref();
+    this.timer = timer;
+  }
 
   /** Runs when a new cheat signal is raised. */
   onSignal(listener: (signal: { playerName: string; kind: SignalKind; summary: string }) => void): void {
@@ -269,7 +349,10 @@ export class WorldService {
       }
 
       this.detectSignals(serverId, playerChars, snapshot.palBoxes, takenAt);
-      this.recordPerformance(serverId, snapshot, now);
+      if (Math.abs(takenAt.getTime() - this.lastPerfSample) >= PERF_SAMPLE_MS) {
+        this.recordPerformance(serverId, snapshot, now);
+        this.lastPerfSample = takenAt.getTime();
+      }
     })();
 
     this.latest = { takenAt, snapshot, baseIds, workersByBase: assignWorkers(snapshot, baseIds) };

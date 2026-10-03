@@ -246,6 +246,15 @@ export interface PlayerProfile {
 
 export type WorldState = 'ok' | 'disabled' | 'unavailable' | 'unconfigured' | 'pending';
 
+/** How often the panel reads the world snapshot; 0 is off. */
+export interface WorldSettings {
+  pollSeconds: number;
+  defaultPollSeconds: number;
+  custom: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
 export interface WorldStatus {
   state: WorldState;
   message: string | null;
