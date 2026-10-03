@@ -224,9 +224,13 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
       secure: config.cookieSecure,
       maxAge: OAUTH_STATE_TTL_MS / 1000,
     });
-    // Players signing in on the website may be added to the Discord server, which needs one extra permission from them.
-    return { url: discord.authorizeUrl(state, { joinServer: intent.kind === 'player' && services.discordBot.joinOnLoginActive }) };
+    return { url: discord.authorizeUrl(state) };
   });
+
+  /** Saves what the extra scopes returned, only for people who actually signed in. */
+  const rememberProfile = (account: DiscordSignIn) => {
+    if (account.profile) services.discordProfiles.save(account.id, account.profile);
+  };
 
   app.get('/discord/callback', async (request, reply) => {
     const query = parse(
@@ -247,7 +251,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
 
     let account: DiscordSignIn;
     try {
-      account = await services.discordOAuth.exchange(query.code);
+      account = await services.discordOAuth.exchange(query.code, { guildId: services.discordBot.settings().guildId });
     } catch (err) {
       request.log.warn({ err: err instanceof DiscordOAuthError ? err.message : err }, 'Discord OAuth exchange failed');
       return fail('discord_error', back);
@@ -266,6 +270,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
             return fail('not_authorized', PANEL, user ? {} : { discord_id: account.id });
           }
           const refreshed = services.users.setDiscord(user.id, account);
+          rememberProfile(account);
           startSession(request, reply, refreshed, 'discord');
           return reply.redirect(PANEL);
         }
@@ -278,6 +283,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
             discord: account,
           });
           services.setup.complete();
+          rememberProfile(account);
           services.audit.record(
             { userId: user.id, username: user.username, ip: request.ip },
             { category: 'auth', action: 'setup_completed', target: user.username, details: { method: 'discord' } },
@@ -289,6 +295,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
           const user = services.users.get(intent.userId);
           if (!user || user.disabled) return fail('invalid_state', back);
           services.users.setDiscord(user.id, account);
+          rememberProfile(account);
           services.audit.record(
             { userId: user.id, username: user.username, ip: request.ip },
             { category: 'auth', action: 'discord_linked', details: { discordId: account.id, discordUsername: account.username } },
@@ -297,6 +304,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
         }
         case 'player': {
           const player = services.siteAccounts.signIn(account);
+          rememberProfile(account);
           setPlayerCookie(reply, services, services.siteAccounts.createSession(player.id));
           // Best effort: signing in must never fail because Discord wouldn't add them. The access token is used once and dropped.
           if (account.accessToken && services.discordBot.joinOnLoginActive) {

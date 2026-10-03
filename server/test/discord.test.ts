@@ -228,8 +228,13 @@ describe('DiscordOAuthClient', () => {
           }
           return json(200, { access_token: 'tok', token_type: 'Bearer' });
         }
-        if (req.url === '/users/@me' && req.headers.authorization === 'Bearer tok') {
-          return json(200, { id: ALICE.id, username: 'alice', global_name: 'Alice', avatar: 'abc' });
+        if (req.headers.authorization === 'Bearer tok') {
+          if (req.url === '/users/@me') return json(200, { id: ALICE.id, username: 'alice', global_name: 'Alice', avatar: 'abc', email: 'alice@example.com', verified: true });
+          if (req.url === '/users/@me/connections') return json(200, [{ type: 'steam', id: '76561198000000001', name: 'alice_steam', verified: true, visibility: 1 }, { nonsense: true }]);
+          if (req.url === '/users/@me/guilds') return json(200, [{ id: '555', name: 'Palworld Friends', owner: false }]);
+          if (req.url === '/users/@me/guilds/555/member') return json(200, { joined_at: '2026-09-01T00:00:00Z', nick: 'Ali', roles: ['77'] });
+          if (req.url === '/users/@me/guilds/666/member') return json(404, { message: 'Unknown Guild' });
+          if (req.url === '/users/@me/guilds/777/member') return json(500, {});
         }
         json(401, {});
       });
@@ -242,15 +247,34 @@ describe('DiscordOAuthClient', () => {
   const client = () =>
     new DiscordOAuthClient({ clientId: '123456789012345678', clientSecret: 'shh', redirectUri: DISCORD_ENV.DISCORD_REDIRECT_URI, apiBase: base });
 
-  it('builds an identify-only authorize URL', () => {
+  it('asks for every scope sign-in uses', () => {
     const url = new URL(client().authorizeUrl('st'));
     expect(url.origin).toBe('https://discord.com');
-    expect(Object.fromEntries(url.searchParams)).toMatchObject({ scope: 'identify', state: 'st', response_type: 'code' });
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      scope: 'identify email connections guilds guilds.join guilds.members.read',
+      state: 'st',
+      response_type: 'code',
+    });
   });
 
-  it('exchanges a code for the Discord user', async () => {
+  it('exchanges a code for the Discord user and their profile', async () => {
     // The access token is handed back for the moment of sign-in (e.g. to join the server) and never stored.
-    expect(await client().exchange('abc')).toEqual({ ...ALICE, accessToken: expect.any(String) });
+    const signIn = await client().exchange('abc', { guildId: '555' });
+    expect(signIn).toEqual({
+      ...ALICE,
+      accessToken: expect.any(String),
+      profile: {
+        email: 'alice@example.com',
+        emailVerified: true,
+        connections: [{ type: 'steam', id: '76561198000000001', name: 'alice_steam', verified: true }],
+        guilds: [{ id: '555', name: 'Palworld Friends' }],
+        communityMember: { joinedAt: '2026-09-01T00:00:00Z', nick: 'Ali', roles: ['77'] },
+      },
+    });
+    // Not in the server, membership couldn't be checked, and no server set.
+    expect((await client().exchange('abc', { guildId: '666' })).profile!.communityMember).toBe(false);
+    expect((await client().exchange('abc', { guildId: '777' })).profile!.communityMember).toBeNull();
+    expect((await client().exchange('abc')).profile!.communityMember).toBeNull();
     await expect(client().exchange('wrong')).rejects.toThrow('HTTP 400');
   });
 });

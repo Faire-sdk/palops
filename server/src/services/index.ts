@@ -9,6 +9,7 @@ import { UserService } from './authentication/users.js';
 import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
 import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
+import { DiscordProfileService } from './discord/profiles.js';
 import { PalBanService } from './palban/palban-service.js';
 import { PalDefenderService } from './paldefender/paldefender-service.js';
 import { PalworldService } from './palworld/index.js';
@@ -35,6 +36,8 @@ export interface Services {
   /** Null when Discord sign-in isn't configured. */
   discordOAuth: DiscordOAuthProvider | null;
   oauthStates: OAuthStateStore;
+  /** Email, linked accounts and servers from Discord sign-in. */
+  discordProfiles: DiscordProfileService;
   players: PlayerDirectory;
   moderation: ModerationService;
   /** Optional PalDefender plugin integration; does nothing until an owner enables it. */
@@ -120,6 +123,7 @@ export function createServices(config: Config, db: DB): Services {
         ? new DiscordOAuthClient(config.discord)
         : null,
     oauthStates: new OAuthStateStore(),
+    discordProfiles: new DiscordProfileService(db),
     players,
     moderation,
     paldefender,

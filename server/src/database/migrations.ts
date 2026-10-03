@@ -575,4 +575,22 @@ export const migrations: Migration[] = [
       INSERT INTO server_schedule (id) VALUES (1);
     `,
   },
+  {
+    id: 20,
+    name: 'discord_profiles',
+    sql: `
+      -- What Discord sign-in returns beyond the account itself (email, linked accounts,
+      -- servers, membership in the community server), refreshed on each sign-in.
+      -- Keyed by Discord id, so panel users and website players share it.
+      CREATE TABLE discord_profiles (
+        discord_id TEXT PRIMARY KEY,
+        email TEXT,
+        email_verified INTEGER,
+        connections TEXT,
+        guilds TEXT,
+        community_member TEXT,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
 ];

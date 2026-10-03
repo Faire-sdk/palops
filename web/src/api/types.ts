@@ -12,6 +12,7 @@ export type Permission =
   | 'players.ban'
   | 'players.note'
   | 'players.ip'
+  | 'accounts.private'
   | 'world.view'
   | 'console.view'
   | 'console.execute'
@@ -137,8 +138,34 @@ export interface ModerationRecord {
 }
 
 /** The website account linked to a character. */
+/** What Discord sign-in returned. Email and servers are null without accounts.private. */
+export interface DiscordProfile {
+  connections: Array<{ type: string; id: string; name: string; verified: boolean }> | null;
+  /** false: not in the community server; null: unknown. */
+  communityMember: { joinedAt: string | null; nick: string | null; roles: string[] } | false | null;
+  email: string | null;
+  emailVerified: boolean | null;
+  guilds: Array<{ id: string; name: string }> | null;
+  updatedAt: string;
+}
+
+export interface WebsiteAccount {
+  id: number;
+  discord: { id: string; username: string | null; avatar: string | null };
+  player: { userId: string; name: string | null; level: number | null } | null;
+  verified: boolean;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  requestedAt: string | null;
+  linkedAt: string | null;
+  createdAt: string;
+  lastLoginAt: string | null;
+  profile: DiscordProfile | null;
+}
+
 export interface CharacterLink {
   discord: { id: string; username: string | null; avatar: string | null };
+  profile?: DiscordProfile | null;
   verified: boolean;
   verifiedBy: string | null;
   verifiedAt: string | null;

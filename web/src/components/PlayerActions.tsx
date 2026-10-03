@@ -25,6 +25,7 @@ import { refreshAll, useApi } from '../hooks/useApi';
 import { DailyPlaytime } from './ActivityMetrics';
 import { EmptyState, ErrorState, KeyValue, Loading, Mono } from './common';
 import { useToast } from './Toast';
+import { DiscordProfileDetails } from './DiscordProfile';
 import { usePalBan } from '../hooks/usePalBan';
 import { usePalDefender } from '../hooks/usePalDefender';
 import { PalBanPlayerSection } from './PalBan';
@@ -273,6 +274,7 @@ export function PlayerProfileDialog({ userId, onClose, onOpen }: { userId: strin
               Linked to <strong>{data.link.discord.username ?? data.link.discord.id}</strong> <Mono muted>{data.link.discord.id}</Mono>
             </Typography>
             {!data.link.verified && <Typography variant="body2" color="text.secondary">A claim proves nothing: anyone can claim a name. Only verified links give Discord roles or carry bans.</Typography>}
+            <DiscordProfileDetails profile={data.link.profile} />
             {can('players.ban') && (
               <Stack direction="row" spacing={1}>
                 {!data.link.verified && (

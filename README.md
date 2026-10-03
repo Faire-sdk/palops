@@ -143,7 +143,11 @@ All variables are documented in [`.env.example`](.env.example).
    `https://<your panel>/api/v1/auth/discord/callback` (locally: `http://localhost:5173/api/v1/auth/discord/callback`).
 3. Set `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `DISCORD_REDIRECT_URI`.
 
-The panel only asks Discord for the `identify` scope (id, username, avatar). Signing in with Discord does not create
+Sign-in asks Discord for `identify` (id, username, avatar), `email`, `connections` (linked accounts such as Steam or Xbox),
+`guilds` (the servers they're in), `guilds.join` (so the bot can add players to your server) and `guilds.members.read`
+(their membership in your server). PalOps saves what these return at each sign-in and shows it on the panel's **Users** page and
+player profiles. Email addresses and server lists are only shown to admins and owners (`accounts.private`); moderators see
+membership and connections. The access token itself is used during sign-in and never stored. Signing in with Discord does not create
 an account by itself: an owner adds people under **Settings → Users** by their Discord user ID and picks their role.
 Someone who isn't added yet is shown their Discord ID after trying to sign in, so they can send it to an owner.
 Existing password users can link Discord under **Settings → Account**.
@@ -359,6 +363,8 @@ To try the panel without a server, choose **Mock server** as the connection type
 | Guilds and their members | ✓ | ✓ | ✓ | ✓ |
 | Kick players, add moderation notes | ✓ | ✓ | ✓ | |
 | See player IP addresses and who shares them | ✓ | ✓ | ✓ | |
+| Users page: website users, their character, Discord membership and connections | ✓ | ✓ | ✓ | ✓ |
+| Website users' email addresses and Discord server lists | ✓ | ✓ | | |
 | World map, bases, performance, cheat signals | ✓ | ✓ | ✓ | |
 | Ban/unban players and IP addresses, console, broadcast, server control, config, logs, backups | ✓ | ✓ | | |
 | Server connection settings, manage panel users | ✓ | | | |
@@ -428,6 +434,7 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/players/:userId/kick` | `players.kick` |
 | POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` (`banAddress: true` also bans the player's last IP) |
 | POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (IP address or CIDR range bans, enforced by PalOps) |
+| GET | `/accounts` (`filter`, `q`) | `players.view` (website users, linked character and Discord profile; email and servers only with `accounts.private`) |
 | GET | `/players/metrics` | `players.view` (unique players, playtime, average visit, peak online, busiest hours, daily series) |
 | GET | `/players/export.csv`, `/players/bans/export.csv` | `players.view` (CSV downloads, audited; addresses only with `players.ip`) |
 | POST | `/players/:userId/notes` | `players.note` |
@@ -469,7 +476,7 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 
 ## Security notes
 
-- Discord OAuth2 uses a single-use, server-side `state` bound to the browser by a cookie; only the `identify` scope is requested and Discord tokens are not stored.
+- Discord OAuth2 uses a single-use, server-side `state` bound to the browser by a cookie; the scopes requested are listed under [Signing in](#signing-in), and Discord tokens are not stored.
 - Passwords (when enabled) are hashed with scrypt; login timing is equalised for unknown users.
 - Sessions are random tokens in `HttpOnly`, `SameSite=Strict` cookies; only a SHA-256 of the token is stored.
   Sessions expire after inactivity and at an absolute maximum; changing a password signs out other sessions.

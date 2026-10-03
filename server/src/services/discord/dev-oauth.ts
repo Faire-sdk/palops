@@ -8,7 +8,7 @@ import { DiscordOAuthError, type DiscordOAuthProvider, type DiscordSignIn } from
  * rest of the flow (state, callback, sessions) is the real code path.
  */
 export class DevDiscordOAuth implements DiscordOAuthProvider {
-  authorizeUrl(state: string, _options?: { joinServer?: boolean }): string {
+  authorizeUrl(state: string): string {
     return `/api/v1/auth/dev-discord?state=${encodeURIComponent(state)}`;
   }
 
@@ -23,7 +23,9 @@ export class DevDiscordOAuth implements DiscordOAuthProvider {
       throw new DiscordOAuthError('Invalid development Discord id');
     }
     const username = typeof parsed.username === 'string' && parsed.username.trim() ? parsed.username.trim().slice(0, 32) : null;
-    return { id: parsed.id, username, avatar: null, accessToken: 'dev-access-token' };
+    // A stand-in profile, so the panel's Users page has something to show locally.
+    const profile = { email: `${username ?? parsed.id}@example.invalid`, emailVerified: true, connections: [], guilds: [], communityMember: null };
+    return { id: parsed.id, username, avatar: null, accessToken: 'dev-access-token', profile };
   }
 
   static encode(id: string, username: string): string {

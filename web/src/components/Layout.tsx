@@ -6,6 +6,7 @@ import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
@@ -38,6 +39,7 @@ const DRAWER_WIDTH = 248;
 const NAV: Array<{ to: string; label: string; icon: IconComponent; permission?: Permission; /** Only shown when the optional PalDefender integration is on. */ paldefender?: boolean }> = [
   { to: '/', label: 'Dashboard', icon: DashboardOutlinedIcon, permission: 'server.view' },
   { to: '/players', label: 'Players', icon: PeopleOutlinedIcon, permission: 'players.view' },
+  { to: '/users', label: 'Users', icon: BadgeOutlinedIcon, permission: 'players.view' },
   { to: '/bans', label: 'Bans', icon: GavelOutlinedIcon, permission: 'players.view' },
   { to: '/world', label: 'World', icon: MapOutlinedIcon, permission: 'players.view' },
   { to: '/paldefender', label: 'PalDefender', icon: ShieldOutlinedIcon, permission: 'world.view', paldefender: true },

@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiscordAccount } from '../src/services/authentication/users.js';
+import type { DiscordSignIn } from '../src/services/discord/oauth.js';
 import type { Interaction } from '../src/services/discord/interactions.js';
 import { api, createTestApp, loginAs } from './helpers.js';
 import { startFakeGateway, startFakeRest } from './fake-discord.js';
@@ -32,8 +33,8 @@ let pd: Server;
 let pdCalls: Array<{ path: string; body: Record<string, unknown> }> = [];
 let pdFail = false;
 let ctx: Awaited<ReturnType<typeof createTestApp>>;
-let nextAccount: DiscordAccount & { accessToken?: string };
-let authorizeOptions: Array<{ joinServer?: boolean } | undefined> = [];
+let nextAccount: DiscordSignIn;
+let exchangeOptions: Array<{ guildId?: string | null } | undefined> = [];
 
 beforeAll(async () => {
   pd = createServer((req, res) => {
@@ -81,12 +82,12 @@ const botSettings = (over: Record<string, unknown> = {}) => ({
 beforeEach(async () => {
   pdCalls = [];
   pdFail = false;
-  authorizeOptions = [];
+  exchangeOptions = [];
   rest = await startFakeRest(BOT_TOKEN);
   ctx = await createTestApp({ DISCORD_CLIENT_ID: '123456789012345678', DISCORD_CLIENT_SECRET: 'shh', DISCORD_REDIRECT_URI: 'https://panel.example/api/v1/auth/discord/callback', AUTH_PASSWORD_LOGIN: 'true' });
   ctx.services.discordOAuth = {
-    authorizeUrl: (state, options) => (authorizeOptions.push(options), `https://discord.com/oauth2/authorize?state=${state}`),
-    exchange: async () => nextAccount,
+    authorizeUrl: (state) => `https://discord.com/oauth2/authorize?state=${state}`,
+    exchange: async (_code, options) => (exchangeOptions.push(options), nextAccount),
   };
   ctx.services.servers.savePrimary({ name: 'Dev', adapter: 'mock', host: '', port: 8212, username: 'admin' });
   await ctx.services.players.refreshOnline();
@@ -318,7 +319,8 @@ describe('joining the Discord server on sign-in', () => {
     rest.calls.length = 0;
 
     await playerSignIn(PLAYER_ONE);
-    expect(authorizeOptions.at(-1)).toEqual({ joinServer: true });
+    // Membership is checked in the bot's server.
+    expect(exchangeOptions.at(-1)).toEqual({ guildId: GUILD });
     const join = rest.calls.find((c) => c.method === 'PUT' && c.path === `/guilds/${GUILD}/members/${PLAYER_ONE.id}`)!;
     expect(join.body).toEqual({ access_token: 'user-access-token', roles: [VERIFIED_ROLE] });
     expect(rolesOf(PLAYER_ONE.id)).toEqual([VERIFIED_ROLE]);
@@ -327,7 +329,6 @@ describe('joining the Discord server on sign-in', () => {
   it('does nothing when switched off, and never blocks sign-in when Discord refuses', async () => {
     const owner = await enableBot({ joinOnLogin: false });
     await playerSignIn(PLAYER_ONE);
-    expect(authorizeOptions.at(-1)).toEqual({ joinServer: false });
     expect(rest.calls.some((c) => c.path.includes('/members/'))).toBe(false);
 
     await put(owner, '/api/v1/discord-bot/settings', botSettings({ joinOnLogin: true }));
@@ -338,8 +339,13 @@ describe('joining the Discord server on sign-in', () => {
 
   it('is off for staff sign-in to the panel', async () => {
     await enableBot({ joinOnLogin: true });
-    await post('', '/api/v1/auth/discord/authorize', { intent: 'login' });
-    expect(authorizeOptions.at(-1)).toEqual({ joinServer: false });
+    rest.calls.length = 0;
+    nextAccount = { id: OWNER_D, username: 'owner-user', avatar: null, accessToken: 'user-access-token' };
+    const start = await post('', '/api/v1/auth/discord/authorize', { intent: 'login' });
+    const state = new URL(start.json().url).searchParams.get('state')!;
+    const res = await ctx.app.inject({ method: 'GET', url: `/api/v1/auth/discord/callback?code=c&state=${state}`, headers: { cookie: `palops_oauth_state=${state}` } });
+    expect(res.headers.location).toBe('/panel');
+    expect(rest.calls.some((c) => c.method === 'PUT' && c.path.includes('/members/'))).toBe(false);
   });
 });
 
@@ -500,5 +506,49 @@ describe('moderation commands with a Discord member', () => {
     rest.failing.set('/guilds/', 403);
     const text = await slash('ban', ADMIN_D, [member(PLAYER_TWO.id)], { [PLAYER_TWO.id]: { username: 'impostor' } });
     expect(text).toContain('lacks access');
+  });
+});
+
+describe('website users page', () => {
+  it('lists website users with their character and Discord profile, hiding private details from moderators', async () => {
+    const owner = await loginAs(ctx.app, ctx.services, 'owner');
+    await put(owner, '/api/v1/discord-bot/settings', botSettings({ enabled: false }));
+    const profile = {
+      email: 'one@example.com',
+      emailVerified: true,
+      connections: [{ type: 'steam', id: '76561190000000001', name: 'one_steam', verified: true }],
+      guilds: [{ id: GUILD, name: 'Palworld Friends' }],
+      communityMember: { joinedAt: '2026-09-01T00:00:00Z', nick: null, roles: [] },
+    };
+    nextAccount = { ...PLAYER_ONE, accessToken: 't', profile };
+    const start = await post('', '/api/v1/auth/discord/authorize', { intent: 'player' });
+    const state = new URL(start.json().url).searchParams.get('state')!;
+    const res = await ctx.app.inject({ method: 'GET', url: `/api/v1/auth/discord/callback?code=c&state=${state}`, headers: { cookie: `palops_oauth_state=${state}` } });
+    const player = `palops_player=${res.cookies.find((c) => c.name === 'palops_player')!.value}`;
+    expect((await link(player, 'Lamball Enjoyer')).statusCode).toBe(200);
+    await playerSignIn(PLAYER_TWO);
+
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    const linked = (await get(admin, '/api/v1/accounts')).json();
+    expect(linked.communityServerId).toBe(GUILD);
+    expect(linked.accounts).toHaveLength(1);
+    expect(linked.accounts[0]).toMatchObject({
+      discord: { id: PLAYER_ONE.id },
+      player: { name: 'Lamball Enjoyer' },
+      verified: false,
+      profile: { email: 'one@example.com', guilds: [{ id: GUILD, name: 'Palworld Friends' }], connections: profile.connections },
+    });
+    expect((await get(admin, '/api/v1/accounts?filter=all')).json().accounts).toHaveLength(2);
+    expect((await get(admin, '/api/v1/accounts?filter=unlinked')).json().accounts[0].discord.id).toBe(PLAYER_TWO.id);
+
+    const moderator = await loginAs(ctx.app, ctx.services, 'moderator');
+    const seen = (await get(moderator, '/api/v1/accounts')).json().accounts[0].profile;
+    expect(seen).toMatchObject({ connections: profile.connections, email: null, guilds: null });
+
+    const viewer = await loginAs(ctx.app, ctx.services, 'viewer');
+    expect((await get(viewer, '/api/v1/accounts')).statusCode).toBe(200);
+    const userId = ctx.services.players.find('Lamball Enjoyer')[0]!.userId;
+    expect((await get(moderator, `/api/v1/players/${userId}`)).json().link.profile.email).toBeNull();
+    expect((await get(admin, `/api/v1/players/${userId}`)).json().link.profile.email).toBe('one@example.com');
   });
 });

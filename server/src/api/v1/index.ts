@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Services } from '../../services/index.js';
+import accountRoutes from './accounts.js';
 import authRoutes from './auth.js';
 import configRoutes from './config.js';
 import consoleRoutes from './console.js';
@@ -19,6 +20,7 @@ export default async function v1(app: FastifyInstance, opts: { services: Service
   await app.register(userRoutes, { ...opts, prefix: '/users' });
   await app.register(serverRoutes, { ...opts, prefix: '/server' });
   await app.register(playerRoutes, { ...opts, prefix: '/players' });
+  await app.register(accountRoutes, { ...opts, prefix: '/accounts' });
   await app.register(discordInteractionRoutes, { ...opts, prefix: '/discord' });
   await app.register(discordBotRoutes, { ...opts, prefix: '/discord-bot' });
   await app.register(consoleRoutes, { ...opts, prefix: '/console' });
