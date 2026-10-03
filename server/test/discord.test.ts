@@ -93,7 +93,15 @@ describe('Discord OAuth2 flow', () => {
     expect(res.headers.location).toBe('/panel');
     const me = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/me', cookie: sessionCookie(res) });
     // Name and avatar are refreshed from Discord on sign-in.
-    expect(me.json().user).toMatchObject({ username: 'alice_panel', role: 'moderator', discord: { username: 'alice', avatar: 'abc' } });
+    expect(me.json().user).toMatchObject({ username: 'alice_panel', displayName: 'alice', role: 'moderator', discord: { username: 'alice', avatar: 'abc' } });
+  });
+
+  it('shows the Discord name, and replaces a username that is only a Discord ID', async () => {
+    await ctx.services.users.create({ username: `discord_${ALICE.id}`, role: 'owner', discord: { id: ALICE.id, username: null, avatar: null } });
+    nextAccount = { ...ALICE, profile: { globalName: 'Alice A.', banner: null, accentColor: null, email: null, emailVerified: null, connections: null, guilds: null, communityMember: null } } as DiscordAccount;
+    const res = await discordFlow(ctx.app, { intent: 'login' });
+    const me = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/me', cookie: sessionCookie(res) });
+    expect(me.json().user).toMatchObject({ username: 'alice', displayName: 'Alice A.' });
   });
 
   it('refuses unknown Discord accounts and tells them their id', async () => {

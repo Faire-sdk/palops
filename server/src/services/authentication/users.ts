@@ -34,6 +34,8 @@ interface UserRow {
 }
 
 export const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
+/** Usernames that are only a Discord ID, which get replaced by the Discord name at sign-in. */
+const PLACEHOLDER_USERNAME = /^(discord[_.-]?)?\d{17,20}$/i;
 /** Discord user ids are snowflakes: 17-20 digit integers. */
 export const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 
@@ -153,6 +155,10 @@ export class UserService {
     this.db
       .prepare(`UPDATE users SET discord_id = ?, discord_username = ?, discord_avatar = ?, ${touch} WHERE id = ?`)
       .run(discord?.id ?? null, discord?.username ?? null, discord?.avatar ?? null, id);
+    // An account named after a bare Discord ID (e.g. "discord_123…") takes their Discord name once it's known.
+    if (discord?.username && PLACEHOLDER_USERNAME.test(before.username)) {
+      this.db.prepare(`UPDATE users SET username = ?, ${touch} WHERE id = ?`).run(this.availableUsername(discord.username), id);
+    }
     if (before.discord?.id !== discord?.id) this.changed(before.discord?.id, discord?.id);
     return this.get(id)!;
   }
