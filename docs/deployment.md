@@ -6,6 +6,9 @@ It keeps its data in one SQLite file and talks to your Palworld server through t
 **The best choice for all the features is to run PalOps on the same machine as the Palworld server.**
 Use another host only when you can't run anything next to the game server, and read what you give up below.
 
+Don't have a game server yet? [deploy-vps.md](deploy-vps.md) rents one cheap VPS and runs the Palworld server, PalOps and HTTPS on it together.
+Railway can't host the game server itself, because it doesn't accept UDP, which Palworld players connect over.
+
 ## Your options
 
 | | Same machine as Palworld (recommended) | Managed cloud (Railway and similar) |

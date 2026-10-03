@@ -48,6 +48,8 @@ the REST API stays on `127.0.0.1`, and planned features such as start/restart, l
 
 **Same machine (recommended):** see [docs/deploy-same-host.md](docs/deploy-same-host.md), which uses [`deploy/same-host/`](deploy/same-host) (Docker Compose with Caddy for HTTPS).
 
+**New VPS with the game server included:** see [docs/deploy-vps.md](docs/deploy-vps.md), which uses [`deploy/vps/`](deploy/vps) to run the Palworld dedicated server, PalOps and Caddy on one cheap VPS. Railway can't host the game server, because it has no inbound UDP.
+
 **Railway:** see [docs/deploy-railway.md](docs/deploy-railway.md), for when you can't run anything next to the game server. The repo includes a `Dockerfile` and `railway.json`.
 
 **Docker anywhere:**

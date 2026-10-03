@@ -1,0 +1,81 @@
+# Palworld dedicated server + PalOps + Caddy on one rented VPS.
+# See docs/deploy-vps.md. Quick start:
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d --build
+#
+# Everything uses host networking: players reach Palworld on 8211/udp, Caddy serves
+# the website and panel on 80/443, and the panel reaches the Palworld REST API at
+# http://127.0.0.1:8212. Keep 8212 closed in the firewall (the guide shows how).
+services:
+  palworld:
+    # Community-maintained image: https://github.com/thijsvanloef/palworld-server-docker
+    image: thijsvanloef/palworld-server-docker:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
+    network_mode: host
+    volumes:
+      # Server files, saves (Pal/Saved/SaveGames) and backups (backups/).
+      - ./palworld:/palworld
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TZ:-UTC}
+      PORT: 8211
+      QUERY_PORT: 27015
+      PLAYERS: ${PLAYERS:-16}
+      SERVER_NAME: ${SERVER_NAME}
+      SERVER_DESCRIPTION: ${SERVER_DESCRIPTION:-}
+      SERVER_PASSWORD: ${SERVER_PASSWORD:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      COMMUNITY: ${COMMUNITY:-false}
+      # PalOps talks to the REST API. RCON is deprecated by Pocketpair and PalOps doesn't use it.
+      REST_API_ENABLED: "true"
+      REST_API_PORT: 8212
+      RCON_ENABLED: "false"
+      UPDATE_ON_BOOT: "true"
+      BACKUP_ENABLED: "true"
+      BACKUP_CRON_EXPRESSION: ${BACKUP_CRON_EXPRESSION:-0 */6 * * *}
+      DELETE_OLD_BACKUPS: "true"
+      OLD_BACKUP_DAYS: ${OLD_BACKUP_DAYS:-7}
+      # Palworld's memory use grows over time; a daily restart keeps it in check.
+      AUTO_REBOOT_ENABLED: ${AUTO_REBOOT_ENABLED:-true}
+      AUTO_REBOOT_CRON_EXPRESSION: ${AUTO_REBOOT_CRON_EXPRESSION:-0 6 * * *}
+      AUTO_REBOOT_WARN_MINUTES: 5
+      AUTO_REBOOT_EVEN_IF_PLAYERS_ONLINE: "true"
+
+  palops:
+    build: ../..
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - palops-data:/data
+      # Read-only, so the Console page can follow the game's log
+      # (Settings → Console logs → /palworld/Pal/Saved/Logs).
+      - ./palworld:/palworld:ro
+    env_file: .env
+    environment:
+      # Only Caddy (on this machine) talks to the app.
+      HOST: 127.0.0.1
+      PORT: "8080"
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+    depends_on:
+      - palworld
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ../same-host/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      PALOPS_DOMAIN: ${PALOPS_DOMAIN}
+    depends_on:
+      - palops
+
+volumes:
+  palops-data:
+  caddy-data:
+  caddy-config:

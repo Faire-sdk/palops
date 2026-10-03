@@ -8,6 +8,9 @@ A small server fits in Railway's Hobby plan.
 > on Railway the panel only has the REST API, so planned features like start/restart, logs, backups and guilds won't work.
 > See [deployment.md](deployment.md) for the comparison and [deploy-same-host.md](deploy-same-host.md) for that setup.
 
+> **This guide is for PalOps only, not the Palworld server.** Railway has no inbound UDP, so players couldn't connect to a game server hosted there.
+> To host the game server too, see [deploy-vps.md](deploy-vps.md).
+
 ## 1. Create the service
 
 1. In Railway, click **New Project → Deploy from GitHub repo** and pick this repository.
