@@ -149,7 +149,13 @@ Someone who isn't added yet is shown their Discord ID after trying to sign in, s
 Existing password users can link Discord under **Settings → Account**.
 
 Password sign-in is off by default once Discord is configured. Set `AUTH_PASSWORD_LOGIN=true` to keep it as a
-second option (useful as a fallback if Discord is down).
+second option for everyone, or `AUTH_PASSWORD_LOGIN=false` to make sure it stays off.
+
+**Emergency password.** Set `PANEL_EMERGENCY_PASSWORD` (at least 16 characters, e.g. `openssl rand -base64 24`) to keep a way in
+if Discord sign-in breaks, even with password sign-in off. An **Emergency sign-in** link appears on the sign-in page and signs you in
+as the first active owner. Each address gets 5 tries per 15 minutes, and after 10 wrong passwords from anywhere it's locked for an hour.
+Every success and failure is in the audit log, and a success is also shown in the console. Leave it empty to turn it off, and
+change it (then restart PalOps) if you think it has leaked.
 
 Linking panel users to Discord ids is also the groundwork for a Discord bot: bot commands can map the Discord user
 to a panel user and check the same role permissions. Discord code lives in `server/src/services/discord/`.

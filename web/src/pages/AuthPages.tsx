@@ -127,7 +127,39 @@ export function LoginPage() {
       <Typography variant="body2" color="text.secondary" align="center">
         {discord ? 'Need access? Ask a panel owner to add your Discord account.' : 'Forgot your password? Ask a panel owner for a reset link.'}
       </Typography>
+      {options.providers.emergency && <EmergencySignIn />}
     </AuthCard>
+  );
+}
+
+/** The owner's way in when Discord sign-in is broken (PANEL_EMERGENCY_PASSWORD). */
+function EmergencySignIn() {
+  const { emergencyLogin } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const { error, busy, onSubmit } = useSubmit(() => emergencyLogin(password));
+
+  if (!open) {
+    return (
+      <Typography variant="body2" align="center">
+        <Link component="button" type="button" onClick={() => setOpen(true)}>
+          Emergency sign-in
+        </Link>
+      </Typography>
+    );
+  }
+  return (
+    <Stack component="form" spacing={2} onSubmit={onSubmit}>
+      <Divider />
+      <Typography variant="body2" color="text.secondary">
+        Signs you in as the owner with the emergency password from the server’s settings. Every use is recorded in the audit log.
+      </Typography>
+      {error && <Alert severity="error">{error}</Alert>}
+      <TextField label="Emergency password" type="password" autoFocus autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      <Button variant="outlined" color="warning" type="submit" loading={busy}>
+        Sign in as owner
+      </Button>
+    </Stack>
   );
 }
 

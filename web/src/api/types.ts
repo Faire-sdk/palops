@@ -325,7 +325,8 @@ export interface AuditEntry {
 
 export interface AuthOptions {
   setupRequired: boolean;
-  providers: { discord: boolean; password: boolean };
+  /** emergency: the owner's break-glass password (PANEL_EMERGENCY_PASSWORD) is set. */
+  providers: { discord: boolean; password: boolean; emergency?: boolean };
 }
 
 /** The live map's background image; bounds are its edges in map coordinates. */

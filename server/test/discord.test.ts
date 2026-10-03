@@ -52,7 +52,7 @@ describe('sign-in options', () => {
   it('makes Discord primary and turns passwords off by default once Discord is configured', async () => {
     await setup();
     const res = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/options' });
-    expect(res.json().providers).toEqual({ discord: true, password: false });
+    expect(res.json().providers).toEqual({ discord: true, password: false, emergency: false });
     const login = await api(ctx.app, { method: 'POST', url: '/api/v1/auth/login', payload: { username: 'x', password: 'y' } });
     expect(login.statusCode).toBe(403);
   });
@@ -62,6 +62,7 @@ describe('sign-in options', () => {
     expect((await api(ctx.app, { method: 'GET', url: '/api/v1/auth/options' })).json().providers).toEqual({
       discord: true,
       password: true,
+      emergency: false,
     });
     await loginAs(ctx.app, ctx.services, 'viewer');
   });

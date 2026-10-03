@@ -40,6 +40,7 @@ On the service's **Variables** tab:
 | `SITE_SHOW_ONLINE_PLAYERS` | Optional. `false` hides the online player list on the website |
 | `WORLD_POLL_SECONDS` | Optional. Seconds between world snapshots (default 20, `0` turns them off) |
 | `AUTH_PASSWORD_LOGIN` | Optional. `true` keeps username/password sign-in for staff as a fallback |
+| `PANEL_EMERGENCY_PASSWORD` | Optional, 16+ characters. Owner sign-in for when Discord sign-in is broken ([details](../README.md#signing-in)) |
 
 `NODE_ENV`, `PORT`, `HOST` and `DATABASE_PATH` are already set by the Dockerfile. Railway's own `PORT` also works.
 
