@@ -513,12 +513,16 @@ describe('website users page', () => {
   it('lists website users with their character and Discord profile, hiding private details from moderators', async () => {
     const owner = await loginAs(ctx.app, ctx.services, 'owner');
     await put(owner, '/api/v1/discord-bot/settings', botSettings({ enabled: false }));
+    const guild = { id: GUILD, name: 'Palworld Friends', icon: 'abc', owner: false, admin: false, memberCount: 120, onlineCount: 30 };
     const profile = {
+      globalName: 'One',
+      banner: null,
+      accentColor: null,
       email: 'one@example.com',
       emailVerified: true,
       connections: [{ type: 'steam', id: '76561190000000001', name: 'one_steam', verified: true }],
-      guilds: [{ id: GUILD, name: 'Palworld Friends' }],
-      communityMember: { joinedAt: '2026-09-01T00:00:00Z', nick: null, roles: [] },
+      guilds: [guild],
+      communityMember: { joinedAt: '2026-09-01T00:00:00Z', nick: null, roles: ['71', '72'] },
     };
     nextAccount = { ...PLAYER_ONE, accessToken: 't', profile };
     const start = await post('', '/api/v1/auth/discord/authorize', { intent: 'player' });
@@ -536,8 +540,9 @@ describe('website users page', () => {
       discord: { id: PLAYER_ONE.id },
       player: { name: 'Lamball Enjoyer' },
       verified: false,
-      profile: { email: 'one@example.com', guilds: [{ id: GUILD, name: 'Palworld Friends' }], connections: profile.connections },
+      profile: { email: 'one@example.com', guilds: [guild], connections: profile.connections },
     });
+    expect(linked.accounts[0].discord).toMatchObject({ globalName: 'One' });
     expect((await get(admin, '/api/v1/accounts?filter=all')).json().accounts).toHaveLength(2);
     expect((await get(admin, '/api/v1/accounts?filter=unlinked')).json().accounts[0].discord.id).toBe(PLAYER_TWO.id);
 
@@ -550,5 +555,39 @@ describe('website users page', () => {
     const userId = ctx.services.players.find('Lamball Enjoyer')[0]!.userId;
     expect((await get(moderator, `/api/v1/players/${userId}`)).json().link.profile.email).toBeNull();
     expect((await get(admin, `/api/v1/players/${userId}`)).json().link.profile.email).toBe('one@example.com');
+  });
+
+  it('looks pictures and names up on Discord with the bot, and names their roles', async () => {
+    const owner = await loginAs(ctx.app, ctx.services, 'owner');
+    await put(owner, '/api/v1/discord-bot/settings', botSettings({ enabled: false }));
+    nextAccount = {
+      ...PLAYER_ONE,
+      accessToken: 't',
+      profile: { globalName: null, banner: null, accentColor: null, email: null, emailVerified: null, connections: null, guilds: null, communityMember: { joinedAt: null, nick: null, roles: ['71', '72', GUILD] } },
+    };
+    const start = await post('', '/api/v1/auth/discord/authorize', { intent: 'player' });
+    const state = new URL(start.json().url).searchParams.get('state')!;
+    await ctx.app.inject({ method: 'GET', url: `/api/v1/auth/discord/callback?code=c&state=${state}`, headers: { cookie: `palops_oauth_state=${state}` } });
+    await playerSignIn(PLAYER_TWO);
+    rest.users.set(PLAYER_TWO.id, { username: 'two', global_name: null, avatar: 'twohash' });
+    rest.users.set(PLAYER_ONE.id, { username: 'one_renamed', global_name: 'One New', avatar: 'newhash', banner: 'bannerhash', accent_color: 0x5865f2 });
+    rest.roles.push({ id: GUILD, name: '@everyone', color: 0, position: 0 }, { id: '71', name: 'Verified', color: 0x2ecc71, position: 1 }, { id: '72', name: 'Moderator', color: 0xe67e22, position: 5 });
+
+    const mod = await loginAs(ctx.app, ctx.services, 'moderator');
+    const id = (await get(mod, '/api/v1/accounts?filter=all')).json().accounts.find((a: { discord: { id: string } }) => a.discord.id === PLAYER_ONE.id).id;
+    const one = (await get(mod, `/api/v1/accounts/${id}`)).json();
+    expect(one.account.discord).toEqual({ id: PLAYER_ONE.id, username: 'one_renamed', globalName: 'One New', avatar: 'newhash', banner: 'bannerhash', accentColor: 0x5865f2 });
+    // Highest role first; @everyone left out.
+    expect(one.roles).toEqual([
+      { id: '72', name: 'Moderator', color: 0xe67e22, position: 5 },
+      { id: '71', name: 'Verified', color: 0x2ecc71, position: 1 },
+    ]);
+    expect(rest.calls.some((c) => c.path === `/users/${PLAYER_ONE.id}` && c.auth === `Bot ${BOT_TOKEN}`)).toBe(true);
+    expect((await get(mod, '/api/v1/accounts/99999')).statusCode).toBe(404);
+
+    // The list refreshes everyone else in the background.
+    await ctx.services.discordLookups.settle();
+    const all = (await get(mod, '/api/v1/accounts?filter=all')).json().accounts;
+    expect(all.find((a: { discord: { id: string } }) => a.discord.id === PLAYER_TWO.id).discord.avatar).toBe('twohash');
   });
 });

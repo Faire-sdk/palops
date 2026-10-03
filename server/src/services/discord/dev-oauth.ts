@@ -24,7 +24,7 @@ export class DevDiscordOAuth implements DiscordOAuthProvider {
     }
     const username = typeof parsed.username === 'string' && parsed.username.trim() ? parsed.username.trim().slice(0, 32) : null;
     // A stand-in profile, so the panel's Users page has something to show locally.
-    const profile = { email: `${username ?? parsed.id}@example.invalid`, emailVerified: true, connections: [], guilds: [], communityMember: null };
+    const profile = { globalName: username, banner: null, accentColor: null, email: `${username ?? parsed.id}@example.invalid`, emailVerified: true, connections: [], guilds: [], communityMember: null };
     return { id: parsed.id, username, avatar: null, accessToken: 'dev-access-token', profile };
   }
 

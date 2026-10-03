@@ -593,4 +593,22 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 21,
+    name: 'discord_users',
+    sql: `
+      -- Each Discord user's current name and pictures: from sign-in, and from the bot
+      -- looking them up (GET /users/{id}), so staff see today's avatar, not the one
+      -- from their last sign-in.
+      CREATE TABLE discord_users (
+        discord_id TEXT PRIMARY KEY,
+        username TEXT,
+        global_name TEXT,
+        avatar TEXT,
+        banner TEXT,
+        accent_color INTEGER,
+        updated_at TEXT NOT NULL DEFAULT ${now}
+      );
+    `,
+  },
 ];

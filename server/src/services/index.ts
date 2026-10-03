@@ -9,6 +9,7 @@ import { UserService } from './authentication/users.js';
 import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
 import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
+import { DiscordLookupService } from './discord/lookups.js';
 import { DiscordProfileService } from './discord/profiles.js';
 import { PalBanService } from './palban/palban-service.js';
 import { PalDefenderService } from './paldefender/paldefender-service.js';
@@ -38,6 +39,7 @@ export interface Services {
   oauthStates: OAuthStateStore;
   /** Email, linked accounts and servers from Discord sign-in. */
   discordProfiles: DiscordProfileService;
+  discordLookups: DiscordLookupService;
   players: PlayerDirectory;
   moderation: ModerationService;
   /** Optional PalDefender plugin integration; does nothing until an owner enables it. */
@@ -106,6 +108,7 @@ export function createServices(config: Config, db: DB): Services {
   const moderation = new ModerationService(db, palworld, players, servers, audit, paldefender);
   const palban = new PalBanService(db, new SecretBox(config.secret, 'palban-key'), moderation, players, servers, audit, consoleLog);
   const siteAccounts = new SiteAccountService(db, config.sessionMaxMs);
+  const discordProfiles = new DiscordProfileService(db);
   const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog, siteAccounts, paldefender, palban });
   return {
     config,
@@ -123,7 +126,8 @@ export function createServices(config: Config, db: DB): Services {
         ? new DiscordOAuthClient(config.discord)
         : null,
     oauthStates: new OAuthStateStore(),
-    discordProfiles: new DiscordProfileService(db),
+    discordProfiles,
+    discordLookups: new DiscordLookupService(() => discordBot.lookupApi(), () => discordBot.settings().guildId, discordProfiles),
     players,
     moderation,
     paldefender,

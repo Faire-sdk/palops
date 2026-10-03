@@ -147,7 +147,9 @@ Sign-in asks Discord for `identify` (id, username, avatar), `email`, `connection
 `guilds` (the servers they're in), `guilds.join` (so the bot can add players to your server) and `guilds.members.read`
 (their membership in your server). PalOps saves what these return at each sign-in and shows it on the panel's **Users** page and
 player profiles. Email addresses and server lists are only shown to admins and owners (`accounts.private`); moderators see
-membership and connections. The access token itself is used during sign-in and never stored. Signing in with Discord does not create
+membership and connections. When a Discord bot token is saved, PalOps also looks each user up on Discord with the bot
+(`GET /users/{id}`, the way PalBan Network does) so names and profile pictures stay current between sign-ins, and reads your
+server's roles to name them in the profile pop-up. The access token itself is used during sign-in and never stored. Signing in with Discord does not create
 an account by itself: an owner adds people under **Settings → Users** by their Discord user ID and picks their role.
 Someone who isn't added yet is shown their Discord ID after trying to sign in, so they can send it to an owner.
 Existing password users can link Discord under **Settings → Account**.
@@ -363,7 +365,7 @@ To try the panel without a server, choose **Mock server** as the connection type
 | Guilds and their members | ✓ | ✓ | ✓ | ✓ |
 | Kick players, add moderation notes | ✓ | ✓ | ✓ | |
 | See player IP addresses and who shares them | ✓ | ✓ | ✓ | |
-| Users page: website users, their character, Discord membership and connections | ✓ | ✓ | ✓ | ✓ |
+| Users page: website users, their character, and a Discord profile pop-up (picture, roles, connections) | ✓ | ✓ | ✓ | ✓ |
 | Website users' email addresses and Discord server lists | ✓ | ✓ | | |
 | World map, bases, performance, cheat signals | ✓ | ✓ | ✓ | |
 | Ban/unban players and IP addresses, console, broadcast, server control, config, logs, backups | ✓ | ✓ | | |
@@ -435,6 +437,7 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/players/:userId/ban`, `/players/:userId/unban` | `players.ban` (`banAddress: true` also bans the player's last IP) |
 | POST/DELETE | `/players/ip-bans`, `/players/ip-bans/:id` | `players.ban` (IP address or CIDR range bans, enforced by PalOps) |
 | GET | `/accounts` (`filter`, `q`) | `players.view` (website users, linked character and Discord profile; email and servers only with `accounts.private`) |
+| GET | `/accounts/:id` | `players.view` (one website user for the profile pop-up: looks up their current Discord name and picture with the bot, and names their roles in your server) |
 | GET | `/players/metrics` | `players.view` (unique players, playtime, average visit, peak online, busiest hours, daily series) |
 | GET | `/players/export.csv`, `/players/bans/export.csv` | `players.view` (CSV downloads, audited; addresses only with `players.ip`) |
 | POST | `/players/:userId/notes` | `players.note` |

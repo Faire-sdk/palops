@@ -145,13 +145,32 @@ export interface DiscordProfile {
   communityMember: { joinedAt: string | null; nick: string | null; roles: string[] } | false | null;
   email: string | null;
   emailVerified: boolean | null;
-  guilds: Array<{ id: string; name: string }> | null;
+  guilds: DiscordGuild[] | null;
   updatedAt: string;
+}
+
+/** A Discord server the user is in. */
+export interface DiscordGuild {
+  id: string;
+  name: string;
+  icon: string | null;
+  owner: boolean;
+  admin: boolean;
+  memberCount: number | null;
+  onlineCount: number | null;
+}
+
+/** A role in the community server; name is null when the bot couldn't read the server's roles. */
+export interface DiscordRole {
+  id: string;
+  name: string | null;
+  color: number;
+  position: number;
 }
 
 export interface WebsiteAccount {
   id: number;
-  discord: { id: string; username: string | null; avatar: string | null };
+  discord: { id: string; username: string | null; avatar: string | null; globalName: string | null; banner: string | null; accentColor: number | null };
   player: { userId: string; name: string | null; level: number | null } | null;
   verified: boolean;
   verifiedBy: string | null;

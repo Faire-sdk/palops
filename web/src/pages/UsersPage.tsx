@@ -12,9 +12,10 @@ import { useAuth } from '../auth/AuthContext';
 import { discordAvatarUrl } from '../auth/discord';
 import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
 import { DataTable } from '../components/DataTable';
-import { ConnectionChips, MemberChip } from '../components/DiscordProfile';
+import { MemberChip } from '../components/DiscordProfile';
 import { PlayerProfileDialog } from '../components/PlayerActions';
 import { PlayerName } from '../components/PlayerBits';
+import { UserProfileDialog } from '../components/UserProfileDialog';
 import { formatDateTime } from '../format';
 import { useApi } from '../hooks/useApi';
 
@@ -27,6 +28,7 @@ export function UsersPage() {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [profile, setProfile] = useState<string | null>(null);
+  const [user, setUser] = useState<number | null>(null);
   const { data, error, loading, reload } = useApi<{ accounts: WebsiteAccount[]; communityServerId: string | null }>(
     `/accounts?filter=${filter}&q=${encodeURIComponent(q)}`,
     { pollMs: 30000 },
@@ -41,7 +43,7 @@ export function UsersPage() {
 
   return (
     <>
-      <PageHeader title="Users" description="Players who signed in on the website with Discord, the character they linked, and their Discord profile." />
+      <PageHeader title="Users" description="Players who signed in on the website with Discord and the character they linked. Click someone to see their Discord profile." />
       <Section
         title={
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { sm: 'center' } }}>
@@ -64,6 +66,7 @@ export function UsersPage() {
           <DataTable
             rows={data?.accounts ?? []}
             rowKey={(a) => a.id}
+            onRowClick={(a) => setUser(a.id)}
             empty={<EmptyState icon={PersonSearchOutlinedIcon} title="No users here yet">Players appear after they sign in on the website{filter !== 'all' && filter !== 'unlinked' ? ' and link their character' : ''}.</EmptyState>}
             columns={[
               {
@@ -71,12 +74,18 @@ export function UsersPage() {
                 header: 'Discord',
                 render: (a) => (
                   <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
-                    <Avatar src={discordAvatarUrl(a.discord) ?? undefined} sx={{ width: 32, height: 32 }}>
-                      {(a.discord.username ?? '?').slice(0, 1).toUpperCase()}
+                    <Avatar src={discordAvatarUrl(a.discord) ?? undefined} sx={{ width: 36, height: 36 }}>
+                      {(a.discord.globalName ?? a.discord.username ?? '?').slice(0, 1).toUpperCase()}
                     </Avatar>
                     <div>
-                      <Typography sx={{ fontWeight: 600 }}>{a.discord.username ?? 'Unknown'}</Typography>
-                      <Mono muted>{a.discord.id}</Mono>
+                      <Typography sx={{ fontWeight: 600 }}>{a.discord.globalName ?? a.discord.username ?? 'Unknown'}</Typography>
+                      {a.discord.username ? (
+                        <Typography variant="body2" color="text.secondary">
+                          @{a.discord.username}
+                        </Typography>
+                      ) : (
+                        <Mono muted>{a.discord.id}</Mono>
+                      )}
                     </div>
                   </Stack>
                 ),
@@ -102,7 +111,6 @@ export function UsersPage() {
                   ),
               },
               { key: 'member', header: 'Discord server', render: (a) => <MemberChip profile={a.profile} /> },
-              { key: 'connections', header: 'Connections', render: (a) => <ConnectionChips profile={a.profile} /> },
               ...(showPrivate
                 ? [
                     {
@@ -123,6 +131,7 @@ export function UsersPage() {
           Set the Discord bot’s server ID in Settings → Discord bot to see who is in your Discord server.
         </Typography>
       )}
+      <UserProfileDialog accountId={user} onClose={() => setUser(null)} onOpenPlayer={setProfile} />
       <PlayerProfileDialog userId={profile} onClose={() => setProfile(null)} onOpen={setProfile} />
     </>
   );

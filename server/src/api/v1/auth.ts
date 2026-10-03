@@ -229,7 +229,7 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
 
   /** Saves what the extra scopes returned, only for people who actually signed in. */
   const rememberProfile = (account: DiscordSignIn) => {
-    if (account.profile) services.discordProfiles.save(account.id, account.profile);
+    if (account.profile) services.discordProfiles.save(account.id, account.profile, account);
   };
 
   app.get('/discord/callback', async (request, reply) => {

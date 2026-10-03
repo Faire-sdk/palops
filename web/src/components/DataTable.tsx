@@ -4,7 +4,7 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 
 export interface Column<T> {
   key: string;
@@ -16,7 +16,20 @@ export interface Column<T> {
 }
 
 /** A Material table driven by column definitions; scrolls sideways on small screens. */
-export function DataTable<T>({ columns, rows, rowKey, empty }: { columns: Column<T>[]; rows: T[]; rowKey: (row: T) => string | number; empty?: ReactNode }) {
+export function DataTable<T>({
+  columns,
+  rows,
+  rowKey,
+  empty,
+  onRowClick,
+}: {
+  columns: Column<T>[];
+  rows: T[];
+  rowKey: (row: T) => string | number;
+  empty?: ReactNode;
+  /** Makes whole rows clickable; links and buttons inside a row still do their own thing. */
+  onRowClick?: (row: T) => void;
+}) {
   if (rows.length === 0 && empty) return <>{empty}</>;
   return (
     <TableContainer>
@@ -32,7 +45,12 @@ export function DataTable<T>({ columns, rows, rowKey, empty }: { columns: Column
         </TableHead>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={rowKey(row)} hover>
+            <TableRow
+              key={rowKey(row)}
+              hover
+              onClick={onRowClick && ((e: MouseEvent) => !(e.target as HTMLElement).closest('a, button') && onRowClick(row))}
+              sx={onRowClick ? { cursor: 'pointer' } : undefined}
+            >
               {columns.map((c) => (
                 <TableCell key={c.key} align={c.align} sx={c.nowrap ? { whiteSpace: 'nowrap' } : undefined}>
                   {c.render(row)}

@@ -20,12 +20,29 @@ export interface DiscordConnection {
   verified: boolean;
 }
 
+/** A server they're in, from the guilds scope. Counts are approximate and may be missing. */
+export interface DiscordGuild {
+  id: string;
+  name: string;
+  /** Icon hash, for cdn.discordapp.com/icons/{id}/{icon}. */
+  icon: string | null;
+  owner: boolean;
+  /** Has the Administrator permission there. */
+  admin: boolean;
+  memberCount: number | null;
+  onlineCount: number | null;
+}
+
 /** What the extra scopes return. Each part is null when Discord didn't return it. */
 export interface DiscordProfile {
+  /** Display name, banner and accent colour from the account itself. */
+  globalName: string | null;
+  banner: string | null;
+  accentColor: number | null;
   email: string | null;
   emailVerified: boolean | null;
   connections: DiscordConnection[] | null;
-  guilds: Array<{ id: string; name: string }> | null;
+  guilds: DiscordGuild[] | null;
   /** Membership in the community server (the Discord bot's server ID), if one is set. */
   communityMember: { joinedAt: string | null; nick: string | null; roles: string[] } | false | null;
 }
@@ -87,6 +104,8 @@ export class DiscordOAuthClient implements DiscordOAuthProvider {
       avatar?: unknown;
       email?: unknown;
       verified?: unknown;
+      banner?: unknown;
+      accent_color?: unknown;
     };
     if (typeof me.id !== 'string') throw new DiscordOAuthError('Discord returned an unexpected user');
 
@@ -94,7 +113,7 @@ export class DiscordOAuthClient implements DiscordOAuthProvider {
     const optional = (path: string) => this.call(`${this.apiBase}${path}`, auth).catch(() => null);
     const [connections, guilds, member] = await Promise.all([
       optional('/users/@me/connections'),
-      optional('/users/@me/guilds'),
+      optional('/users/@me/guilds?with_counts=true'),
       options.guildId ? this.memberOf(options.guildId, auth) : Promise.resolve(null),
     ]);
     return {
@@ -103,10 +122,13 @@ export class DiscordOAuthClient implements DiscordOAuthProvider {
       avatar: typeof me.avatar === 'string' ? me.avatar : null,
       accessToken,
       profile: {
+        globalName: typeof me.global_name === 'string' ? me.global_name : null,
+        banner: typeof me.banner === 'string' ? me.banner : null,
+        accentColor: typeof me.accent_color === 'number' ? me.accent_color : null,
         email: typeof me.email === 'string' ? me.email : null,
         emailVerified: typeof me.verified === 'boolean' ? me.verified : null,
         connections: Array.isArray(connections) ? connections.flatMap(toConnection) : null,
-        guilds: Array.isArray(guilds) ? guilds.flatMap((g) => (isRecord(g) && typeof g.id === 'string' ? [{ id: g.id, name: typeof g.name === 'string' ? g.name : g.id }] : [])) : null,
+        guilds: Array.isArray(guilds) ? guilds.flatMap(toGuild) : null,
         communityMember: member,
       },
     };
@@ -144,4 +166,27 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 function toConnection(c: unknown): DiscordConnection[] {
   if (!isRecord(c) || typeof c.type !== 'string' || typeof c.id !== 'string') return [];
   return [{ type: c.type, id: c.id, name: typeof c.name === 'string' ? c.name : c.id, verified: c.verified === true }];
+}
+
+const ADMINISTRATOR = 1n << 3n;
+
+function toGuild(g: unknown): DiscordGuild[] {
+  if (!isRecord(g) || typeof g.id !== 'string') return [];
+  let admin = false;
+  try {
+    admin = typeof g.permissions === 'string' && (BigInt(g.permissions) & ADMINISTRATOR) !== 0n;
+  } catch {
+    // An unreadable permission string just means "not admin".
+  }
+  return [
+    {
+      id: g.id,
+      name: typeof g.name === 'string' ? g.name : g.id,
+      icon: typeof g.icon === 'string' ? g.icon : null,
+      owner: g.owner === true,
+      admin: g.owner === true || admin,
+      memberCount: typeof g.approximate_member_count === 'number' ? g.approximate_member_count : null,
+      onlineCount: typeof g.approximate_presence_count === 'number' ? g.approximate_presence_count : null,
+    },
+  ];
 }
