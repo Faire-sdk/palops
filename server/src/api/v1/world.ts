@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
-import { MAP_IMAGE_MAX_BYTES, MAP_IMAGE_TYPES } from '../../services/world/map-image.js';
+import { MAP_IMAGE_MAX_BYTES, MAP_IMAGE_TYPES, MAP_REGION_IDS, MAP_REGIONS } from '../../services/world/map-image.js';
 import { badRequest } from '../../utils/errors.js';
 import { parse } from '../../utils/validation.js';
 
@@ -54,11 +54,17 @@ export default async function worldRoutes(app: FastifyInstance, { services }: { 
     return world.performance(hours);
   });
 
-  /** The live map's background: metadata, then the file itself. */
-  app.get('/map-image', { preHandler: requirePermission(services, 'world.view') }, async () => ({ image: mapImage.get() }));
+  /** The live map's backgrounds, one per region: metadata, then each file. */
+  const regionParams = z.object({ region: z.enum(MAP_REGION_IDS) });
 
-  app.get('/map-image/file', { preHandler: requirePermission(services, 'world.view') }, async (_request, reply) => {
-    const file = mapImage.file();
+  app.get('/map-images', { preHandler: requirePermission(services, 'world.view') }, async () => ({
+    regions: MAP_REGIONS.map(({ id, label }) => ({ id, label })),
+    images: mapImage.list(),
+  }));
+
+  app.get('/map-images/:region/file', { preHandler: requirePermission(services, 'world.view') }, async (request, reply) => {
+    const { region } = parse(regionParams, request.params);
+    const file = mapImage.file(region);
     return reply
       .header('Content-Type', file.contentType)
       .header('Cache-Control', 'private, max-age=86400')
@@ -66,24 +72,27 @@ export default async function worldRoutes(app: FastifyInstance, { services }: { 
       .send(file.data);
   });
 
-  app.put('/map-image', { preHandler: requirePermission(services, 'config.edit'), bodyLimit: MAP_IMAGE_MAX_BYTES }, async (request) => {
+  app.put('/map-images/:region', { preHandler: requirePermission(services, 'config.edit'), bodyLimit: MAP_IMAGE_MAX_BYTES }, async (request) => {
+    const { region } = parse(regionParams, request.params);
     const { width, height } = parse(
       z.object({ width: z.coerce.number().int().positive(), height: z.coerce.number().int().positive() }),
       request.query,
     );
     const contentType = (request.headers['content-type'] ?? '').split(';')[0]!.trim();
     if (!Buffer.isBuffer(request.body)) throw badRequest('Upload a PNG, JPEG or WebP image', 'invalid_image');
-    return { image: mapImage.save(actorOf(request), { contentType, data: request.body, width, height }) };
+    return { image: mapImage.save(actorOf(request), region, { contentType, data: request.body, width, height }) };
   });
 
-  app.patch('/map-image', { preHandler: requirePermission(services, 'config.edit') }, async (request) => {
+  app.patch('/map-images/:region', { preHandler: requirePermission(services, 'config.edit') }, async (request) => {
+    const { region } = parse(regionParams, request.params);
     const finite = z.number().finite().min(-100000).max(100000);
     const bounds = parse(z.object({ left: finite, top: finite, right: finite, bottom: finite }), request.body);
-    return { image: mapImage.align(actorOf(request), bounds) };
+    return { image: mapImage.align(actorOf(request), region, bounds) };
   });
 
-  app.delete('/map-image', { preHandler: requirePermission(services, 'config.edit') }, async (request) => {
-    mapImage.remove(actorOf(request));
+  app.delete('/map-images/:region', { preHandler: requirePermission(services, 'config.edit') }, async (request) => {
+    const { region } = parse(regionParams, request.params);
+    mapImage.remove(actorOf(request), region);
     return { image: null };
   });
 }

@@ -13,7 +13,22 @@ export interface MapBounds {
   bottom: number;
 }
 
+/**
+ * The game's map screen shows these as separate maps, but they share one set of
+ * in-game coordinates: the World Tree lies far to the north-west of Palpagos.
+ * Each region gets its own image, lined up on its own, so they land in place
+ * next to each other. The World Tree guess comes from community-mapped
+ * locations there (roughly x -1980..-1440, y 1140..1625), not official data.
+ */
+export const MAP_REGIONS = [
+  { id: 'palpagos', label: 'Palpagos Islands', center: { x: 0, y: 0 }, halfSpan: 1000 },
+  { id: 'world-tree', label: 'World Tree', center: { x: -1710, y: 1385 }, halfSpan: 450 },
+] as const;
+export type MapRegion = (typeof MAP_REGIONS)[number]['id'];
+export const MAP_REGION_IDS = MAP_REGIONS.map((r) => r.id) as [MapRegion, ...MapRegion[]];
+
 export interface MapImage {
+  region: MapRegion;
   contentType: string;
   width: number;
   height: number;
@@ -25,6 +40,7 @@ export interface MapImage {
 }
 
 interface MapImageRow {
+  region: MapRegion;
   file_name: string;
   content_type: string;
   width: number;
@@ -40,8 +56,6 @@ interface MapImageRow {
 
 export const MAP_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 const MAX_SIDE = 16384;
-/** The main island spans roughly -1000..1000 on the in-game map; the starting guess before alignment. */
-const DEFAULT_HALF_SPAN = 1000;
 
 const TYPES: Record<string, { ext: string; matches: (b: Buffer) => boolean }> = {
   'image/png': { ext: 'png', matches: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
@@ -51,8 +65,9 @@ const TYPES: Record<string, { ext: string; matches: (b: Buffer) => boolean }> = 
 export const MAP_IMAGE_TYPES = Object.keys(TYPES);
 
 /**
- * Stores the live map's background image. PalOps doesn't ship the game's map
- * art, so an owner uploads their own and lines it up with two known points.
+ * Stores the live map's background images, one per region. PalOps doesn't ship
+ * the game's map art, so an owner uploads their own and lines each up with two
+ * known points.
  */
 export class MapImageService {
   private dir: string | undefined;
@@ -63,13 +78,18 @@ export class MapImageService {
     private readonly audit: AuditLog,
   ) {}
 
-  get(): MapImage | null {
-    const row = this.row();
+  list(): MapImage[] {
+    const rows = this.db.prepare('SELECT * FROM map_images').all() as MapImageRow[];
+    return MAP_REGION_IDS.flatMap((id) => rows.filter((r) => r.region === id).map(toImage));
+  }
+
+  get(region: MapRegion): MapImage | null {
+    const row = this.row(region);
     return row ? toImage(row) : null;
   }
 
-  file(): { contentType: string; data: Buffer; updatedAt: string } {
-    const row = this.row();
+  file(region: MapRegion): { contentType: string; data: Buffer; updatedAt: string } {
+    const row = this.row(region);
     if (!row) throw notFound('No map image has been uploaded');
     try {
       return { contentType: row.content_type, data: readFileSync(join(this.directory(), row.file_name)), updatedAt: row.updated_at };
@@ -78,29 +98,31 @@ export class MapImageService {
     }
   }
 
-  save(actor: AuditActor, input: { contentType: string; data: Buffer; width: number; height: number }): MapImage {
+  save(actor: AuditActor, region: MapRegion, input: { contentType: string; data: Buffer; width: number; height: number }): MapImage {
     const type = TYPES[input.contentType];
     if (!type || !type.matches(input.data)) throw badRequest('Upload a PNG, JPEG or WebP image', 'invalid_image');
     if (![input.width, input.height].every((n) => Number.isInteger(n) && n > 0 && n <= MAX_SIDE)) {
       throw badRequest(`Image sides must be between 1 and ${MAX_SIDE} pixels`, 'invalid_image');
     }
-    const previous = this.row();
-    const fileName = `map-image.${type.ext}`;
+    const previous = this.row(region);
+    // Palpagos keeps the name it had when it was the only image.
+    const fileName = region === 'palpagos' ? `map-image.${type.ext}` : `map-image-${region}.${type.ext}`;
     writeFileSync(join(this.directory(), fileName), input.data);
     if (previous && previous.file_name !== fileName) rmSync(join(this.directory(), previous.file_name), { force: true });
 
     // A replacement with the same shape keeps its alignment; otherwise start from a centred guess.
     const keep = previous?.aligned && previous.width * input.height === previous.height * input.width;
-    const bounds = keep ? toImage(previous).bounds : defaultBounds(input.width, input.height);
+    const bounds = keep ? toImage(previous).bounds : defaultBounds(region, input.width, input.height);
     this.db
       .prepare(
-        `INSERT INTO map_image (id, file_name, content_type, width, height, left_x, top_y, right_x, bottom_y, aligned, updated_at, updated_by)
-         VALUES (1, @fileName, @contentType, @width, @height, @left, @top, @right, @bottom, @aligned, @now, @by)
-         ON CONFLICT (id) DO UPDATE SET file_name = excluded.file_name, content_type = excluded.content_type, width = excluded.width,
+        `INSERT INTO map_images (region, file_name, content_type, width, height, left_x, top_y, right_x, bottom_y, aligned, updated_at, updated_by)
+         VALUES (@region, @fileName, @contentType, @width, @height, @left, @top, @right, @bottom, @aligned, @now, @by)
+         ON CONFLICT (region) DO UPDATE SET file_name = excluded.file_name, content_type = excluded.content_type, width = excluded.width,
            height = excluded.height, left_x = excluded.left_x, top_y = excluded.top_y, right_x = excluded.right_x,
            bottom_y = excluded.bottom_y, aligned = excluded.aligned, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
       )
       .run({
+        region,
         fileName,
         contentType: input.contentType,
         width: input.width,
@@ -110,32 +132,32 @@ export class MapImageService {
         now: new Date().toISOString(),
         by: actor.username,
       });
-    this.audit.record(actor, { category: 'config', action: 'map_image_uploaded', details: { width: input.width, height: input.height, bytes: input.data.length } });
-    return this.get()!;
+    this.audit.record(actor, { category: 'config', action: 'map_image_uploaded', details: { region, width: input.width, height: input.height, bytes: input.data.length } });
+    return this.get(region)!;
   }
 
-  align(actor: AuditActor, bounds: MapBounds): MapImage {
-    if (!this.row()) throw notFound('Upload a map image first');
+  align(actor: AuditActor, region: MapRegion, bounds: MapBounds): MapImage {
+    if (!this.row(region)) throw notFound('Upload a map image first');
     if (!(bounds.right > bounds.left && bounds.top > bounds.bottom)) {
       throw badRequest('Those points put the map upside down or mirrored; check the coordinates', 'invalid_alignment');
     }
     this.db
-      .prepare('UPDATE map_image SET left_x = ?, top_y = ?, right_x = ?, bottom_y = ?, aligned = 1, updated_at = ?, updated_by = ? WHERE id = 1')
-      .run(bounds.left, bounds.top, bounds.right, bounds.bottom, new Date().toISOString(), actor.username);
-    this.audit.record(actor, { category: 'config', action: 'map_image_aligned', details: { ...bounds } });
-    return this.get()!;
+      .prepare('UPDATE map_images SET left_x = ?, top_y = ?, right_x = ?, bottom_y = ?, aligned = 1, updated_at = ?, updated_by = ? WHERE region = ?')
+      .run(bounds.left, bounds.top, bounds.right, bounds.bottom, new Date().toISOString(), actor.username, region);
+    this.audit.record(actor, { category: 'config', action: 'map_image_aligned', details: { region, ...bounds } });
+    return this.get(region)!;
   }
 
-  remove(actor: AuditActor): void {
-    const row = this.row();
+  remove(actor: AuditActor, region: MapRegion): void {
+    const row = this.row(region);
     if (!row) return;
     rmSync(join(this.directory(), row.file_name), { force: true });
-    this.db.prepare('DELETE FROM map_image WHERE id = 1').run();
-    this.audit.record(actor, { category: 'config', action: 'map_image_removed' });
+    this.db.prepare('DELETE FROM map_images WHERE region = ?').run(region);
+    this.audit.record(actor, { category: 'config', action: 'map_image_removed', details: { region } });
   }
 
-  private row(): MapImageRow | undefined {
-    return this.db.prepare('SELECT * FROM map_image WHERE id = 1').get() as MapImageRow | undefined;
+  private row(region: MapRegion): MapImageRow | undefined {
+    return this.db.prepare('SELECT * FROM map_images WHERE region = ?').get(region) as MapImageRow | undefined;
   }
 
   /** Next to the database, so backups of the data folder include it. */
@@ -152,15 +174,18 @@ export class MapImageService {
   }
 }
 
-function defaultBounds(width: number, height: number): MapBounds {
+/** The starting guess before alignment: the region's usual area, keeping the image's shape. */
+function defaultBounds(region: MapRegion, width: number, height: number): MapBounds {
+  const { center, halfSpan } = MAP_REGIONS.find((r) => r.id === region)!;
   const aspect = width / height;
-  const halfX = aspect >= 1 ? DEFAULT_HALF_SPAN : DEFAULT_HALF_SPAN * aspect;
-  const halfY = aspect >= 1 ? DEFAULT_HALF_SPAN / aspect : DEFAULT_HALF_SPAN;
-  return { left: -halfX, right: halfX, top: halfY, bottom: -halfY };
+  const halfX = aspect >= 1 ? halfSpan : halfSpan * aspect;
+  const halfY = aspect >= 1 ? halfSpan / aspect : halfSpan;
+  return { left: center.x - halfX, right: center.x + halfX, top: center.y + halfY, bottom: center.y - halfY };
 }
 
 function toImage(row: MapImageRow): MapImage {
   return {
+    region: row.region,
     contentType: row.content_type,
     width: row.width,
     height: row.height,

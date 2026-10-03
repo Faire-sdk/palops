@@ -36,7 +36,7 @@ interface View {
 const WORLD = 1000;
 const GRID = 200;
 const MIN_WIDTH = 40;
-const MAX_WIDTH = 3000;
+const MAX_WIDTH = 4500;
 /** Pal and NPC names only show once zoomed in this far (visible width in map units), or they'd bury the map. */
 const PAL_LABEL_WIDTH = 600;
 const WILD_LABEL_WIDTH = 250;
@@ -63,19 +63,21 @@ interface LabelCandidate {
 const levelText = (level: number | null) => `Level ${level ?? '?'}`;
 const PAL_KIND: Record<'OtomoPal' | 'BaseCampPal' | 'WildPal', string> = { OtomoPal: 'Party pal', BaseCampPal: 'Base pal', WildPal: 'Wild pal' };
 
-export const mapImageUrl = (image: MapImage) => `/api/v1/world/map-image/file?v=${encodeURIComponent(image.updatedAt)}`;
+const NO_IMAGES: MapImage[] = [];
 
-/** Fits a view around the given points, never smaller than the main island. */
-function fit(points: MapPoint[]): View {
+export const mapImageUrl = (image: MapImage) => `/api/v1/world/map-images/${image.region}/file?v=${encodeURIComponent(image.updatedAt)}`;
+
+/** Fits a view around the given points, never smaller than the main island; aspect is the map box's width over height. */
+function fit(points: MapPoint[], aspect = 800 / 560): View {
   const xs = [-WORLD, WORLD, ...points.map((p) => p.x)];
   const ys = [-WORLD, WORLD, ...points.map((p) => p.y)];
   const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, width: Math.max(maxX - minX, maxY - minY) * 1.05 };
+  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, width: Math.min(MAX_WIDTH, Math.max(maxX - minX, (maxY - minY) * aspect) * 1.05) };
 }
 
 /**
- * A live map drawn in in-game map coordinates (north up), over the map image
- * an owner uploaded (PalOps doesn't ship the game's map art). Scroll to zoom,
+ * A live map drawn in in-game map coordinates (north up), over the map images
+ * an owner uploaded, one per region (PalOps doesn't ship the game's map art). Scroll to zoom,
  * drag to pan; markers keep their size at any zoom.
  */
 export function WorldMap({
@@ -83,10 +85,10 @@ export function WorldMap({
   focus,
   onPlayer,
   onBase,
-  background,
+  backgrounds = NO_IMAGES,
 }: {
   map: WorldMapData;
-  background?: MapImage | null;
+  backgrounds?: MapImage[];
   focus?: MapPoint | null;
   onPlayer?: (userId: string) => void;
   onBase?: (baseId: number) => void;
@@ -100,15 +102,22 @@ export function WorldMap({
   const [hover, setHover] = useState<(HoverInfo & { x: number; y: number }) | null>(null);
   const allPoints = useMemo(() => {
     const points = [...map.players, ...map.bases].map((p) => p.at);
-    if (background) points.push({ x: background.bounds.left, y: background.bounds.top }, { x: background.bounds.right, y: background.bounds.bottom });
+    for (const b of backgrounds) points.push({ x: b.bounds.left, y: b.bounds.top }, { x: b.bounds.right, y: b.bounds.bottom });
     return points;
-  }, [map, background]);
+  }, [map, backgrounds]);
   const [view, setView] = useState<View>(() => (focus ? { cx: focus.x, cy: focus.y, width: 300 } : fit(allPoints)));
   const drag = useRef<{ x: number; y: number; view: View; moved: boolean } | null>(null);
 
   useEffect(() => {
     if (focus) setView({ cx: focus.x, cy: focus.y, width: 300 });
   }, [focus]);
+
+  // Map images usually load after the markers; show all of them once they arrive.
+  const regions = backgrounds.map((b) => b.region).join();
+  useEffect(() => {
+    if (!focus && regions) setView(fit(allPoints, size.w / size.h));
+    // Only when the set of regions changes, not on every snapshot.
+  }, [regions]);
 
   useEffect(() => {
     const el = box.current;
@@ -204,11 +213,11 @@ export function WorldMap({
   };
 
   const gridLines = [];
-  for (let v = -3000; v <= 3000; v += GRID) {
+  for (let v = -4000; v <= 4000; v += GRID) {
     const major = v === 0;
     const stroke = major ? theme.vars!.palette.text.secondary : theme.vars!.palette.divider;
-    gridLines.push(<line key={`x${v}`} x1={v} x2={v} y1={-3000} y2={3000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
-    gridLines.push(<line key={`y${v}`} y1={-v} y2={-v} x1={-3000} x2={3000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
+    gridLines.push(<line key={`x${v}`} x1={v} x2={v} y1={-4000} y2={4000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
+    gridLines.push(<line key={`y${v}`} y1={-v} y2={-v} x1={-4000} x2={4000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
   }
   const pal = (kind: 'OtomoPal' | 'BaseCampPal' | 'WildPal') => map.pals.filter((p) => p.kind === kind);
 
@@ -293,17 +302,18 @@ export function WorldMap({
         }}
       >
         <svg width="100%" height="100%" viewBox={viewBox} role="img" aria-label="World map">
-          {background && (
+          {backgrounds.map((b) => (
             <image
-              href={mapImageUrl(background)}
-              x={background.bounds.left}
-              y={-background.bounds.top}
-              width={background.bounds.right - background.bounds.left}
-              height={background.bounds.top - background.bounds.bottom}
+              key={b.region}
+              href={mapImageUrl(b)}
+              x={b.bounds.left}
+              y={-b.bounds.top}
+              width={b.bounds.right - b.bounds.left}
+              height={b.bounds.top - b.bounds.bottom}
               preserveAspectRatio="none"
             />
-          )}
-          <g opacity={background ? 0.35 : 1}>{gridLines}</g>
+          ))}
+          <g opacity={backgrounds.length > 0 ? 0.35 : 1}>{gridLines}</g>
           {/* Bases go under the pals, which crowd around the Pal Box. */}
           {layers.has('wildPals') &&
             pal('WildPal').map((p, i) => (
@@ -461,7 +471,7 @@ export function WorldMap({
             </IconButton>
           </Tooltip>
           <Tooltip title="Show everything" placement="left">
-            <IconButton size="small" onClick={() => setView(fit(allPoints))}>
+            <IconButton size="small" onClick={() => setView(fit(allPoints, size.w / size.h))}>
               <CenterFocusStrongOutlinedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
