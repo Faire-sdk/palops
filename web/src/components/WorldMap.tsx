@@ -64,6 +64,8 @@ const levelText = (level: number | null) => `Level ${level ?? '?'}`;
 const PAL_KIND: Record<'OtomoPal' | 'BaseCampPal' | 'WildPal', string> = { OtomoPal: 'Party pal', BaseCampPal: 'Base pal', WildPal: 'Wild pal' };
 
 const NO_IMAGES: MapImage[] = [];
+/** The sea-and-sky colour around the game's own map art, so the images blend into the map box. */
+const MAP_ART_BACKGROUND = '#0c161e';
 
 export const mapImageUrl = (image: MapImage) => `/api/v1/world/map-images/${image.region}/file?v=${encodeURIComponent(image.updatedAt)}`;
 
@@ -295,7 +297,7 @@ export function WorldMap({
           overflow: 'hidden',
           border: 1,
           borderColor: 'divider',
-          bgcolor: 'background.default',
+          bgcolor: backgrounds.length > 0 ? MAP_ART_BACKGROUND : 'background.default',
           touchAction: 'none',
           cursor: 'grab',
           userSelect: 'none',
