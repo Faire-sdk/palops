@@ -375,8 +375,17 @@ export interface AuthOptions {
   providers: { discord: boolean; password: boolean; emergency?: boolean };
 }
 
-/** The live map's background image; bounds are its edges in map coordinates. */
+/** A part of the world with its own map image; all share the same map coordinates. */
+export interface MapRegion {
+  id: string;
+  label: string;
+  /** Where the game draws its own map texture for this region (T_WorldMap, T_TreeMap). */
+  gameBounds: MapImage['bounds'];
+}
+
+/** One region's background image on the live map; bounds are its edges in map coordinates. */
 export interface MapImage {
+  region: string;
   contentType: string;
   width: number;
   height: number;

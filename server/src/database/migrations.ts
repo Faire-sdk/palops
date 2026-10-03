@@ -610,5 +610,29 @@ export const migrations: Migration[] = [
         updated_at TEXT NOT NULL DEFAULT ${now}
       );
     `,
+  },  {
+    id: 22,
+    name: 'map_image_regions',
+    sql: `
+      -- One background per map region (Palpagos Islands, World Tree), all in the same
+      -- in-game coordinates. The single image uploaded before becomes Palpagos.
+      CREATE TABLE map_images (
+        region TEXT PRIMARY KEY,
+        file_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        left_x REAL NOT NULL,
+        top_y REAL NOT NULL,
+        right_x REAL NOT NULL,
+        bottom_y REAL NOT NULL,
+        aligned INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT ${now},
+        updated_by TEXT
+      );
+      INSERT INTO map_images (region, file_name, content_type, width, height, left_x, top_y, right_x, bottom_y, aligned, updated_at, updated_by)
+        SELECT 'palpagos', file_name, content_type, width, height, left_x, top_y, right_x, bottom_y, aligned, updated_at, updated_by FROM map_image;
+      DROP TABLE map_image;
+    `,
   },
 ];

@@ -8,19 +8,21 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { MapImage, MapPoint, WorldMapData } from '../api/types';
+import type { MapImage, MapPoint, MapRegion, WorldMapData } from '../api/types';
 import { refreshAll } from '../hooks/useApi';
 import { useToast } from './Toast';
 import { mapImageUrl } from './WorldMap';
 
 const TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-const MAX_BYTES = 25 * 1024 * 1024;
+const MAX_BYTES = 64 * 1024 * 1024;
 
 type RefId = 'a' | 'b';
 interface Reference {
@@ -57,10 +59,26 @@ export function computeBounds(image: { width: number; height: number }, a: { px:
   return { left, top, right: left + image.width * sx, bottom: top - image.height * sy };
 }
 
-export function MapImageDialog({ open, onClose, image, map }: { open: boolean; onClose: () => void; image: MapImage | null; map: WorldMapData | null }) {
+export function MapImageDialog({
+  open,
+  onClose,
+  regions,
+  images,
+  map,
+}: {
+  open: boolean;
+  onClose: () => void;
+  regions: MapRegion[];
+  images: MapImage[];
+  map: WorldMapData | null;
+}) {
   const notify = useToast();
   const input = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState<'upload' | 'save' | 'remove' | null>(null);
+  const [region, setRegion] = useState(regions[0]?.id ?? 'palpagos');
+  const image = images.find((i) => i.region === region) ?? null;
+  const regionInfo = regions.find((r) => r.id === region);
+  const regionLabel = regionInfo?.label ?? 'this region';
+  const [busy, setBusy] = useState<'upload' | 'save' | 'game' | 'remove' | null>(null);
   const [active, setActive] = useState<RefId>('a');
   const [refs, setRefs] = useState<Record<RefId, Reference>>({ a: emptyRef, b: emptyRef });
   const [error, setError] = useState<string>();
@@ -71,7 +89,7 @@ export function MapImageDialog({ open, onClose, image, map }: { open: boolean; o
       setActive('a');
       setError(undefined);
     }
-  }, [open, image?.updatedAt]);
+  }, [open, region, image?.updatedAt]);
 
   const known = [
     ...(map?.bases ?? []).map((b) => ({ id: `base-${b.id}`, label: `Base: ${b.guildName ?? b.guildId}`, at: b.at })),
@@ -81,11 +99,11 @@ export function MapImageDialog({ open, onClose, image, map }: { open: boolean; o
   const upload = async (file: File | undefined) => {
     if (!file) return;
     if (!TYPES.includes(file.type)) return notify('Choose a PNG, JPEG or WebP image', 'error');
-    if (file.size > MAX_BYTES) return notify('The image must be 25 MB or smaller', 'error');
+    if (file.size > MAX_BYTES) return notify('The image must be 64 MB or smaller', 'error');
     setBusy('upload');
     try {
       const { width, height } = await imageSize(file);
-      await api.put(`/world/map-image?width=${width}&height=${height}`, file);
+      await api.put(`/world/map-images/${region}?width=${width}&height=${height}`, file);
       notify('Map image uploaded. Line it up next.', 'success');
       refreshAll();
     } catch (err) {
@@ -119,8 +137,25 @@ export function MapImageDialog({ open, onClose, image, map }: { open: boolean; o
     setBusy('save');
     setError(undefined);
     try {
-      await api.patch('/world/map-image', bounds);
-      notify('Map lined up', 'success');
+      await api.patch(`/world/map-images/${region}`, bounds);
+      notify(`${regionLabel} lined up`, 'success');
+      refreshAll();
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** For the game's own texture: no points needed, it goes exactly where the game draws it. */
+  const placeAtGamePosition = async () => {
+    if (!regionInfo) return;
+    setBusy('game');
+    setError(undefined);
+    try {
+      await api.patch(`/world/map-images/${region}`, regionInfo.gameBounds);
+      notify(`${regionLabel} placed where the game draws it`, 'success');
       refreshAll();
       onClose();
     } catch (err) {
@@ -133,8 +168,8 @@ export function MapImageDialog({ open, onClose, image, map }: { open: boolean; o
   const remove = async () => {
     setBusy('remove');
     try {
-      await api.delete('/world/map-image');
-      notify('Map image removed', 'success');
+      await api.delete(`/world/map-images/${region}`);
+      notify(`${regionLabel} image removed`, 'success');
       refreshAll();
       onClose();
     } catch (err) {
@@ -146,35 +181,58 @@ export function MapImageDialog({ open, onClose, image, map }: { open: boolean; o
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Map image</DialogTitle>
+      <DialogTitle>Map images</DialogTitle>
       <DialogContent dividers>
         <input ref={input} type="file" accept={TYPES.join(',')} hidden onChange={(e) => void upload(e.target.files?.[0])} />
+        <Tabs value={region} onChange={(_, v: string) => setRegion(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+          {regions.map((r) => (
+            <Tab key={r.id} value={r.id} label={images.some((i) => i.region === r.id) ? r.label : `${r.label} (none yet)`} />
+          ))}
+        </Tabs>
         {!image ? (
           <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>
             <Typography>
-              PalOps doesn’t include the game’s map art. Upload a picture of the Palworld map (a screenshot of the in-game map works), then line it up
-              with two points. Only staff who can see the live map can see it.
+              PalOps doesn’t include the game’s map art. Upload a picture of the {regionLabel} map (a screenshot of the in-game map works), then line it
+              up with two points. Only staff who can see the live map can see it.
             </Typography>
+            {region !== regions[0]?.id && (
+              <Typography variant="body2" color="text.secondary">
+                The game shows each region on its own map, but they share the same coordinates, so once each image is lined up with its own in-game
+                coordinates they sit next to each other just like in the world.
+              </Typography>
+            )}
             <Button variant="contained" startIcon={<UploadFileOutlinedIcon />} loading={busy === 'upload'} loadingPosition="start" onClick={() => input.current?.click()}>
               Upload image
             </Button>
             <Typography variant="body2" color="text.secondary">
-              PNG, JPEG or WebP, up to 25 MB.
+              PNG, JPEG or WebP, up to 64 MB. The game’s own map textures (T_WorldMap and T_TreeMap) land in exactly the right place.
             </Typography>
           </Stack>
         ) : (
           <Stack spacing={2}>
             <Typography>
               Click a spot on the image, then enter its in-game map coordinates. Do it for two spots far apart, such as two bases in opposite corners.
-              You can read coordinates on the in-game map, or pick a base or player PalOps already knows.
+              You can read coordinates on the in-game map, or pick a base or player PalOps already knows in {regionLabel}.
             </Typography>
-            {!image.aligned && <Alert severity="info">Until you line it up, the image is placed by a guess and markers may not match.</Alert>}
+            {!image.aligned && (
+              <Alert
+                severity="info"
+                action={
+                  <Button color="inherit" size="small" onClick={placeAtGamePosition} loading={busy === 'game'}>
+                    Use game position
+                  </Button>
+                }
+              >
+                It’s placed where the game draws its own {regionLabel} map. If this is the game’s own map texture, that’s exact: choose Use game
+                position. Otherwise, line it up with two points below.
+              </Alert>
+            )}
             <ToggleButtonGroup exclusive value={active} onChange={(_, v: RefId | null) => v && setActive(v)} size="small">
               <ToggleButton value="a">Placing point 1</ToggleButton>
               <ToggleButton value="b">Placing point 2</ToggleButton>
             </ToggleButtonGroup>
             <Box onClick={pick} sx={{ position: 'relative', cursor: 'crosshair', border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden', lineHeight: 0 }}>
-              <Box component="img" src={mapImageUrl(image)} alt="Uploaded map" draggable={false} sx={{ width: '100%', height: 'auto', display: 'block' }} />
+              <Box component="img" src={mapImageUrl(image)} alt={`${regionLabel} map`} draggable={false} sx={{ width: '100%', height: 'auto', display: 'block' }} />
               {(['a', 'b'] as const).map((id) =>
                 refs[id].px ? (
                   <Box

@@ -30,7 +30,7 @@ profile pages with playtime, pals and guild, and the panel's player views show p
 From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 seconds:
 
 - Guilds with members and bases, also filling in guilds on player lists, profiles and the public site.
-- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, with names on players, bases, pals and NPCs (labels thin out when crowded, and details show on hover), over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
+- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, with names on players, bases, pals and NPCs (labels thin out when crowded, and details show on hover), over map images an owner or admin uploads and lines up with two points, one each for Palpagos Islands and the World Tree, which land next to each other as in the game (the game's map art isn't ours to ship).
 - Bases with their worker pals, levels and HP, and injured workers flagged.
 - Pals seen with each player, kept for 30 days.
 - Cheat signals: unusual movement, level jumps, players sharing an address and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.

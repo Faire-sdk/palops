@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
+import { migrate } from '../src/database/db.js';
+import { migrations } from '../src/database/migrations.js';
 import type { WorldCharacter, WorldPalBox, WorldSnapshot } from '../src/services/palworld/index.js';
 import { fromMap, toMap } from '../src/services/world/map-coords.js';
 import { api, createTestApp, loginAs } from './helpers.js';
@@ -155,35 +158,39 @@ describe('world data', () => {
 
 describe('map image', () => {
   const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
-  const upload = (cookie: string, body: Buffer, type = 'image/png', size = 'width=2000&height=1000') =>
-    api(ctx.app, { method: 'PUT', url: `/api/v1/world/map-image?${size}`, cookie, payload: body, headers: { 'content-type': type } });
+  const upload = (cookie: string, body: Buffer, type = 'image/png', size = 'width=2000&height=1000', region = 'palpagos') =>
+    api(ctx.app, { method: 'PUT', url: `/api/v1/world/map-images/${region}?${size}`, cookie, payload: body, headers: { 'content-type': type } });
 
   it('lets admins upload, align and remove it, and staff view it', async () => {
     const admin = await loginAs(ctx.app, ctx.services, 'admin');
     const res = await upload(admin, PNG);
     expect(res.statusCode).toBe(200);
-    // A wide image gets a centred guess that keeps its shape until it's aligned.
-    expect(res.json().image).toMatchObject({ width: 2000, height: 1000, aligned: false, bounds: { left: -1000, right: 1000, top: 500, bottom: -500 } });
+    // A wide image starts where the game draws Palpagos, keeping its shape until it's aligned.
+    expect(res.json().image).toMatchObject({ width: 2000, height: 1000, aligned: false });
+    const guess = res.json().image.bounds;
+    expect(guess.left).toBeCloseTo(-1905.3, 0);
+    expect(guess.right).toBeCloseTo(1224.1, 0);
+    expect((guess.right - guess.left) / (guess.top - guess.bottom)).toBeCloseTo(2, 5);
 
     const mod = await loginAs(ctx.app, ctx.services, 'moderator');
-    const file = await get(mod, '/api/v1/world/map-image/file');
+    const file = await get(mod, '/api/v1/world/map-images/palpagos/file');
     expect(file.statusCode).toBe(200);
     expect(file.headers['content-type']).toBe('image/png');
     expect(file.rawPayload.equals(PNG)).toBe(true);
     expect((await upload(mod, PNG)).statusCode).toBe(403);
 
     const bounds = { left: -1200, top: 900, right: 1100, bottom: -1000 };
-    const aligned = await api(ctx.app, { method: 'PATCH', url: '/api/v1/world/map-image', cookie: admin, payload: bounds });
+    const aligned = await api(ctx.app, { method: 'PATCH', url: '/api/v1/world/map-images/palpagos', cookie: admin, payload: bounds });
     expect(aligned.json().image).toMatchObject({ aligned: true, bounds });
-    const mirrored = await api(ctx.app, { method: 'PATCH', url: '/api/v1/world/map-image', cookie: admin, payload: { ...bounds, right: -1300 } });
+    const mirrored = await api(ctx.app, { method: 'PATCH', url: '/api/v1/world/map-images/palpagos', cookie: admin, payload: { ...bounds, right: -1300 } });
     expect(mirrored.statusCode).toBe(400);
 
     // Re-uploading an image of the same shape keeps the alignment.
     expect((await upload(admin, PNG, 'image/png', 'width=4000&height=2000')).json().image).toMatchObject({ aligned: true, bounds });
 
-    expect((await api(ctx.app, { method: 'DELETE', url: '/api/v1/world/map-image', cookie: admin })).statusCode).toBe(200);
-    expect((await get(mod, '/api/v1/world/map-image')).json().image).toBeNull();
-    expect((await get(mod, '/api/v1/world/map-image/file')).statusCode).toBe(404);
+    expect((await api(ctx.app, { method: 'DELETE', url: '/api/v1/world/map-images/palpagos', cookie: admin })).statusCode).toBe(200);
+    expect((await get(mod, '/api/v1/world/map-images')).json().images).toEqual([]);
+    expect((await get(mod, '/api/v1/world/map-images/palpagos/file')).statusCode).toBe(404);
     expect(ctx.services.audit.list({ category: 'config', limit: 10, offset: 0 }).entries.map((e) => e.action)).toEqual([
       'map_image_removed',
       'map_image_uploaded',
@@ -198,6 +205,52 @@ describe('map image', () => {
     expect((await upload(admin, PNG, 'image/svg+xml')).statusCode).toBe(415);
     expect((await upload(admin, PNG, 'image/png', 'width=0&height=10')).statusCode).toBe(400);
     const viewer = await loginAs(ctx.app, ctx.services, 'viewer');
-    expect((await get(viewer, '/api/v1/world/map-image/file')).statusCode).toBe(403);
+    expect((await get(viewer, '/api/v1/world/map-images/palpagos/file')).statusCode).toBe(403);
+    expect((await upload(admin, PNG, 'image/png', 'width=10&height=10', 'atlantis')).statusCode).toBe(400);
+  });
+
+  it('keeps a separate image per region, each starting where the game draws its map', async () => {
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
+    await upload(admin, PNG, 'image/png', 'width=1000&height=1000');
+    const tree = (await upload(admin, JPEG, 'image/jpeg', 'width=1000&height=1000', 'world-tree')).json().image;
+    expect(tree).toMatchObject({ region: 'world-tree', aligned: false, bounds: { left: -2107.9, right: -1369.6, top: 1755.2, bottom: 1017 } });
+
+    const listed = (await get(admin, '/api/v1/world/map-images')).json();
+    expect(listed.regions).toEqual([
+      { id: 'palpagos', label: 'Palpagos Islands', gameBounds: { left: -1905.3, top: 1021.4, right: 1224.1, bottom: -2108 } },
+      { id: 'world-tree', label: 'World Tree', gameBounds: { left: -2107.9, top: 1755.2, right: -1369.6, bottom: 1017 } },
+    ]);
+    // Community-mapped World Tree spots (Teafant Springs, Forbidden Laboratory) fall on its map; Sunreach falls on Palpagos's.
+    const inside = (b: { left: number; top: number; right: number; bottom: number }, p: { x: number; y: number }) =>
+      p.x > b.left && p.x < b.right && p.y > b.bottom && p.y < b.top;
+    expect(inside(listed.regions[1].gameBounds, { x: -1895, y: 1362 })).toBe(true);
+    expect(inside(listed.regions[1].gameBounds, toMap({ x: 621794, y: -757915 }))).toBe(true);
+    expect(inside(listed.regions[0].gameBounds, toMap({ x: -777490, y: -40589 }))).toBe(true);
+    expect(listed.images.map((i: { region: string }) => i.region)).toEqual(['palpagos', 'world-tree']);
+    expect((await get(admin, '/api/v1/world/map-images/world-tree/file')).rawPayload.equals(JPEG)).toBe(true);
+    expect((await get(admin, '/api/v1/world/map-images/palpagos/file')).rawPayload.equals(PNG)).toBe(true);
+
+    // Removing one region leaves the other alone.
+    await api(ctx.app, { method: 'DELETE', url: '/api/v1/world/map-images/palpagos', cookie: admin });
+    expect((await get(admin, '/api/v1/world/map-images')).json().images.map((i: { region: string }) => i.region)).toEqual(['world-tree']);
+    expect((await get(admin, '/api/v1/world/map-images/world-tree/file')).statusCode).toBe(200);
+  });
+
+  it('moves an image uploaded before regions existed to Palpagos', () => {
+    const db = new Database(':memory:');
+    db.exec('CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT)');
+    for (const m of migrations.filter((m) => m.id < 22)) {
+      db.exec(m.sql);
+      db.prepare('INSERT INTO schema_migrations (id, name) VALUES (?, ?)').run(m.id, m.name);
+    }
+    db.prepare(
+      `INSERT INTO map_image (id, file_name, content_type, width, height, left_x, top_y, right_x, bottom_y, aligned)
+       VALUES (1, 'map-image.png', 'image/png', 100, 100, -900, 950, 1100, -1050, 1)`,
+    ).run();
+    migrate(db);
+    expect(db.prepare('SELECT region, file_name, left_x, aligned FROM map_images').all()).toEqual([
+      { region: 'palpagos', file_name: 'map-image.png', left_x: -900, aligned: 1 },
+    ]);
   });
 });
