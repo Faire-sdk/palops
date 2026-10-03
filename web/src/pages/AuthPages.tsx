@@ -141,23 +141,30 @@ function EmergencySignIn() {
 
   if (!open) {
     return (
-      <Typography variant="body2" align="center">
-        <Link component="button" type="button" onClick={() => setOpen(true)}>
+      <Typography variant="caption" align="center">
+        <Link component="button" type="button" color="text.secondary" underline="hover" onClick={() => setOpen(true)} sx={{ fontSize: 'inherit' }}>
           Emergency sign-in
         </Link>
       </Typography>
     );
   }
   return (
-    <Stack component="form" spacing={2} onSubmit={onSubmit}>
-      <Divider />
-      <Typography variant="body2" color="text.secondary">
-        Signs you in as the owner with the emergency password from the server’s settings. Every use is recorded in the audit log.
-      </Typography>
-      {error && <Alert severity="error">{error}</Alert>}
-      <TextField label="Emergency password" type="password" autoFocus autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} required />
-      <Button variant="outlined" color="warning" type="submit" loading={busy}>
-        Sign in as owner
+    <Stack component="form" direction="row" spacing={1} onSubmit={onSubmit} sx={{ alignItems: 'flex-start' }}>
+      <TextField
+        label="Emergency password"
+        type="password"
+        size="small"
+        fullWidth
+        autoFocus
+        autoComplete="off"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        error={!!error}
+        helperText={error}
+        required
+      />
+      <Button variant="outlined" color="warning" type="submit" loading={busy} sx={{ flexShrink: 0, height: 40 }}>
+        Sign in
       </Button>
     </Stack>
   );
