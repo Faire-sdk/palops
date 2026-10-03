@@ -58,7 +58,7 @@ export default async function worldRoutes(app: FastifyInstance, { services }: { 
   const regionParams = z.object({ region: z.enum(MAP_REGION_IDS) });
 
   app.get('/map-images', { preHandler: requirePermission(services, 'world.view') }, async () => ({
-    regions: MAP_REGIONS.map(({ id, label }) => ({ id, label })),
+    regions: MAP_REGIONS,
     images: mapImage.list(),
   }));
 

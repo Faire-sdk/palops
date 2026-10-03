@@ -165,8 +165,12 @@ describe('map image', () => {
     const admin = await loginAs(ctx.app, ctx.services, 'admin');
     const res = await upload(admin, PNG);
     expect(res.statusCode).toBe(200);
-    // A wide image gets a centred guess that keeps its shape until it's aligned.
-    expect(res.json().image).toMatchObject({ width: 2000, height: 1000, aligned: false, bounds: { left: -1000, right: 1000, top: 500, bottom: -500 } });
+    // A wide image starts where the game draws Palpagos, keeping its shape until it's aligned.
+    expect(res.json().image).toMatchObject({ width: 2000, height: 1000, aligned: false });
+    const guess = res.json().image.bounds;
+    expect(guess.left).toBeCloseTo(-1905.3, 0);
+    expect(guess.right).toBeCloseTo(1224.1, 0);
+    expect((guess.right - guess.left) / (guess.top - guess.bottom)).toBeCloseTo(2, 5);
 
     const mod = await loginAs(ctx.app, ctx.services, 'moderator');
     const file = await get(mod, '/api/v1/world/map-images/palpagos/file');
@@ -205,15 +209,24 @@ describe('map image', () => {
     expect((await upload(admin, PNG, 'image/png', 'width=10&height=10', 'atlantis')).statusCode).toBe(400);
   });
 
-  it('keeps a separate image per region, starting the World Tree north-west of Palpagos', async () => {
+  it('keeps a separate image per region, each starting where the game draws its map', async () => {
     const admin = await loginAs(ctx.app, ctx.services, 'admin');
     const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
     await upload(admin, PNG, 'image/png', 'width=1000&height=1000');
     const tree = (await upload(admin, JPEG, 'image/jpeg', 'width=1000&height=1000', 'world-tree')).json().image;
-    expect(tree).toMatchObject({ region: 'world-tree', aligned: false, bounds: { left: -2160, right: -1260, top: 1835, bottom: 935 } });
+    expect(tree).toMatchObject({ region: 'world-tree', aligned: false, bounds: { left: -2107.9, right: -1369.6, top: 1755.2, bottom: 1017 } });
 
     const listed = (await get(admin, '/api/v1/world/map-images')).json();
-    expect(listed.regions.map((r: { id: string }) => r.id)).toEqual(['palpagos', 'world-tree']);
+    expect(listed.regions).toEqual([
+      { id: 'palpagos', label: 'Palpagos Islands', gameBounds: { left: -1905.3, top: 1021.4, right: 1224.1, bottom: -2108 } },
+      { id: 'world-tree', label: 'World Tree', gameBounds: { left: -2107.9, top: 1755.2, right: -1369.6, bottom: 1017 } },
+    ]);
+    // Community-mapped World Tree spots (Teafant Springs, Forbidden Laboratory) fall on its map; Sunreach falls on Palpagos's.
+    const inside = (b: { left: number; top: number; right: number; bottom: number }, p: { x: number; y: number }) =>
+      p.x > b.left && p.x < b.right && p.y > b.bottom && p.y < b.top;
+    expect(inside(listed.regions[1].gameBounds, { x: -1895, y: 1362 })).toBe(true);
+    expect(inside(listed.regions[1].gameBounds, toMap({ x: 621794, y: -757915 }))).toBe(true);
+    expect(inside(listed.regions[0].gameBounds, toMap({ x: -777490, y: -40589 }))).toBe(true);
     expect(listed.images.map((i: { region: string }) => i.region)).toEqual(['palpagos', 'world-tree']);
     expect((await get(admin, '/api/v1/world/map-images/world-tree/file')).rawPayload.equals(JPEG)).toBe(true);
     expect((await get(admin, '/api/v1/world/map-images/palpagos/file')).rawPayload.equals(PNG)).toBe(true);

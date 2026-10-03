@@ -379,6 +379,8 @@ export interface AuthOptions {
 export interface MapRegion {
   id: string;
   label: string;
+  /** Where the game draws its own map texture for this region (T_WorldMap, T_TreeMap). */
+  gameBounds: MapImage['bounds'];
 }
 
 /** One region's background image on the live map; bounds are its edges in map coordinates. */

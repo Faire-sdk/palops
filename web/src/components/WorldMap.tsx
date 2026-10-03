@@ -36,7 +36,7 @@ interface View {
 const WORLD = 1000;
 const GRID = 200;
 const MIN_WIDTH = 40;
-const MAX_WIDTH = 4500;
+const MAX_WIDTH = 6000;
 /** Pal and NPC names only show once zoomed in this far (visible width in map units), or they'd bury the map. */
 const PAL_LABEL_WIDTH = 600;
 const WILD_LABEL_WIDTH = 250;
@@ -213,11 +213,11 @@ export function WorldMap({
   };
 
   const gridLines = [];
-  for (let v = -4000; v <= 4000; v += GRID) {
+  for (let v = -5000; v <= 5000; v += GRID) {
     const major = v === 0;
     const stroke = major ? theme.vars!.palette.text.secondary : theme.vars!.palette.divider;
-    gridLines.push(<line key={`x${v}`} x1={v} x2={v} y1={-4000} y2={4000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
-    gridLines.push(<line key={`y${v}`} y1={-v} y2={-v} x1={-4000} x2={4000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
+    gridLines.push(<line key={`x${v}`} x1={v} x2={v} y1={-5000} y2={5000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
+    gridLines.push(<line key={`y${v}`} y1={-v} y2={-v} x1={-5000} x2={5000} stroke={stroke} strokeWidth={r(major ? 1.5 : 1)} />);
   }
   const pal = (kind: 'OtomoPal' | 'BaseCampPal' | 'WildPal') => map.pals.filter((p) => p.kind === kind);
 

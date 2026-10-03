@@ -22,7 +22,7 @@ import { useToast } from './Toast';
 import { mapImageUrl } from './WorldMap';
 
 const TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-const MAX_BYTES = 25 * 1024 * 1024;
+const MAX_BYTES = 64 * 1024 * 1024;
 
 type RefId = 'a' | 'b';
 interface Reference {
@@ -76,8 +76,9 @@ export function MapImageDialog({
   const input = useRef<HTMLInputElement>(null);
   const [region, setRegion] = useState(regions[0]?.id ?? 'palpagos');
   const image = images.find((i) => i.region === region) ?? null;
-  const regionLabel = regions.find((r) => r.id === region)?.label ?? 'this region';
-  const [busy, setBusy] = useState<'upload' | 'save' | 'remove' | null>(null);
+  const regionInfo = regions.find((r) => r.id === region);
+  const regionLabel = regionInfo?.label ?? 'this region';
+  const [busy, setBusy] = useState<'upload' | 'save' | 'game' | 'remove' | null>(null);
   const [active, setActive] = useState<RefId>('a');
   const [refs, setRefs] = useState<Record<RefId, Reference>>({ a: emptyRef, b: emptyRef });
   const [error, setError] = useState<string>();
@@ -98,7 +99,7 @@ export function MapImageDialog({
   const upload = async (file: File | undefined) => {
     if (!file) return;
     if (!TYPES.includes(file.type)) return notify('Choose a PNG, JPEG or WebP image', 'error');
-    if (file.size > MAX_BYTES) return notify('The image must be 25 MB or smaller', 'error');
+    if (file.size > MAX_BYTES) return notify('The image must be 64 MB or smaller', 'error');
     setBusy('upload');
     try {
       const { width, height } = await imageSize(file);
@@ -138,6 +139,23 @@ export function MapImageDialog({
     try {
       await api.patch(`/world/map-images/${region}`, bounds);
       notify(`${regionLabel} lined up`, 'success');
+      refreshAll();
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** For the game's own texture: no points needed, it goes exactly where the game draws it. */
+  const placeAtGamePosition = async () => {
+    if (!regionInfo) return;
+    setBusy('game');
+    setError(undefined);
+    try {
+      await api.patch(`/world/map-images/${region}`, regionInfo.gameBounds);
+      notify(`${regionLabel} placed where the game draws it`, 'success');
       refreshAll();
       onClose();
     } catch (err) {
@@ -187,7 +205,7 @@ export function MapImageDialog({
               Upload image
             </Button>
             <Typography variant="body2" color="text.secondary">
-              PNG, JPEG or WebP, up to 25 MB.
+              PNG, JPEG or WebP, up to 64 MB. The game’s own map textures (T_WorldMap and T_TreeMap) land in exactly the right place.
             </Typography>
           </Stack>
         ) : (
@@ -196,7 +214,19 @@ export function MapImageDialog({
               Click a spot on the image, then enter its in-game map coordinates. Do it for two spots far apart, such as two bases in opposite corners.
               You can read coordinates on the in-game map, or pick a base or player PalOps already knows in {regionLabel}.
             </Typography>
-            {!image.aligned && <Alert severity="info">Until you line it up, the image is placed by a guess at where it usually sits, and markers may not match.</Alert>}
+            {!image.aligned && (
+              <Alert
+                severity="info"
+                action={
+                  <Button color="inherit" size="small" onClick={placeAtGamePosition} loading={busy === 'game'}>
+                    Use game position
+                  </Button>
+                }
+              >
+                It’s placed where the game draws its own {regionLabel} map. If this is the game’s own map texture, that’s exact: choose Use game
+                position. Otherwise, line it up with two points below.
+              </Alert>
+            )}
             <ToggleButtonGroup exclusive value={active} onChange={(_, v: RefId | null) => v && setActive(v)} size="small">
               <ToggleButton value="a">Placing point 1</ToggleButton>
               <ToggleButton value="b">Placing point 2</ToggleButton>

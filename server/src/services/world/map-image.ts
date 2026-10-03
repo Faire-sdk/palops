@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { DB } from '../../database/db.js';
 import { badRequest, notFound } from '../../utils/errors.js';
 import type { AuditActor, AuditLog } from '../audit/audit-log.js';
+import { toMap } from './map-coords.js';
 
 /** The image's edges in in-game map coordinates (x east, y north). */
 export interface MapBounds {
@@ -15,16 +16,28 @@ export interface MapBounds {
 
 /**
  * The game's map screen shows these as separate maps, but they share one set of
- * in-game coordinates: the World Tree lies far to the north-west of Palpagos.
- * Each region gets its own image, lined up on its own, so they land in place
- * next to each other. The World Tree guess comes from community-mapped
- * locations there (roughly x -1980..-1440, y 1140..1625), not official data.
+ * in-game coordinates: the World Tree lies just past the north-west edge of the
+ * Palpagos map. Each region gets its own image, lined up on its own, so they
+ * land in place next to each other.
+ *
+ * The world bounds are what the game stretches its own square map textures over
+ * (T_WorldMap and T_TreeMap), from its DT_WorldMapUIData table as decoded by the
+ * PalMiniMap mod for 1.0. Inferred, not official documentation, but they put
+ * community-mapped World Tree and Sunreach locations on the right spots.
  */
-export const MAP_REGIONS = [
-  { id: 'palpagos', label: 'Palpagos Islands', center: { x: 0, y: 0 }, halfSpan: 1000 },
-  { id: 'world-tree', label: 'World Tree', center: { x: -1710, y: 1385 }, halfSpan: 450 },
+const GAME_TEXTURES = [
+  { id: 'palpagos', label: 'Palpagos Islands', min: { x: -1099400, y: -724400 }, max: { x: 349400, y: 724400 } },
+  { id: 'world-tree', label: 'World Tree', min: { x: 347351.5, y: -818197 }, max: { x: 689148.5, y: -476400 } },
 ] as const;
-export type MapRegion = (typeof MAP_REGIONS)[number]['id'];
+
+/** World x runs north and world y east, so the texture's top-left is (max x, min y). */
+export const MAP_REGIONS = GAME_TEXTURES.map(({ id, label, min, max }) => {
+  const topLeft = toMap({ x: max.x, y: min.y });
+  const bottomRight = toMap({ x: min.x, y: max.y });
+  const gameBounds: MapBounds = { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y };
+  return { id, label, gameBounds };
+});
+export type MapRegion = (typeof GAME_TEXTURES)[number]['id'];
 export const MAP_REGION_IDS = MAP_REGIONS.map((r) => r.id) as [MapRegion, ...MapRegion[]];
 
 export interface MapImage {
@@ -54,7 +67,8 @@ interface MapImageRow {
   updated_by: string | null;
 }
 
-export const MAP_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+/** Big enough for the game's own 8192px map textures as PNG. */
+export const MAP_IMAGE_MAX_BYTES = 64 * 1024 * 1024;
 const MAX_SIDE = 16384;
 
 const TYPES: Record<string, { ext: string; matches: (b: Buffer) => boolean }> = {
@@ -174,10 +188,17 @@ export class MapImageService {
   }
 }
 
-/** The starting guess before alignment: the region's usual area, keeping the image's shape. */
+/**
+ * The starting guess before alignment: where the game draws that region's map,
+ * keeping the image's shape. Exact when the image is the game's own texture.
+ */
 function defaultBounds(region: MapRegion, width: number, height: number): MapBounds {
-  const { center, halfSpan } = MAP_REGIONS.find((r) => r.id === region)!;
+  const { gameBounds } = MAP_REGIONS.find((r) => r.id === region)!;
+  const center = { x: (gameBounds.left + gameBounds.right) / 2, y: (gameBounds.top + gameBounds.bottom) / 2 };
+  const halfSpan = (gameBounds.right - gameBounds.left) / 2;
   const aspect = width / height;
+  // The game's textures are square, so a square image is placed exactly.
+  if (aspect === 1) return { ...gameBounds };
   const halfX = aspect >= 1 ? halfSpan : halfSpan * aspect;
   const halfY = aspect >= 1 ? halfSpan / aspect : halfSpan;
   return { left: center.x - halfX, right: center.x + halfX, top: center.y + halfY, bottom: center.y - halfY };
