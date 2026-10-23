@@ -104,8 +104,8 @@ function Guilds() {
               </Link>
             ),
           },
-          { key: 'level', header: 'Level', render: (g) => g.level ?? '—' },
-          { key: 'admin', header: 'Leader', render: (g) => g.admin?.name || '—' },
+          { key: 'level', header: 'Level', render: (g) => g.level ?? 'Unknown' },
+          { key: 'admin', header: 'Leader', render: (g) => g.admin?.name || 'Unknown' },
           { key: 'members', header: 'Members', render: (g) => g.memberCount },
           { key: 'camps', header: 'Bases', render: (g) => g.campCount },
         ]}
@@ -130,8 +130,8 @@ function GuildDialog({ guild, onClose, onChanged }: { guild: PdGuildSummary | nu
       <Stack spacing={2}>
         <KeyValue
           items={[
-            ['Level', g.level ?? '—'],
-            ['Leader', g.admin?.name || '—'],
+            ['Level', g.level ?? 'Unknown'],
+            ['Leader', g.admin?.name || 'Unknown'],
             !!g.storage && ['Guild storage', `${g.storage.used}/${g.storage.max} slots`],
             !!g.currentResearch && ['Researching', <Mono>{g.currentResearch}</Mono>],
           ]}
@@ -144,7 +144,7 @@ function GuildDialog({ guild, onClose, onChanged }: { guild: PdGuildSummary | nu
           rowKey={(m) => m.uid || m.name}
           columns={[
             { key: 'name', header: 'Player', render: (m) => m.name },
-            { key: 'status', header: 'Status', render: (m) => m.status ?? '—' },
+            { key: 'status', header: 'Status', render: (m) => m.status ?? 'Unknown' },
           ]}
         />
         <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -155,9 +155,9 @@ function GuildDialog({ guild, onClose, onChanged }: { guild: PdGuildSummary | nu
           rowKey={(c) => c.id}
           empty={<Typography color="text.secondary">No bases</Typography>}
           columns={[
-            { key: 'pos', header: 'Position', nowrap: true, render: (c) => (c.mapPos ? formatMapPoint(c.mapPos) : '—') },
-            { key: 'level', header: 'Level', render: (c) => c.level ?? '—' },
-            { key: 'state', header: 'State', render: (c) => c.state ?? '—' },
+            { key: 'pos', header: 'Position', nowrap: true, render: (c) => (c.mapPos ? formatMapPoint(c.mapPos) : 'Unknown') },
+            { key: 'level', header: 'Level', render: (c) => c.level ?? 'Unknown' },
+            { key: 'state', header: 'State', render: (c) => c.state ?? 'Unknown' },
             {
               key: 'actions',
               header: '',

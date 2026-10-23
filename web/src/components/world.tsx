@@ -52,7 +52,7 @@ export function SignalChip({ kind }: { kind: SignalKind }) {
 }
 
 export function HpBar({ hp, maxHp }: { hp: number | null; maxHp: number | null }) {
-  if (hp === null || !maxHp) return <>—</>;
+  if (hp === null || !maxHp) return <>Unknown</>;
   const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 90 }}>

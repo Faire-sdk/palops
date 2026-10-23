@@ -42,6 +42,13 @@ export interface SessionInfo {
 
 export type ServerState = 'online' | 'offline' | 'error' | 'unconfigured';
 
+/** What staff write for the public website. */
+export interface SiteSettings {
+  rules: string[];
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
 export interface ScheduleSettings {
   restartEnabled: boolean;
   restartEveryHours: number;

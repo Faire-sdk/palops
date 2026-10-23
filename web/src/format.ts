@@ -7,5 +7,6 @@ export function formatDuration(totalSeconds: number): string {
   return `${m}m`;
 }
 
-export const formatDateTime = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+/** A date and time, or `fallback` (default "Never") when there is none. */
+export const formatDateTime = (iso: string | null, fallback = 'Never') =>
+  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : fallback;

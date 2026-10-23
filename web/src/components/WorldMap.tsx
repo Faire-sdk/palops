@@ -11,7 +11,8 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined';
 import { useTheme } from '@mui/material/styles';
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react';
 import type { MapImage, MapPoint, WorldMapData } from '../api/types';
 import { palLabel, prettyClass, useGuildColor } from './world';
 
@@ -102,6 +103,14 @@ export function WorldMap({
   const [layers, setLayers] = useState<Set<Layer>>(new Set(['players', 'bases', 'partyPals', 'basePals']));
   const [showLabels, setShowLabels] = useState(true);
   const [hover, setHover] = useState<(HoverInfo & { x: number; y: number }) | null>(null);
+  /** The player or base marker with keyboard focus, e.g. "p:steam_..." or "b:12". */
+  const [focused, setFocused] = useState<string | null>(null);
+  const focusedAt = focused?.startsWith('p:')
+    ? map.players.find((p) => `p:${p.userId}` === focused)?.at
+    : map.bases.find((b) => `b:${b.id}` === focused)?.at;
+  const hintId = useId();
+  // On touch screens, players and bases get an invisible 44px tap area around the marker.
+  const touch = useMediaQuery('(pointer: coarse)');
   const allPoints = useMemo(() => {
     const points = [...map.players, ...map.bases].map((p) => p.at);
     for (const b of backgrounds) points.push({ x: b.bounds.left, y: b.bounds.top }, { x: b.bounds.right, y: b.bounds.bottom });
@@ -194,8 +203,55 @@ export function WorldMap({
       setHover({ ...info, x: e.clientX - rect.left, y: e.clientY - rect.top });
     },
     onPointerLeave: () => setHover(null),
-    'aria-label': [info.title, ...info.lines].join(', '),
   });
+
+  /** Where a map point sits in the map box, in pixels from its top-left. */
+  const toScreen = (at: MapPoint) => ({ x: (at.x - (view.cx - view.width / 2)) / unitsPerPx, y: (view.cy + height / 2 - at.y) / unitsPerPx });
+  const inView = (at: MapPoint) => Math.abs(at.x - view.cx) < view.width / 2 && Math.abs(at.y - view.cy) < height / 2;
+
+  /**
+   * Players and bases that open something are buttons: Tab reaches the ones in
+   * view, Enter or Space opens them, and focus shows the same card as hover.
+   */
+  const pressable = (key: string, at: MapPoint, info: HoverInfo, open: () => void) => ({
+    role: 'button',
+    tabIndex: inView(at) ? 0 : -1,
+    'aria-label': [info.title, ...info.lines].join(', '),
+    onClick: click(open),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      open();
+    },
+    onFocus: (e: FocusEvent<Element>) => {
+      // A mouse click focuses the marker too; only keyboard focus gets the ring and card.
+      if (!e.currentTarget.matches(':focus-visible')) return;
+      setFocused(key);
+      setHover({ ...info, ...toScreen(at) });
+    },
+    onBlur: () => {
+      setFocused(null);
+      setHover(null);
+    },
+    // The ring drawn around the focused marker replaces the outline, which SVG shapes don't show reliably.
+    style: { cursor: 'pointer', outline: 'none' },
+  });
+
+  /** Arrow keys pan a tenth of the view, + and - zoom, 0 shows everything. */
+  const onKeyDown = (e: KeyboardEvent) => {
+    const step = view.width / 10;
+    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+    if (moves[e.key]) {
+      const [dx, dy] = moves[e.key]!;
+      setView((v) => ({ ...v, cx: v.cx + dx, cy: v.cy + dy }));
+    } else if (e.key === '+' || e.key === '=') zoom(1 / 1.5);
+    else if (e.key === '-' || e.key === '_') zoom(1.5);
+    else if (e.key === '0') setView(fit(allPoints, size.w / size.h));
+    else return;
+    e.preventDefault();
+    setHover(null);
+  };
 
   const toggle = (layer: Layer) =>
     setLayers((current) => {
@@ -285,6 +341,11 @@ export function WorldMap({
       </Stack>
       <Box
         ref={box}
+        tabIndex={0}
+        role="group"
+        aria-label="World map"
+        aria-describedby={hintId}
+        onKeyDown={onKeyDown}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -303,7 +364,7 @@ export function WorldMap({
           userSelect: 'none',
         }}
       >
-        <svg width="100%" height="100%" viewBox={viewBox} role="img" aria-label="World map">
+        <svg width="100%" height="100%" viewBox={viewBox}>
           {backgrounds.map((b) => (
             <image
               key={b.region}
@@ -340,29 +401,28 @@ export function WorldMap({
               />
             ))}
           {layers.has('bases') &&
-            map.bases.map((b) => (
-              <g
-                key={b.id}
-                onClick={click(() => onBase?.(b.id))}
-                style={{ cursor: onBase ? 'pointer' : undefined }}
-                {...hoverable({
-                  title: b.guildName ?? 'Base',
-                  lines: ['Base', `${b.workers} worker${b.workers === 1 ? '' : 's'}`],
-                  hint: onBase ? 'Click for the base’s workers' : undefined,
-                })}
-              >
-                <rect
-                  x={b.at.x - r(8)}
-                  y={-b.at.y - r(8)}
-                  width={r(16)}
-                  height={r(16)}
-                  rx={r(3)}
-                  fill={guildColor(b.guildId)}
-                  stroke={theme.vars!.palette.background.paper}
-                  strokeWidth={r(2)}
-                />
-              </g>
-            ))}
+            map.bases.map((b) => {
+              const info = {
+                title: b.guildName ?? 'Base',
+                lines: ['Base', `${b.workers} worker${b.workers === 1 ? '' : 's'}`],
+                hint: onBase ? 'Click or press Enter for the base’s workers' : undefined,
+              };
+              return (
+                <g key={b.id} {...hoverable(info)} {...(onBase ? pressable(`b:${b.id}`, b.at, info, () => onBase(b.id)) : {})}>
+                  {touch && onBase && <circle cx={b.at.x} cy={-b.at.y} r={r(22)} fill="transparent" />}
+                  <rect
+                    x={b.at.x - r(8)}
+                    y={-b.at.y - r(8)}
+                    width={r(16)}
+                    height={r(16)}
+                    rx={r(3)}
+                    fill={guildColor(b.guildId)}
+                    stroke={theme.vars!.palette.background.paper}
+                    strokeWidth={r(2)}
+                  />
+                </g>
+              );
+            })}
           {layers.has('basePals') &&
             pal('BaseCampPal').map((p, i) => (
               <circle
@@ -389,20 +449,22 @@ export function WorldMap({
               />
             ))}
           {layers.has('players') &&
-            map.players.map((p) => (
-              <g
-                key={p.userId}
-                onClick={click(() => onPlayer?.(p.userId))}
-                style={{ cursor: onPlayer ? 'pointer' : undefined }}
-                {...hoverable({
-                  title: p.name,
-                  lines: ['Player', levelText(p.level), p.guildName ?? 'No guild'],
-                  hint: onPlayer ? 'Click to open their profile' : undefined,
-                })}
-              >
-                <circle cx={p.at.x} cy={-p.at.y} r={r(7)} fill={guildColor(p.guildId)} stroke={theme.vars!.palette.background.paper} strokeWidth={r(2.5)} />
-              </g>
-            ))}
+            map.players.map((p) => {
+              const info = {
+                title: p.name,
+                lines: ['Player', levelText(p.level), p.guildName ?? 'No guild'],
+                hint: onPlayer ? 'Click or press Enter to open their profile' : undefined,
+              };
+              return (
+                <g key={p.userId} {...hoverable(info)} {...(onPlayer ? pressable(`p:${p.userId}`, p.at, info, () => onPlayer(p.userId)) : {})}>
+                  {touch && onPlayer && <circle cx={p.at.x} cy={-p.at.y} r={r(22)} fill="transparent" />}
+                  <circle cx={p.at.x} cy={-p.at.y} r={r(7)} fill={guildColor(p.guildId)} stroke={theme.vars!.palette.background.paper} strokeWidth={r(2.5)} />
+                </g>
+              );
+            })}
+          {focusedAt && (
+            <circle cx={focusedAt.x} cy={-focusedAt.y} r={r(13)} fill="none" stroke={theme.vars!.palette.primary.main} strokeWidth={r(3)} pointerEvents="none" />
+          )}
           {showLabels && (
             <g pointerEvents="none" fontFamily={theme.typography.fontFamily}>
               {labels.map((l) => (
@@ -439,7 +501,7 @@ export function WorldMap({
               bottom: hover.y + 120 > size.h ? size.h - hover.y + 14 : undefined,
             }}
           >
-            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            <Typography variant="subtitle2" component="div" sx={{ fontWeight: 600 }}>
               {hover.title}
             </Typography>
             {hover.lines.map((line, i) => (
@@ -480,6 +542,9 @@ export function WorldMap({
         </Stack>
         <Box sx={{ position: 'absolute', left: 8, bottom: 8, px: 1, py: 0.25, borderRadius: 1, bgcolor: 'background.paper', fontSize: 12, color: 'text.secondary' }}>
           Grid: {GRID} map units · center {Math.round(view.cx)}, {Math.round(view.cy)}
+          <Box component="span" id={hintId} sx={{ display: 'block' }}>
+            Drag or use the arrow keys to move, + and - to zoom, 0 to see everything
+          </Box>
         </Box>
       </Box>
     </Stack>

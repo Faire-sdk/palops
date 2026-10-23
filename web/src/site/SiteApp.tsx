@@ -11,6 +11,8 @@ import { BrowserRouter, Link as RouterLink, Route, Routes } from 'react-router-d
 import { api, ApiError } from '../api/client';
 import { DiscordButton } from '../auth/discord';
 import { Brand } from '../components/Brand';
+import { SkipLink } from '../components/common';
+import { ThemeModeButton } from '../components/ThemeModeButton';
 import { useApi } from '../hooks/useApi';
 import { AccountPage } from './AccountPage';
 import { HomePage } from './HomePage';
@@ -65,10 +67,15 @@ export default function SiteApp() {
   return (
     <BrowserRouter>
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <SkipLink />
         <AppBar position="sticky" color="inherit" sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Container>
             <Toolbar disableGutters sx={{ gap: 2 }}>
-              <Box component={RouterLink} to="/" sx={{ color: 'inherit', textDecoration: 'none', minWidth: 0, flexShrink: 1 }}>
+              <Box
+                component={RouterLink}
+                to="/"
+                sx={{ color: 'inherit', textDecoration: 'none', minWidth: 0, flexShrink: 1, display: 'flex', alignItems: 'center', '@media (pointer: coarse)': { minHeight: 44 } }}
+              >
                 <Brand name={name} />
               </Box>
               <Stack component="nav" direction="row" spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' }, ml: 2 }}>
@@ -90,6 +97,7 @@ export default function SiteApp() {
                 )}
               </Stack>
               <Box sx={{ flexGrow: 1 }} />
+              <ThemeModeButton />
               {session.profile ? (
                 <Button variant="outlined" component={RouterLink} to="/account" sx={{ flexShrink: 0 }}>
                   {session.profile.character?.name ?? session.profile.account.discord.username ?? 'My account'}
@@ -105,7 +113,7 @@ export default function SiteApp() {
           </Container>
         </AppBar>
 
-        <Box component="main" sx={{ flexGrow: 1 }}>
+        <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
           <Routes>
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/players/:id" element={<PlayerProfilePage />} />
@@ -120,7 +128,7 @@ export default function SiteApp() {
               <Typography variant="body2" color="text.secondary">
                 © {new Date().getFullYear()} {name}. Not affiliated with Pocketpair.
               </Typography>
-              <Link href="/panel" variant="body2" color="text.secondary">
+              <Link href="/panel" variant="body2" color="text.secondary" sx={{ alignSelf: 'flex-start', '@media (pointer: coarse)': { display: 'inline-flex', alignItems: 'center', minHeight: 44 } }}>
                 Staff panel
               </Link>
             </Stack>

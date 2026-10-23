@@ -16,6 +16,53 @@ import type { ServerState } from '../api/types';
 
 export type IconComponent = typeof SvgIcon;
 
+/** Read by screen readers, invisible on screen. */
+export const visuallyHidden = {
+  border: 0,
+  clip: 'rect(0 0 0 0)',
+  height: '1px',
+  margin: '-1px',
+  overflow: 'hidden',
+  padding: 0,
+  position: 'absolute',
+  whiteSpace: 'nowrap',
+  width: '1px',
+} as const;
+
+/**
+ * The first thing a keyboard user reaches: jumps past the navigation to the
+ * element with id "main". Hidden until it has focus.
+ */
+export function SkipLink() {
+  return (
+    <Box
+      component="a"
+      href="#main"
+      onClick={(e) => {
+        e.preventDefault();
+        document.getElementById('main')?.focus();
+      }}
+      sx={{
+        position: 'fixed',
+        left: 8,
+        top: 8,
+        zIndex: 'tooltip',
+        px: 2,
+        py: 1.5,
+        borderRadius: '8px',
+        bgcolor: 'background.paper',
+        color: 'primary.main',
+        fontWeight: 600,
+        boxShadow: 3,
+        transform: 'translateY(-200%)',
+        '&:focus': { transform: 'none' },
+      }}
+    >
+      Skip to content
+    </Box>
+  );
+}
+
 export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3, justifyContent: 'space-between', alignItems: { sm: 'flex-end' } }}>
@@ -117,7 +164,7 @@ export function KeyValue({ items }: { items: Array<[string, ReactNode] | false |
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
   return (
     <Box>
-      <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
         {label}
       </Typography>
       <Typography variant="h5" component="div">

@@ -26,8 +26,8 @@ export function FpsHistory() {
     body = (
       <>
         <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
-          <Stat label="Average FPS" value={data?.avgFps ?? '—'} />
-          <Stat label="Lowest FPS" value={Number.isFinite(minFps) ? minFps : '—'} />
+          <Stat label="Average FPS" value={data?.avgFps ?? 'No data'} />
+          <Stat label="Lowest FPS" value={Number.isFinite(minFps) ? minFps : 'No data'} />
           <Stat label="Snapshots" value={timeline.length} />
         </Stack>
         {timeline.length < 2 ? (

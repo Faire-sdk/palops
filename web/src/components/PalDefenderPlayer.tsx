@@ -64,10 +64,10 @@ function PalTable({ pals, limit = 300 }: { pals: PdPal[]; limit?: number }) {
               </Stack>
             ),
           },
-          { key: 'level', header: 'Lv', render: (p) => p.level ?? '—' },
-          { key: 'gender', header: 'Gender', render: (p) => p.gender ?? '—' },
-          { key: 'hp', header: 'HP', render: (p) => (p.hp !== null ? Math.round(p.hp) : '—') },
-          { key: 'passives', header: 'Passives', render: (p) => (p.passives.length ? p.passives.join(', ') : '—') },
+          { key: 'level', header: 'Lv', render: (p) => p.level ?? 'Unknown' },
+          { key: 'gender', header: 'Gender', render: (p) => p.gender ?? 'Unknown' },
+          { key: 'hp', header: 'HP', render: (p) => (p.hp !== null ? Math.round(p.hp) : 'Unknown') },
+          { key: 'passives', header: 'Passives', render: (p) => (p.passives.length ? p.passives.join(', ') : 'None') },
         ]}
       />
       {pals.length > limit && (

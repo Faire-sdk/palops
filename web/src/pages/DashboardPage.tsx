@@ -91,8 +91,8 @@ export function DashboardPage() {
               items={[
                 ['Name', status.info?.name ?? status.connection?.name],
                 ['Address', <Mono>{status.connection?.adapter === 'mock' ? 'mock server' : `${status.connection?.host}:${status.connection?.port}`}</Mono>],
-                ['Version', status.info?.version ?? '—'],
-                ['Uptime', m ? formatDuration(m.uptimeSeconds) : '—'],
+                ['Version', status.info?.version ?? 'Unknown'],
+                ['Uptime', m ? formatDuration(m.uptimeSeconds) : 'Unavailable'],
                 !!status.info?.description && ['Description', status.info.description],
               ]}
             />
@@ -110,17 +110,17 @@ export function DashboardPage() {
             }
           >
             <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap' }}>
-              <Stat label="Online" value={m ? m.currentPlayers : '—'} hint={m ? `of ${m.maxPlayers} slots` : undefined} />
-              <Stat label="In-game day" value={m?.inGameDays ?? '—'} />
-              <Stat label="Base camps" value={m?.baseCampCount ?? '—'} />
+              <Stat label="Online" value={m ? m.currentPlayers : 'Unavailable'} hint={m ? `of ${m.maxPlayers} slots` : undefined} />
+              <Stat label="In-game day" value={m?.inGameDays ?? 'Unavailable'} />
+              <Stat label="Base camps" value={m?.baseCampCount ?? 'Unavailable'} />
             </Stack>
           </Section>
         </Grid>
         <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <Section title="Performance">
             <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
-              <Stat label="Server FPS" value={m ? m.fps : '—'} />
-              <Stat label="Frame time" value={m ? `${m.frameTimeMs.toFixed(1)} ms` : '—'} />
+              <Stat label="Server FPS" value={m ? m.fps : 'Unavailable'} />
+              <Stat label="Frame time" value={m ? `${m.frameTimeMs.toFixed(1)} ms` : 'Unavailable'} />
               {can('world.view') && <Stat label="Avg FPS (24 h)" value={<AverageFps />} />}
             </Stack>
             <Typography variant="body2" color="text.secondary">
@@ -143,7 +143,7 @@ export function DashboardPage() {
 /** The last 24 hours' average FPS from the world snapshots. */
 function AverageFps() {
   const { data } = useApi<WorldPerformance>('/world/performance?hours=24', { pollMs: 60000 });
-  return <>{data?.avgFps ?? '—'}</>;
+  return <>{data?.avgFps ?? 'No data'}</>;
 }
 
 function BroadcastDialog({ open, onClose }: { open: boolean; onClose: () => void }) {

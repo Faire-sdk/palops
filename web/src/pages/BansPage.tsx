@@ -91,8 +91,8 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
         columns={[
           { key: 'name', header: 'Player', render: (b) => <PlayerName name={b.playerName ?? b.playerUserId} userId={b.playerUserId} onOpen={onOpen} /> },
           { key: 'userId', header: 'Platform ID', render: (b) => <Mono>{b.playerUserId}</Mono> },
-          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
-          { key: 'by', header: 'Banned by', render: (b) => b.actorUsername ?? '—' },
+          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? 'No reason given' },
+          { key: 'by', header: 'Banned by', render: (b) => b.actorUsername ?? 'Unknown' },
           { key: 'at', header: 'When', nowrap: true, render: (b) => formatDateTime(b.createdAt) },
           {
             key: 'actions',
@@ -133,10 +133,10 @@ function Bans({ onOpen, onAction }: { onOpen: (userId: string) => void; onAction
                 {
                   key: 'player',
                   header: 'From player',
-                  render: (b) => (b.playerUserId ? <PlayerName name={b.playerName ?? b.playerUserId} userId={b.playerUserId} onOpen={onOpen} /> : '—'),
+                  render: (b) => (b.playerUserId ? <PlayerName name={b.playerName ?? b.playerUserId} userId={b.playerUserId} onOpen={onOpen} /> : 'None'),
                 },
-                { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
-                { key: 'by', header: 'Banned by', render: (b) => b.actorUsername ?? '—' },
+                { key: 'reason', header: 'Reason', render: (b) => b.reason ?? 'No reason given' },
+                { key: 'by', header: 'Banned by', render: (b) => b.actorUsername ?? 'Unknown' },
                 { key: 'at', header: 'When', nowrap: true, render: (b) => formatDateTime(b.createdAt) },
                 {
                   key: 'actions',
@@ -241,9 +241,9 @@ function PalDefenderBans({ onOpen }: { onOpen: (userId: string) => void }) {
         columns={[
           { key: 'kind', header: 'Type', render: (b) => <Chip label={b.kind === 'ip' ? 'IP' : 'Player'} variant="outlined" /> },
           { key: 'id', header: 'Who', render: (b) => (b.kind === 'user' ? <PlayerName name={b.id} userId={b.id} onOpen={onOpen} /> : <Mono>{b.id}</Mono>) },
-          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
-          { key: 'by', header: 'Banned by', render: (b) => (b.bannedBy ? `${b.bannedBy}${b.bannedVia ? ` (${b.bannedVia})` : ''}` : (b.bannedVia ?? '—')) },
-          { key: 'at', header: 'When', nowrap: true, render: (b) => (b.bannedAt ? formatDateTime(b.bannedAt) : '—') },
+          { key: 'reason', header: 'Reason', render: (b) => b.reason ?? 'No reason given' },
+          { key: 'by', header: 'Banned by', render: (b) => (b.bannedBy ? `${b.bannedBy}${b.bannedVia ? ` (${b.bannedVia})` : ''}` : (b.bannedVia ?? 'Unknown')) },
+          { key: 'at', header: 'When', nowrap: true, render: (b) => formatDateTime(b.bannedAt, 'Unknown') },
           {
             key: 'actions',
             header: '',

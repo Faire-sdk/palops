@@ -31,6 +31,8 @@ export default async function publicRoutes(app: FastifyInstance, { services }: {
       joinAddress: site.joinAddress,
       discordInvite: site.discordInvite,
       showOnlinePlayers: site.showOnlinePlayers,
+      /** Written by staff under Settings, Website. Empty means the website shows no rules. */
+      rules: services.siteSettings.get().rules,
       /** Whether players can sign in with Discord on the website. */
       playerLogin: services.discordOAuth !== null,
       knownPlayers: services.players.count(),

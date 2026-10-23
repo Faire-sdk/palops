@@ -78,7 +78,7 @@ export function PlayerProfilePage() {
 
             <Grid container spacing={1.5}>
               <Grid size={{ xs: 6, sm: 3 }}>
-                <Stat label="Level" value={data.level ?? '—'} />
+                <Stat label="Level" value={data.level ?? 'Unknown'} />
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
                 <Stat label="Time played" value={formatDuration(data.playtimeSeconds)} />

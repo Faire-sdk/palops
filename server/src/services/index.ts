@@ -20,6 +20,7 @@ import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
 import { ScheduleService } from './schedule/schedule-service.js';
 import { SiteAccountService } from './site/site-accounts.js';
+import { SiteSettingsService } from './site/site-settings.js';
 import { ServerRegistry } from './servers/server-registry.js';
 import { MapImageService } from './world/map-image.js';
 import { WorldService } from './world/world-service.js';
@@ -51,6 +52,8 @@ export interface Services {
   /** The optional Discord bot; does nothing until an owner enables it. */
   discordBot: DiscordBotService;
   siteAccounts: SiteAccountService;
+  /** The public website's rules, written by staff. */
+  siteSettings: SiteSettingsService;
   world: WorldService;
   mapImage: MapImageService;
   /** Scheduled world saves and restarts. */
@@ -133,6 +136,7 @@ export function createServices(config: Config, db: DB): Services {
     paldefender,
     palban,
     siteAccounts,
+    siteSettings: new SiteSettingsService(db),
     world,
     console: consoleLog,
     discordBot,

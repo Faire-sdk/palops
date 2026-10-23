@@ -58,7 +58,7 @@ export function LogsPage() {
               empty={<EmptyState title="No log entries yet" />}
               columns={[
                 { key: 'time', header: 'Time', nowrap: true, render: (e) => formatDateTime(e.createdAt) },
-                { key: 'actor', header: 'User', render: (e) => e.actorUsername ?? '—' },
+                { key: 'actor', header: 'User', render: (e) => e.actorUsername ?? 'Unknown' },
                 { key: 'category', header: 'Category', render: (e) => <Chip label={e.category} variant="outlined" /> },
                 { key: 'action', header: 'Action', render: (e) => e.action.replace(/_/g, ' ') },
                 { key: 'target', header: 'Target', render: (e) => e.target ?? '' },

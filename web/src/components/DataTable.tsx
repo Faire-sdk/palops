@@ -1,13 +1,16 @@
+import Box from '@mui/material/Box';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import type { MouseEvent, ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { visuallyHidden } from './common';
 
 export interface Column<T> {
   key: string;
+  /** Empty for a column of buttons; screen readers then hear "Actions". */
   header: string;
   render: (row: T) => ReactNode;
   align?: 'left' | 'right';
@@ -22,6 +25,7 @@ export function DataTable<T>({
   rowKey,
   empty,
   onRowClick,
+  label = 'Table',
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -29,16 +33,23 @@ export function DataTable<T>({
   empty?: ReactNode;
   /** Makes whole rows clickable; links and buttons inside a row still do their own thing. */
   onRowClick?: (row: T) => void;
+  /** Names the table when it scrolls sideways and becomes a keyboard stop. */
+  label?: string;
 }) {
+  const container = useRef<HTMLDivElement>(null);
+  const scrolls = useScrollsSideways(container, rows.length);
+
   if (rows.length === 0 && empty) return <>{empty}</>;
   return (
-    <TableContainer>
+    // A table wider than the screen takes focus, so the keyboard can scroll it.
+    // Positioned, so the hidden "Actions" label stays inside the scrolling box instead of widening the page.
+    <TableContainer ref={container} sx={{ position: 'relative' }} {...(scrolls ? { tabIndex: 0, role: 'region', 'aria-label': `${label}, scrolls sideways` } : {})}>
       <Table size="small">
         <TableHead>
           <TableRow>
             {columns.map((c) => (
               <TableCell key={c.key} align={c.align}>
-                {c.header}
+                {c.header || <Box component="span" sx={visuallyHidden}>Actions</Box>}
               </TableCell>
             ))}
           </TableRow>
@@ -62,4 +73,19 @@ export function DataTable<T>({
       </Table>
     </TableContainer>
   );
+}
+
+/** Whether the element is wider than the space it has, rechecked when it resizes. */
+function useScrollsSideways(ref: RefObject<HTMLElement | null>, rowCount: number) {
+  const [scrolls, setScrolls] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setScrolls(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, rowCount]);
+  return scrolls;
 }

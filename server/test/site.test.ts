@@ -63,6 +63,20 @@ describe('public server info', () => {
     await setup({ SITE_SHOW_ONLINE_PLAYERS: 'false' });
     expect((await api(ctx.app, { method: 'GET', url: '/api/v1/public/players' })).statusCode).toBe(403);
   });
+
+  it('shows no rules until staff write them, then exactly those', async () => {
+    expect((await api(ctx.app, { method: 'GET', url: '/api/v1/public/server' })).json().rules).toEqual([]);
+
+    const viewer = await loginAs(ctx.app, ctx.services, 'viewer');
+    const admin = await loginAs(ctx.app, ctx.services, 'admin');
+    const denied = await api(ctx.app, { method: 'PUT', url: '/api/v1/server/site', cookie: viewer, payload: { rules: ['No griefing'] } });
+    expect(denied.statusCode).toBe(403);
+
+    const saved = await api(ctx.app, { method: 'PUT', url: '/api/v1/server/site', cookie: admin, payload: { rules: [' No griefing ', '', 'Be kind'] } });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().settings).toMatchObject({ rules: ['No griefing', 'Be kind'], updatedBy: 'admin-user' });
+    expect((await api(ctx.app, { method: 'GET', url: '/api/v1/public/server' })).json().rules).toEqual(['No griefing', 'Be kind']);
+  });
 });
 
 describe('player accounts', () => {

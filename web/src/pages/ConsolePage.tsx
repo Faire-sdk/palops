@@ -231,6 +231,8 @@ export function ConsolePage() {
             role="log"
             aria-live="off"
             aria-label="Console output"
+            // Focusable so the keyboard can scroll it.
+            tabIndex={0}
             sx={{ height: { xs: 420, md: 'calc(100vh - 380px)' }, minHeight: 320, overflow: 'auto', p: 1.5, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12.5, lineHeight: 1.6, bgcolor: 'action.hover' }}
           >
             {visible.length === 0 ? (

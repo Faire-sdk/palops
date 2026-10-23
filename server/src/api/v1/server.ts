@@ -88,6 +88,17 @@ export default async function serverRoutes(app: FastifyInstance, { services }: {
     return { settings, status: services.schedule.getStatus() };
   });
 
+  app.get('/site', { preHandler: requirePermission(services, 'server.view') }, async () => ({ settings: services.siteSettings.get() }));
+
+  app.put('/site', { preHandler: requirePermission(services, 'server.control') }, async (request) => {
+    const { rules } = parse(z.object({ rules: z.array(z.string().trim().max(300)).max(30) }), request.body);
+    const before = services.siteSettings.get().rules;
+    const actor = actorOf(request);
+    const settings = services.siteSettings.save(rules, actor.username);
+    services.audit.record(actor, { category: 'server', action: 'site_rules_updated', details: { before, after: settings.rules } });
+    return { settings };
+  });
+
   app.get('/connection', { preHandler: requirePermission(services, 'server.connection') }, async () => ({
     connection: services.servers.getPrimary() ?? null,
   }));
