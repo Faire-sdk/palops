@@ -8,6 +8,7 @@ Status: draft. It records what the owner has decided and what the code does toda
 - Say "IP", not "address", for player and ban IPs. People know the word.
 - PalBan Network and PalDefender stay out of sight unless their integration is on.
 - Integrations share information about cheaters with proof. They never decide who plays on another server.
+- The public site shows only what the server and its staff wrote: no stand-in description, no default rules.
 
 ## Accessibility rules (from antislop audit 001)
 
@@ -31,7 +32,7 @@ These hold for every screen, in light and dark:
 | Typeface | Roboto (MUI's default) |
 | Surfaces | outlined cards, no shadows, 12px card corners |
 | Theme | follows the device, with a light, dark or device switch in the header |
-| Public site hero | soft blue and teal radial glow behind the server name |
+| Public site hero | plain page background; the radial glow was removed (antislop audit 003) |
 
 ## Open questions for the owner
 
@@ -39,4 +40,3 @@ These hold for every screen, in light and dark:
 2. Typeface: keep Roboto, or pick one that fits PalOps's character?
 3. Three words for how PalOps should feel to staff and to players.
 4. The public site: one PalOps look for every server, or an accent color each server owner sets?
-5. The hero glow on the public site: keep it (and why), or drop it?

@@ -50,13 +50,7 @@ export function HomePage({ server, session }: Props) {
 
   return (
     <>
-      <Box
-        component="section"
-        sx={(theme) => ({
-          py: { xs: 7, md: 11 },
-          background: `radial-gradient(1000px 420px at 15% 0%, ${theme.alpha(theme.vars!.palette.primary.main, 0.22)}, transparent 70%), radial-gradient(700px 360px at 90% 10%, ${theme.alpha(theme.vars!.palette.secondary.main, 0.18)}, transparent 70%)`,
-        })}
-      >
+      <Box component="section" sx={{ py: { xs: 7, md: 11 } }}>
         <Container>
           <Stack spacing={3} sx={{ maxWidth: 760 }}>
             <div>
@@ -69,9 +63,12 @@ export function HomePage({ server, session }: Props) {
             <Typography variant="h2" component="h1" sx={{ fontWeight: 700, fontSize: { xs: 38, md: 56 }, lineHeight: 1.1 }}>
               {s?.name ?? 'Palworld server'}
             </Typography>
-            <Typography variant="h6" component="p" color="text.secondary" sx={{ fontWeight: 400 }}>
-              {s?.description || 'A community Palworld server. Catch, build and explore with friends.'}
-            </Typography>
+            {/* Only the server's own description; nothing stands in for it when there is none. */}
+            {s?.description && (
+              <Typography variant="h6" component="p" color="text.secondary" sx={{ fontWeight: 400 }}>
+                {s.description}
+              </Typography>
+            )}
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
               {s?.joinAddress && (
                 <Button variant="contained" size="large" onClick={copyAddress} startIcon={copied ? <CheckIcon /> : <ContentCopyIcon />}>
