@@ -15,6 +15,7 @@ import { api, errorMessage } from '../api/client';
 import type { ServerStatus } from '../api/types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorState, KeyValue, Loading, PageHeader, Section, ServerStateChip } from '../components/common';
+import { ScheduleSettingsSection } from '../components/ScheduleSettings';
 import { useToast } from '../components/Toast';
 import { formatDuration } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
@@ -66,7 +67,7 @@ export function ServerPage() {
 
   return (
     <>
-      <PageHeader title="Server" description="Save the world or shut the server down. Every action is recorded in the audit log." />
+      <PageHeader title="Server" description="Save the world, shut the server down or schedule restarts. Every action is recorded in the audit log." />
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Section title="Status" action={<ServerStateChip state={status.state} />}>
@@ -121,6 +122,12 @@ export function ServerPage() {
           >
             Stops the server immediately <strong>without saving</strong>. Use only if it’s stuck; progress since the last save is lost.
           </ActionCard>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <ScheduleSettingsSection />
         </Grid>
       </Grid>
 

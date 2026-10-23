@@ -13,6 +13,7 @@ import { LogsPage } from '../pages/LogsPage';
 import { PalDefenderPage } from '../pages/PalDefenderPage';
 import { BansPage } from '../pages/BansPage';
 import { PlayersPage } from '../pages/PlayersPage';
+import { UsersPage } from '../pages/UsersPage';
 import { ServerPage } from '../pages/ServerPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { WorldPage } from '../pages/WorldPage';
@@ -42,6 +43,7 @@ function PanelRoutes() {
         <Route index element={<Guard permission="server.view"><DashboardPage /></Guard>} />
         <Route path="bans" element={<Guard permission="players.view"><BansPage /></Guard>} />
         <Route path="players" element={<Guard permission="players.view"><PlayersPage /></Guard>} />
+        <Route path="users" element={<Guard permission="players.view"><UsersPage /></Guard>} />
         <Route path="world" element={<Guard permission="players.view"><WorldPage /></Guard>} />
         <Route path="console" element={<Guard permission="console.view"><ConsolePage /></Guard>} />
         <Route path="paldefender" element={<Guard permission="world.view"><PalDefenderPage /></Guard>} />

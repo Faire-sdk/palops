@@ -12,7 +12,7 @@ Tracks progress against the development priority order in the project roadmap.
 | 6 | Console | View-only live console: panel events plus the game's and PalDefender's log files tailed from disk, with filter, search, pause and download ([console.md](console.md)). No commands: Palworld has deprecated RCON. Optionally the PalServerLogger websocket for the game's real console output |
 | 7 | Configuration | Read-only: live settings grouped and searchable. Editing needs host access to `PalWorldSettings.ini` |
 | 8 | Logs | Audit log with category filter and pagination; the Console page covers the game and PalDefender log files |
-| 9 | Server controls | Save, shutdown with countdown and message, force stop. Start/restart needs a process manager integration |
+| 9 | Server controls | Save, shutdown with countdown and message, force stop, and scheduled restarts and world saves (Server → Restarts and saves; the server's service manager starts it again). Starting a stopped server on demand needs a process manager integration |
 | 10 | Backups | Not started |
 | 11 | Real-time updates | Not started (UI polls every 10-15s for now) |
 | 12 | Security hardening | Baseline in place (see README) |
@@ -30,7 +30,7 @@ profile pages with playtime, pals and guild, and the panel's player views show p
 From the REST API's world snapshot (`-enable-gamedata-api`), polled every 20 seconds:
 
 - Guilds with members and bases, also filling in guilds on player lists, profiles and the public site.
-- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, with names on players, bases, pals and NPCs (labels thin out when crowded, and details show on hover), over a map image an owner or admin uploads and lines up with two points (the game's map art isn't ours to ship).
+- A live map for staff with players, bases, pals and NPCs, in in-game map coordinates, with names on players, bases, pals and NPCs (labels thin out when crowded, and details show on hover), over map images an owner or admin uploads and lines up with two points, one each for Palpagos Islands and the World Tree, which land next to each other as in the game (the game's map art isn't ours to ship).
 - Bases with their worker pals, levels and HP, and injured workers flagged.
 - Pals seen with each player, kept for 30 days.
 - Cheat signals: unusual movement, level jumps, players sharing an IP and base intrusions (a player outside a guild standing at its Pal Box, useful on PvP servers), with dismissal recorded in the audit log.
@@ -42,11 +42,11 @@ An opt-in integration with the [PalDefender](https://ultimeit.github.io/PalDefen
 in Settings: bans and IP bans mirrored to PalDefender, its ban list shown on the Bans tab, player IPs synced from it, and a PalDefender page
 and player panel for inventories, pals, technologies, progression, guilds and bases, giving, summoning, base deletion, config reload and messages. See [paldefender.md](paldefender.md).
 
-## PalBan Network (optional)
+## Shared banlist network (optional)
 
-An opt-in integration with [PalBan Network](https://github.com/Faire-sdk/PalBanNetwork)'s shared banlists, off unless an owner turns it on: your server's PalBan banlist next to the
-game's with banning in the game one player at a time on a person's confirmation (never automatic), a CSV export for adding local bans to PalBan, network lookups on player profiles and at join, and joins and bans
-reported to PalBan. Reports from other servers are leads, never bans. See [palban.md](palban.md).
+An opt-in integration with a shared banlist network for Palworld servers such as PalBan Network, off unless an owner turns it on: your server's banlist there next to the game's, with
+banning in the game one player at a time on a person's confirmation (never automatic), a CSV export for adding local bans there, lookups on player profiles and at join, and joins and
+bans reported. It shares information about cheaters, with proof, and is never meant to control another server's ban decisions. See [palban.md](palban.md).
 
 ## Discord bot (optional)
 

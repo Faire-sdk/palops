@@ -16,6 +16,8 @@ export const PERMISSIONS = [
   'players.note',
   /** See the addresses players connect from. */
   'players.ip',
+  /** See website users' email address and the Discord servers they're in. */
+  'accounts.private',
   'world.view',
   'console.view',
   'console.execute',

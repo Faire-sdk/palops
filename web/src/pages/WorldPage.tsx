@@ -20,7 +20,7 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import type { Base, GuildDetail, Guild, MapImage, MapPoint, WorkerPal, WorldMapData, WorldPerformance, WorldStatus } from '../api/types';
+import type { Base, GuildDetail, Guild, MapImage, MapPoint, MapRegion, WorkerPal, WorldMapData, WorldPerformance, WorldStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, PageHeader, Section, Stat } from '../components/common';
 import { DataTable } from '../components/DataTable';
@@ -103,18 +103,21 @@ export function WorldPage() {
   );
 }
 
+const NO_IMAGES: MapImage[] = [];
+
 function MapTab({ focus, onPlayer, onBase }: { focus: MapPoint | null; onPlayer: (id: string) => void; onBase: (id: number) => void }) {
   const { can } = useAuth();
   const { data, error, loading, reload } = useApi<{ status: WorldStatus; map: WorldMapData | null }>('/world/map', { pollMs: 20000 });
-  const { data: imageData } = useApi<{ image: MapImage | null }>('/world/map-image');
+  const { data: imageData } = useApi<{ regions: MapRegion[]; images: MapImage[] }>('/world/map-images');
   const [editing, setEditing] = useState(false);
-  const image = imageData?.image ?? null;
+  const images = imageData?.images ?? NO_IMAGES;
+  const unaligned = images.filter((i) => !i.aligned).map((i) => imageData?.regions.find((r) => r.id === i.region)?.label ?? i.region);
   const editor = can('config.edit') && (
     <>
       <Button variant="outlined" startIcon={<ImageOutlinedIcon />} onClick={() => setEditing(true)}>
-        {image ? 'Map image' : 'Add map image'}
+        {images.length > 0 ? 'Map images' : 'Add map images'}
       </Button>
-      <MapImageDialog open={editing} onClose={() => setEditing(false)} image={image} map={data?.map ?? null} />
+      <MapImageDialog open={editing} onClose={() => setEditing(false)} regions={imageData?.regions ?? []} images={images} map={data?.map ?? null} />
     </>
   );
   if (loading && !data) return <Loading />;
@@ -132,19 +135,21 @@ function MapTab({ focus, onPlayer, onBase }: { focus: MapPoint | null; onPlayer:
       <Grid size={{ xs: 12, lg: 9 }}>
         <Section disablePadding>
           <Box sx={{ p: 2 }}>
-            {(editor || (image && !image.aligned)) && (
+            {(editor || unaligned.length > 0) && (
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5, alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  {!image
-                    ? 'Upload a picture of the Palworld map to draw it under the markers.'
-                    : image.aligned
-                      ? ''
-                      : 'The map image isn’t lined up yet, so markers may not match it.'}
+                  {images.length === 0
+                    ? 'Upload pictures of the Palpagos Islands and World Tree maps to draw them under the markers.'
+                    : unaligned.length > 0
+                      ? unaligned.length === 1
+                        ? `The ${unaligned[0]} map isn’t lined up yet, so markers may not match it.`
+                        : `The ${unaligned.join(' and ')} maps aren’t lined up yet, so markers may not match them.`
+                      : ''}
                 </Typography>
                 {editor}
               </Stack>
             )}
-            <WorldMap map={map} focus={focus} onPlayer={onPlayer} onBase={onBase} background={image} />
+            <WorldMap map={map} focus={focus} onPlayer={onPlayer} onBase={onBase} backgrounds={images} />
             {map.truncated && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 Only the first 3,000 wild pals are drawn.

@@ -9,7 +9,7 @@ beforeEach(async () => {
 describe('first-run setup', () => {
   it('reports setup as required and rejects a wrong token', async () => {
     const status = await api(ctx.app, { method: 'GET', url: '/api/v1/auth/options' });
-    expect(status.json()).toEqual({ setupRequired: true, providers: { discord: false, password: true } });
+    expect(status.json()).toEqual({ setupRequired: true, providers: { discord: false, password: true, emergency: false } });
 
     const res = await api(ctx.app, {
       method: 'POST',

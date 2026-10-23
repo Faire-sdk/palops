@@ -1,0 +1,91 @@
+# Everything on your own computer: the Palworld server, PalOps (website, panel and
+# Discord bot) and a Cloudflare Tunnel for HTTPS, with no web ports opened on your router.
+# See docs/deploy-home.md. Quick start:
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d --build
+#
+# Works on Linux and on Windows with Docker Desktop (WSL 2). Only the game port
+# (8211/udp) is published; the REST API (8212) stays inside the Compose network.
+services:
+  palworld:
+    # Community-maintained image: https://github.com/thijsvanloef/palworld-server-docker
+    image: thijsvanloef/palworld-server-docker:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "8211:8211/udp"
+      # Only needed with COMMUNITY=true (the in-game server browser).
+      - "27015:27015/udp"
+    volumes:
+      # Server files, saves (Pal/Saved/SaveGames) and backups (backups/).
+      - ./palworld:/palworld
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TZ:-UTC}
+      PORT: 8211
+      QUERY_PORT: 27015
+      PLAYERS: ${PLAYERS:-16}
+      SERVER_NAME: ${SERVER_NAME}
+      SERVER_DESCRIPTION: ${SERVER_DESCRIPTION:-}
+      SERVER_PASSWORD: ${SERVER_PASSWORD:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      COMMUNITY: ${COMMUNITY:-false}
+      REST_API_ENABLED: "true"
+      REST_API_PORT: 8212
+      RCON_ENABLED: "false"
+      UPDATE_ON_BOOT: "true"
+      # Hourly backups of the save folder, kept for 3 days.
+      BACKUP_ENABLED: "true"
+      BACKUP_CRON_EXPRESSION: ${BACKUP_CRON_EXPRESSION:-0 * * * *}
+      DELETE_OLD_BACKUPS: "true"
+      OLD_BACKUP_DAYS: ${OLD_BACKUP_DAYS:-3}
+      # Restarts are scheduled in PalOps (Server → Restarts and saves).
+      AUTO_REBOOT_ENABLED: "false"
+
+  palops:
+    build: ../..
+    restart: unless-stopped
+    # Reachable from this computer only, for when the tunnel is down: http://localhost:8080/panel
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - palops-data:/data
+      # Read-only, so the Console page can follow the game's log
+      # (Settings → Console logs → /palworld/Pal/Saved/Logs).
+      - ./palworld:/palworld:ro
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8080"
+      # Cloudflare Tunnel is the reverse proxy and serves HTTPS.
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+    depends_on:
+      - palworld
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # Public hostname in the Cloudflare dashboard → http://palops:8080
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      - palops
+
+  # Optional: only if you can't forward 8211/udp on your router (e.g. CGNAT).
+  # Start with: docker compose --profile playit up -d
+  playit:
+    image: ghcr.io/playit-cloud/playit-agent:latest
+    restart: unless-stopped
+    profiles: [playit]
+    # Shares the game server's network, so the tunnel's local address is 127.0.0.1:8211.
+    network_mode: service:palworld
+    environment:
+      SECRET_KEY: ${PLAYIT_SECRET_KEY:-}
+    depends_on:
+      - palworld
+
+volumes:
+  palops-data:

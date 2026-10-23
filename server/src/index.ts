@@ -57,6 +57,12 @@ const palbanTimer = setInterval(() => {
 }, 60 * 1000);
 palbanTimer.unref();
 
+// Scheduled world saves and restarts, as set on the Server page.
+const scheduleTimer = setInterval(() => {
+  services.schedule.tick().catch((err) => app.log.warn({ err }, 'Schedule tick failed'));
+}, 15 * 1000);
+scheduleTimer.unref();
+
 // World snapshot: guilds, bases, the live map, cheat signals and lag hotspots.
 if (config.worldPollSeconds > 0) {
   const worldTimer = setInterval(() => {

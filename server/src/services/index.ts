@@ -9,6 +9,8 @@ import { UserService } from './authentication/users.js';
 import { DiscordOAuthClient, type DiscordOAuthProvider } from './discord/oauth.js';
 import { DevDiscordOAuth } from './discord/dev-oauth.js';
 import { OAuthStateStore } from './discord/oauth-states.js';
+import { DiscordLookupService } from './discord/lookups.js';
+import { DiscordProfileService } from './discord/profiles.js';
 import { PalBanService } from './palban/palban-service.js';
 import { PalDefenderService } from './paldefender/paldefender-service.js';
 import { PalworldService } from './palworld/index.js';
@@ -16,6 +18,7 @@ import { DiscordBotService } from './discord/discord-bot.js';
 import { ConsoleService } from './console/console-service.js';
 import { ModerationService } from './players/moderation.js';
 import { PlayerDirectory } from './players/player-directory.js';
+import { ScheduleService } from './schedule/schedule-service.js';
 import { SiteAccountService } from './site/site-accounts.js';
 import { ServerRegistry } from './servers/server-registry.js';
 import { MapImageService } from './world/map-image.js';
@@ -34,6 +37,9 @@ export interface Services {
   /** Null when Discord sign-in isn't configured. */
   discordOAuth: DiscordOAuthProvider | null;
   oauthStates: OAuthStateStore;
+  /** Email, linked accounts and servers from Discord sign-in. */
+  discordProfiles: DiscordProfileService;
+  discordLookups: DiscordLookupService;
   players: PlayerDirectory;
   moderation: ModerationService;
   /** Optional PalDefender plugin integration; does nothing until an owner enables it. */
@@ -47,6 +53,8 @@ export interface Services {
   siteAccounts: SiteAccountService;
   world: WorldService;
   mapImage: MapImageService;
+  /** Scheduled world saves and restarts. */
+  schedule: ScheduleService;
 }
 
 /**
@@ -100,6 +108,7 @@ export function createServices(config: Config, db: DB): Services {
   const moderation = new ModerationService(db, palworld, players, servers, audit, paldefender);
   const palban = new PalBanService(db, new SecretBox(config.secret, 'palban-key'), moderation, players, servers, audit, consoleLog);
   const siteAccounts = new SiteAccountService(db, config.sessionMaxMs);
+  const discordProfiles = new DiscordProfileService(db);
   const discordBot = new DiscordBotService(db, new SecretBox(config.secret, 'discord-bot-token'), config, { users, palworld, players, moderation, audit, world, console: consoleLog, siteAccounts, paldefender, palban });
   return {
     config,
@@ -117,6 +126,8 @@ export function createServices(config: Config, db: DB): Services {
         ? new DiscordOAuthClient(config.discord)
         : null,
     oauthStates: new OAuthStateStore(),
+    discordProfiles,
+    discordLookups: new DiscordLookupService(() => discordBot.lookupApi(), () => discordBot.settings().guildId, discordProfiles),
     players,
     moderation,
     paldefender,
@@ -126,5 +137,6 @@ export function createServices(config: Config, db: DB): Services {
     console: consoleLog,
     discordBot,
     mapImage: new MapImageService(db, config.databasePath, audit),
+    schedule: new ScheduleService(db, palworld, servers, audit, consoleLog),
   };
 }

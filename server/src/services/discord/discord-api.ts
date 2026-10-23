@@ -29,6 +29,16 @@ export class DiscordApi {
     return this.call('GET', '/users/@me');
   }
 
+  /** Any Discord user's public profile: name, avatar, banner. */
+  user(id: string): Promise<{ id: string; username?: string; global_name?: string | null; avatar?: string | null; banner?: string | null; accent_color?: number | null }> {
+    return this.call('GET', `/users/${id}`);
+  }
+
+  /** The server's roles, for showing role names and colours. */
+  roles(guildId: string): Promise<Array<{ id: string; name: string; color: number; position: number }>> {
+    return this.call('GET', `/guilds/${guildId}/roles`);
+  }
+
   guild(id: string): Promise<{ id: string; name: string }> {
     return this.call('GET', `/guilds/${id}`);
   }

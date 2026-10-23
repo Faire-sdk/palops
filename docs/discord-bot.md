@@ -63,7 +63,7 @@ In **Settings → Discord bot → Players and roles** you can set:
 - a **verified player role**, given to players with a verified character and removed if the link is removed;
 - **owner, admin and moderator roles**, given to panel users by the Discord ID on their panel account, and updated when their role changes or they're disabled;
 - **nicknames** set to the verified character name;
-- **Add players to the Discord server when they sign in**: the sign-in asks for the extra "join servers for you" permission, and the bot adds them (with their roles). The
+- **Add players to the Discord server when they sign in**: sign-in always asks for the "join servers for you" permission, and with this on the bot adds them (with their roles). The
   access token is used once and never stored. A refusal never blocks signing in.
 
 The bot only touches the roles you configure, never any other. It needs **Manage Roles** with its own role above the roles it manages, **Manage Nicknames** for nicknames and

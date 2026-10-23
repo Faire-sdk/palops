@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { cleanBaseUrl } from '../src/services/palban/palban-service.js';
 import { api, createTestApp, loginAs } from './helpers.js';
 
-const KEY = 'pbn_secret_key';
+const KEY = 'net_secret_key';
 const ANUBIS = 'steam_76561190000000002';
 const LAMBALL = 'steam_76561190000000001';
 const CHEATER = 'steam_76561190000000777';

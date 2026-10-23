@@ -10,6 +10,8 @@ interface AuthState {
   options: AuthOptions;
   can: (permission: Permission) => boolean;
   login: (username: string, password: string) => Promise<void>;
+  /** Break-glass sign-in as the owner. */
+  emergencyLogin: (password: string) => Promise<void>;
   completeSetup: (setupToken: string, username: string, password: string) => Promise<void>;
   /** Sends the browser to Discord; it comes back through the server's callback. */
   startDiscord: (intent: DiscordIntent, setupToken?: string) => Promise<void>;
@@ -48,6 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(await api.post<SessionInfo>('/auth/login', { username, password }));
   }, []);
 
+  const emergencyLogin = useCallback(async (password: string) => {
+    setSession(await api.post<SessionInfo>('/auth/emergency', { password }));
+  }, []);
+
   const completeSetup = useCallback(async (setupToken: string, username: string, password: string) => {
     setSession(await api.post<SessionInfo>('/auth/setup', { setupToken, username, password }));
     setOptions((o) => ({ ...o, setupRequired: false }));
@@ -70,12 +76,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options,
       can: (p) => !!session?.permissions.includes(p),
       login,
+      emergencyLogin,
       completeSetup,
       startDiscord,
       refresh,
       logout,
     }),
-    [session, loading, options, login, completeSetup, startDiscord, refresh, logout],
+    [session, loading, options, login, emergencyLogin, completeSetup, startDiscord, refresh, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

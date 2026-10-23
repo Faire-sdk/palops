@@ -440,6 +440,11 @@ export class DiscordBotService {
     return r?.bot_token_encrypted ? this.secrets.decrypt(r.bot_token_encrypted) : null;
   }
 
+  /** The bot's REST client for lookups (user profiles, role names), whenever a token is saved. */
+  lookupApi(): DiscordApi | null {
+    return this.api();
+  }
+
   private api(): DiscordApi | null {
     const t = this.token();
     return t ? new DiscordApi(t, this.apiBase) : null;

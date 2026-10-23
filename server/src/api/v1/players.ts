@@ -7,6 +7,7 @@ import { notFound } from '../../utils/errors.js';
 import { toMap } from '../../services/world/map-coords.js';
 import { toCsv } from '../../utils/csv.js';
 import { parse } from '../../utils/validation.js';
+import { visibleProfile } from './accounts.js';
 
 /** Platform ids look like steam_76561198000000000 or epic_0f3a...; keep them to a safe charset. */
 const userIdParams = z.object({ userId: z.string().regex(/^[A-Za-z0-9_.:-]{1,80}$/, 'Invalid player id') });
@@ -220,7 +221,7 @@ export default async function playerRoutes(app: FastifyInstance, { services }: {
       /** The website account linked to this character, and whether the link is proven. */
       link: (() => {
         const a = services.siteAccounts.byPlayerUserId(userId, false);
-        return a ? { discord: a.discord, verified: a.playerVerified, verifiedBy: a.verifiedBy, verifiedAt: a.verifiedAt, requestedAt: a.verificationRequestedAt, linkedAt: a.linkedAt } : null;
+        return a ? { discord: a.discord, verified: a.playerVerified, verifiedBy: a.verifiedBy, verifiedAt: a.verifiedAt, requestedAt: a.verificationRequestedAt, linkedAt: a.linkedAt, profile: visibleProfile(services.discordProfiles.get(a.discord.id), hasPermission(request.user!.role, 'accounts.private')) } : null;
       })(),
       /** Cheat signals are staff-only, like the map. */
       signals: staff ? world.signals({ userId, includeDismissed: true, limit: 20, offset: 0 }).signals : [],

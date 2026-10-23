@@ -127,7 +127,46 @@ export function LoginPage() {
       <Typography variant="body2" color="text.secondary" align="center">
         {discord ? 'Need access? Ask a panel owner to add your Discord account.' : 'Forgot your password? Ask a panel owner for a reset link.'}
       </Typography>
+      {options.providers.emergency && <EmergencySignIn />}
     </AuthCard>
+  );
+}
+
+/** The owner's way in when Discord sign-in is broken (PANEL_EMERGENCY_PASSWORD). */
+function EmergencySignIn() {
+  const { emergencyLogin } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const { error, busy, onSubmit } = useSubmit(() => emergencyLogin(password));
+
+  if (!open) {
+    return (
+      <Typography variant="caption" align="center">
+        <Link component="button" type="button" color="text.secondary" underline="hover" onClick={() => setOpen(true)} sx={{ fontSize: 'inherit' }}>
+          Emergency sign-in
+        </Link>
+      </Typography>
+    );
+  }
+  return (
+    <Stack component="form" direction="row" spacing={1} onSubmit={onSubmit} sx={{ alignItems: 'flex-start' }}>
+      <TextField
+        label="Emergency password"
+        type="password"
+        size="small"
+        fullWidth
+        autoFocus
+        autoComplete="off"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        error={!!error}
+        helperText={error}
+        required
+      />
+      <Button variant="outlined" color="warning" type="submit" loading={busy} sx={{ flexShrink: 0, height: 40 }}>
+        Sign in
+      </Button>
+    </Stack>
   );
 }
 
