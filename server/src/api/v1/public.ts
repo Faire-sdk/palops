@@ -34,7 +34,7 @@ export default async function publicRoutes(app: FastifyInstance, { services }: {
       showOnlinePlayers: site.showOnlinePlayers,
       /** Written by staff under Settings, Website. Empty means the website shows no rules. */
       rules: written.rules,
-      /** The server's own colour (#rrggbb), or null for PalOps blue. The website keeps it readable. */
+      /** The server's own colour (#rrggbb), or null for PalOps colours. The website keeps it readable. */
       accentColor: written.accentColor,
       /** Whether players can sign in with Discord on the website. */
       playerLogin: services.discordOAuth !== null,

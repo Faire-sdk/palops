@@ -1,9 +1,10 @@
 # PalOps design direction
 
-Status: draft. It records what the owner has decided and what the code does today. The open question at the end is the owner's to answer; until then, the "In the code" choices stay as they are and nothing new is invented on top of them.
+Status: direction set by the owner. It records what the owner has decided and what the code does today. Nothing here was invented on the owner's behalf; new choices go to the owner first.
 
 ## Decided by the owner
 
+- **Primary color: Harbor, a muted navy.** `#24527a` in light mode (8.19:1 on white, 7.57:1 on the page background) and `#8bb8e8` in dark mode (8.20:1 on cards, 8.93:1 on the page). Chosen from four checked options for calm, precise and trustworthy; it stays clear of the green, red and amber status colors.
 - **Personality: calm, precise, trustworthy.** Quiet surfaces, one accent color used where it matters, exact wording, no decoration that claims more than the product does.
 - **Typeface: Roboto.** Kept on purpose: plain and easy to read at the small sizes a dense panel needs.
 - **Each server sets its own website color** under Settings, Website. The staff panel keeps PalOps colors. The public website uses the server's color in a shade that stays readable (4.5:1) in light and dark mode, and shows the server's staff both shades before they save.
@@ -30,16 +31,15 @@ These hold for every screen, in light and dark:
 
 | Choice | Value |
 | --- | --- |
-| Primary | `#0b6bcb` light, `#6ab7ff` dark (until question 1 is answered) |
 | Secondary | `#00796b` light, `#4fd1c5` dark |
 | Status | green online or good, red offline or banned, amber needs a look, blue info |
 | Surfaces | outlined cards, no shadows, 12px card corners |
 | Theme | follows the device, with a light, dark or device switch in the header |
 | Public site hero | plain page background; the radial glow was removed (antislop audit 003) |
 
-## Open question for the owner
+## Color options that were considered
 
-1. PalOps's own color (the panel, and the website of any server that hasn't picked one). Options suggested on request, each checked for contrast:
+The owner picked A from these, suggested on request and each checked for contrast. The rest stay here for reference.
 
 | Option | Light mode | Dark mode | On white | On dark cards | Notes |
 | --- | --- | --- | --- | --- | --- |

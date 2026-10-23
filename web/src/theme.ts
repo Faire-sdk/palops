@@ -7,8 +7,8 @@ const TOUCH = '@media (pointer: coarse)';
 export const LIGHT_BACKGROUNDS = { default: '#f4f6f9', paper: '#ffffff' };
 export const DARK_BACKGROUNDS = { default: '#0f1418', paper: '#161d23' };
 
-/** PalOps's own primary colour in each mode. */
-export const PALOPS_PRIMARY = { light: '#0b6bcb', dark: '#6ab7ff' };
+/** PalOps's own primary colour in each mode: Harbor, a muted navy (see DESIGN.md). */
+export const PALOPS_PRIMARY = { light: '#24527a', dark: '#8bb8e8' };
 
 /**
  * The shades of a server's chosen colour that stay readable (4.5:1) on the
@@ -35,7 +35,7 @@ export const createPalOpsTheme = (primary = PALOPS_PRIMARY) => createTheme({
       palette: {
         // White or black button text, whichever reaches 4.5:1 (MUI's default bar is 3:1).
         contrastThreshold: 4.5,
-        primary: { main: primary.light }, // PalOps blue: 5.28 on white
+        primary: { main: primary.light }, // Harbor: 8.19 on white
         secondary: { main: '#00796b' }, // 5.32 on white
         warning: { main: '#b45309' }, // 5.02 on white, 4.61 on the console's #f5f5f5
         info: { main: '#0277bd' }, // 4.80 on white
@@ -70,8 +70,8 @@ export const createPalOpsTheme = (primary = PALOPS_PRIMARY) => createTheme({
         ':focus-visible': { outline: `2px solid ${theme.vars.palette.primary.main}`, outlineOffset: 2 },
       }),
     },
-    // One visible focus ring for every button, tab, chip and list item: primary
-    // is 5.28:1 on white and 7.97:1 on the dark paper.
+    // One visible focus ring for every button, tab, chip and list item: Harbor
+    // is 8.19:1 on white and 8.20:1 on the dark paper.
     MuiButtonBase: {
       styleOverrides: {
         root: ({ theme }) => ({

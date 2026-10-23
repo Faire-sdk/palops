@@ -151,7 +151,7 @@ function ColourSection({ settings, canEdit, save }: { settings: SiteSettings; ca
             onChange={(e) => setHex(e.target.value.trim())}
             disabled={!canEdit}
             error={hex !== '' && !valid}
-            helperText={hex === '' ? 'Empty: the website uses PalOps blue' : valid ? 'Six-digit hex colour' : 'Use a colour such as #2a6f97'}
+            helperText={hex === '' ? 'Empty: the website uses PalOps colours' : valid ? 'Six-digit hex colour' : 'Use a colour such as #2a6f97'}
             sx={{ maxWidth: 220 }}
             slotProps={{ htmlInput: { maxLength: 7, spellCheck: false } }}
           />

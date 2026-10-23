@@ -3,7 +3,7 @@ import type { DB } from '../../database/db.js';
 export interface SiteSettings {
   /** The public website's server rules, in order. None hides the rules section. */
   rules: string[];
-  /** The server's own colour for its public website (#rrggbb), or null for PalOps blue. */
+  /** The server's own colour for its public website (#rrggbb), or null for PalOps colours. */
   accentColor: string | null;
   updatedAt: string | null;
   updatedBy: string | null;

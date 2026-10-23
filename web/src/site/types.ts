@@ -11,7 +11,7 @@ export interface PublicServer {
   showOnlinePlayers: boolean;
   /** Written by staff; empty means no rules section. */
   rules: string[];
-  /** The server's own colour (#rrggbb), or null for PalOps blue. */
+  /** The server's own colour (#rrggbb), or null for PalOps colours. */
   accentColor: string | null;
   playerLogin: boolean;
   knownPlayers: number;

@@ -9,7 +9,7 @@ export const SetPrimaryContext = createContext<(primary: PrimaryShades) => void>
 
 const STORAGE_KEY = 'palops-site-accent';
 
-/** The server colour from the last visit, so the site doesn't flash PalOps blue before it loads. */
+/** The server colour from the last visit, so the site doesn't flash PalOps colours before it loads. */
 export function cachedSiteAccent(): PrimaryShades {
   try {
     const hex = localStorage.getItem(STORAGE_KEY);
