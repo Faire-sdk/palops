@@ -33,6 +33,8 @@ export interface User {
   discord: { id: string; username: string | null; avatar: string | null } | null;
   createdAt: string;
   lastLoginAt: string | null;
+  /** Discord display name when linked, else the username. Only on the signed-in user's session. */
+  displayName?: string;
 }
 
 export interface SessionInfo {

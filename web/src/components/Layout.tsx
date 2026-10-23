@@ -118,11 +118,11 @@ export function Layout() {
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', ml: 1 }}>
             <Avatar src={avatar ?? undefined} sx={{ width: 32, height: 32, fontSize: 15 }}>
-              {user?.username.slice(0, 1).toUpperCase()}
+              {(user?.displayName ?? user?.username)?.slice(0, 1).toUpperCase()}
             </Avatar>
             <Box sx={{ display: { xs: 'none', sm: 'block' }, lineHeight: 1.2 }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {user?.username}
+                {user?.displayName ?? user?.username}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {user?.role}

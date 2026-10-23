@@ -35,7 +35,9 @@ export default async function authRoutes(app: FastifyInstance, { services }: { s
   const emergencyPerIp = new RateLimiter(5, WINDOW);
   const emergencyFailures = new RateLimiter(10, 60 * 60 * 1000);
 
-  const session = (user: User) => ({ user, permissions: permissionsFor(user.role) });
+  /** The name to show for the signed-in user: their Discord display name when linked, else the panel username. */
+  const displayName = (user: User) => (user.discord && (services.discordProfiles.identity(user.discord.id)?.globalName ?? user.discord.username)) || user.username;
+  const session = (user: User) => ({ user: { ...user, displayName: displayName(user) }, permissions: permissionsFor(user.role) });
 
   const startSession = (request: FastifyRequest, reply: FastifyReply, user: User, method: 'password' | 'discord' | 'emergency') => {
     const { token } = services.sessions.create(user.id, { ip: request.ip, userAgent: request.headers['user-agent'] });

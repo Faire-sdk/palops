@@ -77,6 +77,19 @@ export default async function userRoutes(app: FastifyInstance, { services }: { s
     return { user };
   });
 
+  app.delete('/:id', async (request) => {
+    const { id } = parse(idParam, request.params);
+    if (id === request.user!.userId) throw badRequest('You can’t delete your own account', 'self_delete');
+    const user = services.users.delete(id);
+    services.audit.record(actorOf(request), {
+      category: 'users',
+      action: 'user_deleted',
+      target: user.username,
+      details: { role: user.role, discordId: user.discord?.id ?? null },
+    });
+    return { ok: true };
+  });
+
   app.post('/:id/password-reset', async (request) => {
     if (!config.passwordLogin) throw badRequest('Password sign-in is disabled on this panel');
     const { id } = parse(idParam, request.params);
