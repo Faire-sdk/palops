@@ -11,6 +11,7 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Link as RouterLink, Route, Routes } from 'react-router-dom';
+import { useSiteAccent } from '../accent';
 import { api, ApiError } from '../api/client';
 import { DiscordButton } from '../auth/discord';
 import { Brand } from '../components/Brand';
@@ -104,6 +105,7 @@ function SiteMenu({ links }: { links: SiteLink[] }) {
 export default function SiteApp() {
   const session = usePlayerSession();
   const server = useApi<PublicServer>('/public/server', { pollMs: 30000 });
+  useSiteAccent(server.data ? server.data.accentColor : undefined);
   const name = server.data?.name ?? 'Palworld server';
   const links: SiteLink[] = [
     { label: 'Home', to: '/' },

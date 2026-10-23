@@ -650,4 +650,12 @@ export const migrations: Migration[] = [
       INSERT INTO site_settings (id) VALUES (1);
     `,
   },
+  {
+    id: 24,
+    name: 'site_accent_color',
+    sql: `
+      -- The server's own colour for its public website (#rrggbb). NULL keeps PalOps blue.
+      ALTER TABLE site_settings ADD COLUMN accent_color TEXT;
+    `,
+  },
 ];

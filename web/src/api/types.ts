@@ -45,6 +45,8 @@ export type ServerState = 'online' | 'offline' | 'error' | 'unconfigured';
 /** What staff write for the public website. */
 export interface SiteSettings {
   rules: string[];
+  /** The server's own colour for its public website (#rrggbb), or null for PalOps blue. */
+  accentColor: string | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }

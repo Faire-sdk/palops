@@ -1,33 +1,55 @@
 import { createTheme } from '@mui/material/styles';
+import { readableShade } from './color';
 
 /** Phones and tablets: controls get a 44px minimum so a thumb can hit them. */
 const TOUCH = '@media (pointer: coarse)';
+
+export const LIGHT_BACKGROUNDS = { default: '#f4f6f9', paper: '#ffffff' };
+export const DARK_BACKGROUNDS = { default: '#0f1418', paper: '#161d23' };
+
+/** PalOps's own primary colour in each mode. */
+export const PALOPS_PRIMARY = { light: '#0b6bcb', dark: '#6ab7ff' };
+
+/**
+ * The shades of a server's chosen colour that stay readable (4.5:1) on the
+ * page and card backgrounds of each mode. Used for the public website.
+ */
+export function accentShades(hex: string) {
+  return {
+    light: readableShade(hex, [LIGHT_BACKGROUNDS.paper, LIGHT_BACKGROUNDS.default]),
+    dark: readableShade(hex, [DARK_BACKGROUNDS.paper, DARK_BACKGROUNDS.default]),
+  };
+}
 
 /**
  * Material Design theme shared by the panel and the public website. Follows
  * the visitor's light or dark preference unless they pick one (see
  * ThemeModeButton). Every text colour here passes WCAG AA (4.5:1) on the
- * surface it sits on; the comments give the measured ratios.
+ * surface it sits on; the comments give the measured ratios. `primary` swaps
+ * in a server's own colour on its public website.
  */
-export const theme = createTheme({
+export const createPalOpsTheme = (primary = PALOPS_PRIMARY) => createTheme({
   cssVariables: { colorSchemeSelector: 'class' },
   colorSchemes: {
     light: {
       palette: {
-        primary: { main: '#0b6bcb' }, // 5.28 on white
+        // White or black button text, whichever reaches 4.5:1 (MUI's default bar is 3:1).
+        contrastThreshold: 4.5,
+        primary: { main: primary.light }, // PalOps blue: 5.28 on white
         secondary: { main: '#00796b' }, // 5.32 on white
         warning: { main: '#b45309' }, // 5.02 on white, 4.61 on the console's #f5f5f5
         info: { main: '#0277bd' }, // 4.80 on white
-        background: { default: '#f4f6f9', paper: '#ffffff' },
+        background: LIGHT_BACKGROUNDS,
       },
     },
     dark: {
       palette: {
-        primary: { main: '#6ab7ff' },
+        contrastThreshold: 4.5,
+        primary: { main: primary.dark },
         secondary: { main: '#4fd1c5' },
         // White on #f44336 is 3.68, so red buttons take dark text (5.17) like the other dark mode buttons.
         error: { main: '#f44336', contrastText: 'rgba(0, 0, 0, 0.87)' },
-        background: { default: '#0f1418', paper: '#161d23' },
+        background: DARK_BACKGROUNDS,
       },
     },
   },

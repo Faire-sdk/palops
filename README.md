@@ -180,7 +180,9 @@ platform ID to see their level, guild, first/last seen and online status.
   player is offline. The official REST API doesn't report guilds; guild names show up once a connection method that
   provides them is added (the mock server includes them).
 - Staff write the server rules under **Settings → Website**, one per line; the home page shows no rules section until
-  they do. Configure the join address, Discord invite and player list with the `SITE_*` variables in `.env.example`.
+  they do. The same tab sets the website's color: it uses the nearest shade that stays readable in light and dark mode,
+  and the staff panel keeps PalOps colors. Configure the join address, Discord invite and player list with the `SITE_*`
+  variables in `.env.example`.
 - To show live status on a different website, fetch `GET /api/v1/public/server` and `GET /api/v1/public/players`.
 
 ## Connecting to Palworld
@@ -455,8 +457,8 @@ All endpoints are under `/api/v1` and use JSON. State-changing requests must sen
 | POST | `/server/save`, `/server/shutdown`, `/server/stop` | `server.control` |
 | GET | `/server/schedule` (scheduled restarts and saves) | `server.view` |
 | PUT | `/server/schedule` | `server.control` |
-| GET | `/server/site` (the public website's rules) | `server.view` |
-| PUT | `/server/site` | `server.control` (audited) |
+| GET | `/server/site` (the public website's rules and color) | `server.view` |
+| PUT | `/server/site` (`rules`, `accentColor` as `#rrggbb` or `null`; either can be left out) | `server.control` (audited) |
 | GET/PUT | `/paldefender/settings` | `server.connection` (optional PalDefender integration; the token is never returned) |
 | POST | `/paldefender/test` | `server.connection` |
 | GET | `/paldefender/status` | `players.view` |

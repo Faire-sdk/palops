@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
 import { TIME_OF_DAY } from '../../services/schedule/schedule-service.js';
+import { HEX_COLOR } from '../../services/site/site-settings.js';
 import { ADAPTER_KINDS } from '../../services/servers/server-registry.js';
 import { parse } from '../../utils/validation.js';
 
@@ -91,11 +92,21 @@ export default async function serverRoutes(app: FastifyInstance, { services }: {
   app.get('/site', { preHandler: requirePermission(services, 'server.view') }, async () => ({ settings: services.siteSettings.get() }));
 
   app.put('/site', { preHandler: requirePermission(services, 'server.control') }, async (request) => {
-    const { rules } = parse(z.object({ rules: z.array(z.string().trim().max(300)).max(30) }), request.body);
-    const before = services.siteSettings.get().rules;
+    const input = parse(
+      z.object({
+        rules: z.array(z.string().trim().max(300)).max(30).optional(),
+        accentColor: z.string().regex(HEX_COLOR, 'Use a colour such as #2a6f97').nullable().optional(),
+      }),
+      request.body,
+    );
+    const { rules, accentColor } = services.siteSettings.get();
     const actor = actorOf(request);
-    const settings = services.siteSettings.save(rules, actor.username);
-    services.audit.record(actor, { category: 'server', action: 'site_rules_updated', details: { before, after: settings.rules } });
+    const settings = services.siteSettings.save(input, actor.username);
+    services.audit.record(actor, {
+      category: 'server',
+      action: 'site_settings_updated',
+      details: { before: { rules, accentColor }, after: { rules: settings.rules, accentColor: settings.accentColor } },
+    });
     return { settings };
   });
 

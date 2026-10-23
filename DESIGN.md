@@ -1,9 +1,12 @@
 # PalOps design direction
 
-Status: draft. It records what the owner has decided and what the code does today. The open questions at the end are the owner's to answer; until then, the "In the code" choices stay as they are and nothing new is invented on top of them.
+Status: draft. It records what the owner has decided and what the code does today. The open question at the end is the owner's to answer; until then, the "In the code" choices stay as they are and nothing new is invented on top of them.
 
 ## Decided by the owner
 
+- **Personality: calm, precise, trustworthy.** Quiet surfaces, one accent color used where it matters, exact wording, no decoration that claims more than the product does.
+- **Typeface: Roboto.** Kept on purpose: plain and easy to read at the small sizes a dense panel needs.
+- **Each server sets its own website color** under Settings, Website. The staff panel keeps PalOps colors. The public website uses the server's color in a shade that stays readable (4.5:1) in light and dark mode, and shows the server's staff both shades before they save.
 - No pills anywhere. Buttons are rounded rectangles with 8px corners, chips 6px.
 - Say "IP", not "address", for player and ban IPs. People know the word.
 - PalBan Network and PalDefender stay out of sight unless their integration is on.
@@ -21,22 +24,26 @@ These hold for every screen, in light and dark:
 - Status color always comes with words ("Online", "Banned", "Verified"), never color alone.
 - A missing value says what is missing ("Unknown", "None", "Never"), never a dash.
 - Anything that opens on hover also opens on focus or tap.
+- Button text is white or black, whichever reaches 4.5:1 on the button color (the theme's `contrastThreshold`).
 
 ## In the code (no reason recorded yet)
 
 | Choice | Value |
 | --- | --- |
-| Primary | `#0b6bcb` light, `#6ab7ff` dark |
+| Primary | `#0b6bcb` light, `#6ab7ff` dark (until question 1 is answered) |
 | Secondary | `#00796b` light, `#4fd1c5` dark |
 | Status | green online or good, red offline or banned, amber needs a look, blue info |
-| Typeface | Roboto (MUI's default) |
 | Surfaces | outlined cards, no shadows, 12px card corners |
 | Theme | follows the device, with a light, dark or device switch in the header |
 | Public site hero | plain page background; the radial glow was removed (antislop audit 003) |
 
-## Open questions for the owner
+## Open question for the owner
 
-1. Brand color: keep the blue, or use a color of your own?
-2. Typeface: keep Roboto, or pick one that fits PalOps's character?
-3. Three words for how PalOps should feel to staff and to players.
-4. The public site: one PalOps look for every server, or an accent color each server owner sets?
+1. PalOps's own color (the panel, and the website of any server that hasn't picked one). Options suggested on request, each checked for contrast:
+
+| Option | Light mode | Dark mode | On white | On dark cards | Notes |
+| --- | --- | --- | --- | --- | --- |
+| A. Harbor | `#24527a` | `#8bb8e8` | 8.19:1 | 8.20:1 | Muted navy. Calm and steady; clearly apart from the green, red and amber status colors. |
+| B. Lagoon | `#0b6b66` | `#5cc6bb` | 6.35:1 | 8.31:1 | Deep teal, like island water. Sits near PalBan Network's teal and a little near the green "online" color. |
+| C. Ink | `#1f3a5f` | `#9cc3f0` | 11.48:1 | 9.30:1 | Deep navy. The most precise and serious; buttons read heavier. |
+| D. Current blue | `#0b6bcb` | `#6ab7ff` | 5.28:1 | 7.97:1 | Brighter. Close to the stock Material blue, so it says least about PalOps. |

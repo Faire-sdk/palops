@@ -20,6 +20,7 @@ export default async function publicRoutes(app: FastifyInstance, { services }: {
     const status = await services.palworld.getStatus();
     // Keep the known-player count current (the online list is briefly cached).
     if (status.state === 'online') await services.players.refreshOnline().catch(() => undefined);
+    const written = services.siteSettings.get();
     return {
       state: status.state === 'online' ? 'online' : status.state === 'unconfigured' ? 'unknown' : 'offline',
       name: status.info?.name ?? status.connection?.name ?? 'Palworld server',
@@ -32,7 +33,9 @@ export default async function publicRoutes(app: FastifyInstance, { services }: {
       discordInvite: site.discordInvite,
       showOnlinePlayers: site.showOnlinePlayers,
       /** Written by staff under Settings, Website. Empty means the website shows no rules. */
-      rules: services.siteSettings.get().rules,
+      rules: written.rules,
+      /** The server's own colour (#rrggbb), or null for PalOps blue. The website keeps it readable. */
+      accentColor: written.accentColor,
       /** Whether players can sign in with Discord on the website. */
       playerLogin: services.discordOAuth !== null,
       knownPlayers: services.players.count(),
