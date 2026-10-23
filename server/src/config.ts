@@ -30,7 +30,7 @@ const envSchema = z.object({
   SITE_JOIN_ADDRESS: z.string().max(200).optional(),
   SITE_DISCORD_INVITE: z.url().optional(),
   SITE_SHOW_ONLINE_PLAYERS: booleanString.default(true),
-  WORLD_POLL_SECONDS: z.coerce.number().int().min(0).max(3600).default(20),
+  WORLD_POLL_SECONDS: z.coerce.number().int().min(0).max(3600).default(10),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 

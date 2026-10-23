@@ -64,12 +64,7 @@ const scheduleTimer = setInterval(() => {
 scheduleTimer.unref();
 
 // World snapshot: guilds, bases, the live map, cheat signals and lag hotspots.
-if (config.worldPollSeconds > 0) {
-  const worldTimer = setInterval(() => {
-    if (services.servers.getPrimary()) services.world.poll().catch((err) => app.log.warn({ err }, 'World snapshot failed'));
-  }, config.worldPollSeconds * 1000);
-  worldTimer.unref();
-}
+services.world.start((err) => app.log.warn({ err }, 'World snapshot failed'));
 
 await app.listen({ host: config.host, port: config.port });
 
@@ -85,6 +80,7 @@ if (setupToken) {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
     services.discordBot.stop();
+    services.world.stop();
     services.console.stopTail();
     services.console.flush();
     await app.close();

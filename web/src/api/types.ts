@@ -33,6 +33,8 @@ export interface User {
   discord: { id: string; username: string | null; avatar: string | null } | null;
   createdAt: string;
   lastLoginAt: string | null;
+  /** Discord display name when linked, else the username. Only on the signed-in user's session. */
+  displayName?: string;
 }
 
 export interface SessionInfo {
@@ -254,6 +256,15 @@ export interface PlayerProfile {
 // ---- World data (the REST API's game-data snapshot) ----
 
 export type WorldState = 'ok' | 'disabled' | 'unavailable' | 'unconfigured' | 'pending';
+
+/** How often the panel reads the world snapshot; 0 is off. */
+export interface WorldSettings {
+  pollSeconds: number;
+  defaultPollSeconds: number;
+  custom: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
 
 export interface WorldStatus {
   state: WorldState;

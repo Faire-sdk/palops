@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { actorOf, requirePermission } from '../../middleware/auth.js';
 import type { Services } from '../../services/index.js';
 import { MAP_IMAGE_MAX_BYTES, MAP_IMAGE_TYPES, MAP_REGION_IDS, MAP_REGIONS } from '../../services/world/map-image.js';
+import { POLL_CHOICES } from '../../services/world/world-service.js';
 import { badRequest } from '../../utils/errors.js';
 import { parse } from '../../utils/validation.js';
 
@@ -20,6 +21,15 @@ export default async function worldRoutes(app: FastifyInstance, { services }: { 
 
   /** Reads a fresh snapshot now instead of waiting for the next poll. */
   app.post('/refresh', { preHandler: requirePermission(services, 'world.view') }, async () => world.refresh());
+
+  /** How often snapshots are read; null on save goes back to WORLD_POLL_SECONDS. */
+  app.get('/settings', { preHandler: requirePermission(services, 'world.view') }, async () => ({ settings: world.settings(), choices: POLL_CHOICES }));
+
+  app.put('/settings', { preHandler: requirePermission(services, 'config.edit') }, async (request) => {
+    const choice = z.number().int().refine((n) => (POLL_CHOICES as readonly number[]).includes(n), 'Pick one of the offered intervals');
+    const { pollSeconds } = parse(z.object({ pollSeconds: choice.nullable() }), request.body);
+    return { settings: world.saveSettings(actorOf(request), pollSeconds), choices: POLL_CHOICES };
+  });
 
   app.get('/map', { preHandler: requirePermission(services, 'world.view') }, async () => ({ status: world.status(), map: world.map() }));
 

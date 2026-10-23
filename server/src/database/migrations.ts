@@ -610,7 +610,8 @@ export const migrations: Migration[] = [
         updated_at TEXT NOT NULL DEFAULT ${now}
       );
     `,
-  },  {
+  },
+  {
     id: 22,
     name: 'map_image_regions',
     sql: `
@@ -637,6 +638,21 @@ export const migrations: Migration[] = [
   },
   {
     id: 23,
+    name: 'world_settings',
+    sql: `
+      -- How often the panel reads the world snapshot, as set on the World page.
+      -- NULL means WORLD_POLL_SECONDS from the environment; 0 turns snapshots off.
+      CREATE TABLE world_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        poll_seconds INTEGER,
+        updated_at TEXT,
+        updated_by TEXT
+      );
+      INSERT INTO world_settings (id) VALUES (1);
+    `,
+  },
+  {
+    id: 24,
     name: 'site_rules',
     sql: `
       -- What staff write for the public website (one row). Rules are a JSON array
@@ -651,7 +667,7 @@ export const migrations: Migration[] = [
     `,
   },
   {
-    id: 24,
+    id: 25,
     name: 'site_accent_color',
     sql: `
       -- The server's own colour for its public website (#rrggbb). NULL keeps PalOps colours.
