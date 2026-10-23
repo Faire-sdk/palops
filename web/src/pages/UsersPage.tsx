@@ -116,9 +116,9 @@ export function UsersPage() {
                     {
                       key: 'email',
                       header: 'Email',
-                      render: (a: WebsiteAccount) => (a.profile?.email ? `${a.profile.email}${a.profile.emailVerified === false ? ' (not verified)' : ''}` : '—'),
+                      render: (a: WebsiteAccount) => (a.profile?.email ? `${a.profile.email}${a.profile.emailVerified === false ? ' (not verified)' : ''}` : 'None'),
                     },
-                    { key: 'guilds', header: 'Servers', align: 'right' as const, render: (a: WebsiteAccount) => a.profile?.guilds?.length ?? '—' },
+                    { key: 'guilds', header: 'Servers', align: 'right' as const, render: (a: WebsiteAccount) => a.profile?.guilds?.length ?? 'Unknown' },
                   ]
                 : []),
               { key: 'seen', header: 'Last sign-in', nowrap: true, render: (a) => formatDateTime(a.lastLoginAt ?? a.createdAt) },

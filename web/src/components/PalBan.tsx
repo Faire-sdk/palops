@@ -117,7 +117,7 @@ export function PalBanSettingsTab() {
               helperText={hasKey ? 'A key is saved. Leave blank to keep it.' : 'The integration key for your server, from your account on the network. It’s shown once.'}
             />
             <FormControlLabel control={<Switch checked={form.checkJoins} onChange={(e) => setForm({ ...form, checkJoins: e.target.checked })} />} label="Look players up on the network when they join" />
-            <FormControlLabel control={<Switch checked={form.sendEvents} onChange={(e) => setForm({ ...form, sendEvents: e.target.checked })} />} label="Tell PalBan about joins, leaves and bans (never addresses)" />
+            <FormControlLabel control={<Switch checked={form.sendEvents} onChange={(e) => setForm({ ...form, sendEvents: e.target.checked })} />} label="Tell PalBan about joins, leaves and bans (never IPs)" />
             {pd && (
               <>
                 <FormControlLabel
@@ -135,7 +135,7 @@ export function PalBanSettingsTab() {
                 {form.sendLogs && (
                   <FormControlLabel
                     control={<Switch checked={form.sendLogAddresses} onChange={(e) => setForm({ ...form, sendLogAddresses: e.target.checked })} />}
-                    label="Include player addresses in those lines (removed by default)"
+                    label="Include player IPs in those lines (removed by default)"
                     sx={{ ml: 3 }}
                   />
                 )}
@@ -230,17 +230,17 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
           rowKey={(b) => b.id}
           empty={<EmptyState title="No bans read yet" />}
           columns={[
-            { key: 'player', header: 'Player', render: (b) => (b.active || b.inGame ? <PlayerName name={b.playerName ?? b.gameId} userId={b.gameId} onOpen={onOpen} /> : (b.playerName ?? '—')) },
+            { key: 'player', header: 'Player', render: (b) => (b.active || b.inGame ? <PlayerName name={b.playerName ?? b.gameId} userId={b.gameId} onOpen={onOpen} /> : (b.playerName ?? 'Unknown')) },
             { key: 'id', header: 'Game ID', render: (b) => <Mono>{b.gameId}</Mono> },
-            { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
-            { key: 'category', header: 'Category', render: (b) => (b.category ? b.category.charAt(0) + b.category.slice(1).toLowerCase().replace(/_/g, ' ') : '—') },
+            { key: 'reason', header: 'Reason', render: (b) => b.reason ?? 'No reason given' },
+            { key: 'category', header: 'Category', render: (b) => (b.category ? b.category.charAt(0) + b.category.slice(1).toLowerCase().replace(/_/g, ' ') : 'None') },
             { key: 'status', header: 'On PalBan', render: (b) => <Chip label={b.status.toLowerCase()} color={b.active ? 'error' : 'default'} variant="outlined" /> },
             {
               key: 'game',
               header: 'In the game',
-              render: (b) => (b.inGame ? <Chip label={b.applied ? 'Banned by PalBan' : 'Banned'} color="success" variant="outlined" /> : b.active ? <Chip label="Not banned" color="warning" variant="outlined" /> : '—'),
+              render: (b) => (b.inGame ? <Chip label={b.applied ? 'Banned by PalBan' : 'Banned'} color="success" variant="outlined" /> : b.active ? <Chip label="Not banned" color="warning" variant="outlined" /> : 'Not banned'),
             },
-            { key: 'at', header: 'Banned', nowrap: true, render: (b) => (b.banDate ? formatDateTime(b.banDate) : '—') },
+            { key: 'at', header: 'Banned', nowrap: true, render: (b) => formatDateTime(b.banDate, 'Unknown') },
             {
               key: 'actions',
               header: '',
@@ -276,8 +276,8 @@ export function PalBanBans({ onOpen }: { onOpen: (userId: string) => void }) {
             columns={[
               { key: 'player', header: 'Player', render: (b) => <PlayerName name={b.name ?? b.userId} userId={b.userId} onOpen={onOpen} /> },
               { key: 'id', header: 'Game ID', render: (b) => <Mono>{b.userId}</Mono> },
-              { key: 'reason', header: 'Reason', render: (b) => b.reason ?? '—' },
-              { key: 'at', header: 'Banned', nowrap: true, render: (b) => formatDateTime(b.bannedAt) },
+              { key: 'reason', header: 'Reason', render: (b) => b.reason ?? 'No reason given' },
+              { key: 'at', header: 'Banned', nowrap: true, render: (b) => formatDateTime(b.bannedAt, 'Unknown') },
             ]}
           />
         </Section>

@@ -1,16 +1,22 @@
+import MenuIcon from '@mui/icons-material/Menu';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Link from '@mui/material/Link';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Link as RouterLink, Route, Routes } from 'react-router-dom';
+import { useSiteAccent } from '../accent';
 import { api, ApiError } from '../api/client';
 import { DiscordButton } from '../auth/discord';
 import { Brand } from '../components/Brand';
+import { SkipLink } from '../components/common';
+import { ThemeModeButton } from '../components/ThemeModeButton';
 import { useApi } from '../hooks/useApi';
 import { AccountPage } from './AccountPage';
 import { HomePage } from './HomePage';
@@ -53,11 +59,60 @@ function usePlayerSession(): PlayerSession {
   return { profile, loading, setProfile, signIn, signOut };
 }
 
+interface SiteLink {
+  label: string;
+  /** A page of this site. */
+  to?: string;
+  /** Anything else: a section of the home page or the Discord invite. */
+  href?: string;
+  external?: boolean;
+}
+
+/** Phones: the header links behind a labelled Menu button instead of disappearing. */
+function SiteMenu({ links }: { links: SiteLink[] }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const close = () => setAnchor(null);
+  return (
+    <Box component="nav" aria-label="Site" sx={{ display: { md: 'none' } }}>
+      <Button
+        color="inherit"
+        startIcon={<MenuIcon />}
+        onClick={(e) => setAnchor(e.currentTarget)}
+        aria-haspopup="menu"
+        aria-expanded={anchor ? 'true' : undefined}
+        aria-controls={anchor ? 'site-menu' : undefined}
+      >
+        Menu
+      </Button>
+      <Menu id="site-menu" anchorEl={anchor} open={!!anchor} onClose={close}>
+        {links.map((l) =>
+          l.to ? (
+            <MenuItem key={l.label} component={RouterLink} to={l.to} onClick={close}>
+              {l.label}
+            </MenuItem>
+          ) : (
+            <MenuItem key={l.label} component="a" href={l.href} onClick={close} {...(l.external ? { target: '_blank', rel: 'noreferrer' } : {})}>
+              {l.label}
+            </MenuItem>
+          ),
+        )}
+      </Menu>
+    </Box>
+  );
+}
+
 /** The public website for the server, meant as its main site. */
 export default function SiteApp() {
   const session = usePlayerSession();
   const server = useApi<PublicServer>('/public/server', { pollMs: 30000 });
+  useSiteAccent(server.data ? server.data.accentColor : undefined);
   const name = server.data?.name ?? 'Palworld server';
+  const links: SiteLink[] = [
+    { label: 'Home', to: '/' },
+    { label: 'How to join', href: '/#join' },
+    ...(server.data?.showOnlinePlayers ? [{ label: 'Players', to: '/players' }] : []),
+    ...(server.data?.discordInvite ? [{ label: 'Discord', href: server.data.discordInvite, external: true }] : []),
+  ];
   useEffect(() => {
     if (server.data?.name) document.title = server.data.name;
   }, [server.data?.name]);
@@ -65,31 +120,33 @@ export default function SiteApp() {
   return (
     <BrowserRouter>
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <SkipLink />
         <AppBar position="sticky" color="inherit" sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Container>
-            <Toolbar disableGutters sx={{ gap: 2 }}>
-              <Box component={RouterLink} to="/" sx={{ color: 'inherit', textDecoration: 'none', minWidth: 0, flexShrink: 1 }}>
+            <Toolbar disableGutters sx={{ gap: { xs: 1, sm: 2 } }}>
+              <Box
+                component={RouterLink}
+                to="/"
+                sx={{ color: 'inherit', textDecoration: 'none', minWidth: 0, flexShrink: 1, display: 'flex', alignItems: 'center', '@media (pointer: coarse)': { minHeight: 44 } }}
+              >
                 <Brand name={name} />
               </Box>
-              <Stack component="nav" direction="row" spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' }, ml: 2 }}>
-                <Button color="inherit" component={RouterLink} to="/">
-                  Home
-                </Button>
-                <Button color="inherit" href="/#join">
-                  How to join
-                </Button>
-                {server.data?.showOnlinePlayers && (
-                  <Button color="inherit" component={RouterLink} to="/players">
-                    Players
-                  </Button>
-                )}
-                {server.data?.discordInvite && (
-                  <Button color="inherit" href={server.data.discordInvite} target="_blank" rel="noreferrer">
-                    Discord
-                  </Button>
+              <Stack component="nav" aria-label="Site" direction="row" spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' }, ml: 2 }}>
+                {links.map((l) =>
+                  l.to ? (
+                    <Button key={l.label} color="inherit" component={RouterLink} to={l.to}>
+                      {l.label}
+                    </Button>
+                  ) : (
+                    <Button key={l.label} color="inherit" href={l.href} {...(l.external ? { target: '_blank', rel: 'noreferrer' } : {})}>
+                      {l.label}
+                    </Button>
+                  ),
                 )}
               </Stack>
               <Box sx={{ flexGrow: 1 }} />
+              <SiteMenu links={links} />
+              <ThemeModeButton />
               {session.profile ? (
                 <Button variant="outlined" component={RouterLink} to="/account" sx={{ flexShrink: 0 }}>
                   {session.profile.character?.name ?? session.profile.account.discord.username ?? 'My account'}
@@ -105,7 +162,7 @@ export default function SiteApp() {
           </Container>
         </AppBar>
 
-        <Box component="main" sx={{ flexGrow: 1 }}>
+        <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
           <Routes>
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/players/:id" element={<PlayerProfilePage />} />
@@ -120,7 +177,7 @@ export default function SiteApp() {
               <Typography variant="body2" color="text.secondary">
                 © {new Date().getFullYear()} {name}. Not affiliated with Pocketpair.
               </Typography>
-              <Link href="/panel" variant="body2" color="text.secondary">
+              <Link href="/panel" variant="body2" color="text.secondary" sx={{ alignSelf: 'flex-start', '@media (pointer: coarse)': { display: 'inline-flex', alignItems: 'center', minHeight: 44 } }}>
                 Staff panel
               </Link>
             </Stack>

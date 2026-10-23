@@ -1,6 +1,7 @@
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
 import SearchIcon from '@mui/icons-material/Search';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -19,7 +20,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage } from '../api/client';
 import type { KnownPlayer, LinkRequest, Player, PlayerSignal } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
-import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section } from '../components/common';
+import { EmptyState, ErrorState, Loading, Mono, PageHeader, Section, visuallyHidden } from '../components/common';
 import { ServerActivity } from '../components/ActivityMetrics';
 import { ExportButton, PlayerName } from '../components/PlayerBits';
 import { DataTable } from '../components/DataTable';
@@ -72,9 +73,15 @@ export function PlayersPage() {
 /** A small mark for players with a website account: verified (proven) or claimed (not yet). */
 function LinkBadge({ link }: { link: 'verified' | 'claimed' | null | undefined }) {
   if (!link) return null;
+  const text = link === 'verified' ? 'Discord account linked and verified' : 'Discord account linked but not verified';
   return (
-    <Tooltip title={link === 'verified' ? 'Discord account linked and verified' : 'Discord account linked but not verified'}>
-      {link === 'verified' ? <VerifiedIcon color="primary" sx={{ fontSize: 16 }} /> : <LinkIcon color="disabled" sx={{ fontSize: 16 }} />}
+    <Tooltip title={text} describeChild>
+      <Box component="span" sx={{ display: 'inline-flex' }}>
+        {link === 'verified' ? <VerifiedIcon color="primary" sx={{ fontSize: 16 }} /> : <LinkIcon color="disabled" sx={{ fontSize: 16 }} />}
+        <Box component="span" sx={visuallyHidden}>
+          {text}
+        </Box>
+      </Box>
     </Tooltip>
   );
 }
@@ -140,14 +147,14 @@ function OnlinePlayers({ onOpen, onAction }: { onOpen: (userId: string) => void;
               </Stack>
             ),
           },
-          { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
-          { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
-          { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : '—') },
+          { key: 'level', header: 'Level', render: (p) => p.level ?? 'Unknown' },
+          { key: 'guild', header: 'Guild', render: (p) => p.guild ?? 'No guild' },
+          { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : 'None yet') },
           { key: 'sessions', header: 'Visits', render: (p) => p.sessions ?? 0 },
           { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
-          ...(can('players.ip') ? [{ key: 'ip', header: 'IP address', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : '—') }] : []),
-          { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? '—' },
-          { key: 'ping', header: 'Ping', nowrap: true, render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : '—') },
+          ...(can('players.ip') ? [{ key: 'ip', header: 'IP', render: (p: Player) => (p.ip ? <Mono>{p.ip}</Mono> : 'Unknown') }] : []),
+          { key: 'buildings', header: 'Buildings', render: (p) => p.buildingCount ?? 'Unknown' },
+          { key: 'ping', header: 'Ping', nowrap: true, render: (p) => (p.ping !== null ? `${Math.round(p.ping)} ms` : 'Unknown') },
           {
             key: 'actions',
             header: '',
@@ -218,9 +225,9 @@ function AllPlayers({ onOpen }: { onOpen: (userId: string) => void }) {
                 </Stack>
               ),
             },
-            { key: 'level', header: 'Level', render: (p) => p.level ?? '—' },
-            { key: 'guild', header: 'Guild', render: (p) => p.guild ?? '—' },
-            { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : '—') },
+            { key: 'level', header: 'Level', render: (p) => p.level ?? 'Unknown' },
+            { key: 'guild', header: 'Guild', render: (p) => p.guild ?? 'No guild' },
+            { key: 'playtime', header: 'Playtime', nowrap: true, render: (p) => (p.playtimeSeconds ? formatDuration(p.playtimeSeconds) : 'None yet') },
           { key: 'sessions', header: 'Visits', render: (p) => p.sessions ?? 0 },
             { key: 'userId', header: 'Platform ID', render: (p) => <Mono>{p.userId}</Mono> },
             { key: 'lastSeen', header: 'Last seen', nowrap: true, render: (p) => formatDateTime(p.lastSeenAt) },
@@ -305,8 +312,8 @@ function LinkRequests({ onOpen }: { onOpen: (userId: string) => void }) {
         columns={[
           { key: 'discord', header: 'Discord account', render: (r) => r.discord.username ?? r.discord.id },
           { key: 'player', header: 'Says they are', render: (r) => <PlayerName name={r.player.name} userId={r.player.userId} onOpen={onOpen} /> },
-          { key: 'level', header: 'Level', render: (r) => r.player.level ?? '—' },
-          { key: 'at', header: 'Asked', nowrap: true, render: (r) => (r.requestedAt ? formatDateTime(r.requestedAt) : '—') },
+          { key: 'level', header: 'Level', render: (r) => r.player.level ?? 'Unknown' },
+          { key: 'at', header: 'Asked', nowrap: true, render: (r) => formatDateTime(r.requestedAt, 'Unknown') },
           {
             key: 'actions',
             header: '',
@@ -338,7 +345,7 @@ function LinkRequests({ onOpen }: { onOpen: (userId: string) => void }) {
   );
 }
 
-/** Unusual movement, level jumps and shared addresses, from the world snapshot. */
+/** Unusual movement, level jumps and shared IPs, from the world snapshot. */
 function Signals({ onOpen }: { onOpen: (userId: string) => void }) {
   const { can } = useAuth();
   const notify = useToast();

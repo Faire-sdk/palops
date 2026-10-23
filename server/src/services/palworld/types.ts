@@ -25,7 +25,7 @@ export interface PalworldPlayer {
   name: string;
   accountName: string;
   playerId: string;
-  /** Platform id such as steam_7656... — the id used for kick/ban. */
+  /** Platform id such as steam_7656..., the id used for kick/ban. */
   userId: string;
   ip: string | null;
   ping: number | null;

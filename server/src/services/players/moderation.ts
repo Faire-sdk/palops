@@ -43,7 +43,7 @@ interface ModerationRow {
 
 export interface IpBan {
   id: number;
-  /** A single address, or a CIDR range such as 203.0.113.0/24. */
+  /** A single IP, or a CIDR range such as 203.0.113.0/24. */
   ip: string;
   reason: string | null;
   /** The player whose ban this came from, if any. */
@@ -63,9 +63,9 @@ interface IpBanRow {
   created_at: string;
 }
 
-/** Shown to players kicked for connecting from a banned address. */
+/** Shown to players kicked for connecting from a banned IP. */
 const IP_BAN_MESSAGE = 'You are banned from this server';
-/** Someone retrying from a banned address is kicked every time, but their history gets one entry per window. */
+/** Someone retrying from a banned IP is kicked every time, but their history gets one entry per window. */
 const ENFORCE_RECORD_MS = 10 * 60 * 1000;
 const SYSTEM_ACTOR: AuditActor = { userId: null, username: 'PalOps' };
 
@@ -147,14 +147,14 @@ export class ModerationService {
     options: { banAddress?: boolean } = {},
   ): Promise<{ record: ModerationRecord; ipBan: IpBan | null; ipSkipped: string | null; paldefender: Mirror | null }> {
     const ip = options.banAddress ? this.players.lastAddress(userId) : null;
-    if (options.banAddress && !ip) throw badRequest('PalOps hasn’t seen an address for this player yet', 'no_address');
+    if (options.banAddress && !ip) throw badRequest('PalOps hasn’t seen an IP for this player yet', 'no_address');
     await this.palworld.ban(userId, reason);
     this.players.markOffline(userId);
     const record = this.store(actor, userId, 'ban', reason);
     let ipBan: IpBan | null = null;
     let ipSkipped: string | null = null;
     if (ip) {
-      if (isSharedRangeIp(ip)) ipSkipped = `${ip} is a private or loopback address shared by many players, so it wasn't banned.`;
+      if (isSharedRangeIp(ip)) ipSkipped = `${ip} is a private or loopback IP shared by many players, so it wasn't banned.`;
       else ipBan = (await this.banIp(actor, ip, reason, userId)).ipBan;
     }
     // PalDefender resolves the address itself, so only ask it to ban one when the panel did.
@@ -163,7 +163,7 @@ export class ModerationService {
     return { record, ipBan, ipSkipped, paldefender };
   }
 
-  /** Also lifts the address bans that came with this player's ban. */
+  /** Also lifts the IP bans that came with this player's ban. */
   async unban(actor: AuditActor, userId: string, reason: string): Promise<{ record: ModerationRecord; paldefender: Mirror | null }> {
     await this.palworld.unban(userId);
     const lifted = this.ipBans().filter((b) => b.playerUserId === userId);
@@ -174,9 +174,9 @@ export class ModerationService {
     return { record, paldefender: combine(results) };
   }
 
-  // ---- Address bans ----
+  // ---- IP bans ----
 
-  /** Bans an address or range, and kicks anyone online from it now. */
+  /** Bans an IP or range, and kicks anyone online from it now. */
   async banIp(actor: AuditActor, value: string, reason: string, playerUserId: string | null = null): Promise<{ ipBan: IpBan; paldefender: Mirror | null }> {
     const ip = parseIpRule(value);
     if (!ip) throw badRequest('Enter an IP address, or a range like 203.0.113.0/24', 'invalid_ip');
@@ -207,7 +207,7 @@ export class ModerationService {
     return { ipBan, paldefender };
   }
 
-  /** Lifts an address ban and mirrors that to PalDefender. */
+  /** Lifts an IP ban and mirrors that to PalDefender. */
   async unbanIp(actor: AuditActor, id: number): Promise<Mirror | null> {
     const ip = this.liftIpBan(actor, id);
     return ip.includes('/') ? null : this.paldefender.mirrorUnbanAddress(ip);
@@ -216,7 +216,7 @@ export class ModerationService {
   liftIpBan(actor: AuditActor, id: number): string {
     const server = this.servers.getPrimary();
     const row = server && (this.db.prepare('SELECT * FROM ip_bans WHERE id = ? AND server_id = ? AND lifted_at IS NULL').get(id, server.id) as IpBanRow | undefined);
-    if (!row) throw notFound('Address ban not found');
+    if (!row) throw notFound('IP ban not found');
     this.db.prepare('UPDATE ip_bans SET lifted_at = ?, lifted_by = ? WHERE id = ?').run(new Date().toISOString(), actor.username, id);
     this.audit.record(actor, { category: 'players', action: 'ip_unban', target: row.ip });
     return row.ip;
@@ -235,8 +235,8 @@ export class ModerationService {
   }
 
   /**
-   * Kicks online players who connect from a banned address. The REST API has
-   * no address bans, so the panel checks each fresh online list itself.
+   * Kicks online players who connect from a banned IP. The REST API has
+   * no IP bans, so the panel checks each fresh online list itself.
    */
   async enforceIpBans(online: PalworldPlayer[]): Promise<string[]> {
     const bans = this.ipBans();
@@ -255,7 +255,7 @@ export class ModerationService {
       const last = this.lastEnforced.get(player.userId) ?? 0;
       if (Date.now() - last >= ENFORCE_RECORD_MS) {
         this.lastEnforced.set(player.userId, Date.now());
-        this.store(SYSTEM_ACTOR, player.userId, 'kick', 'Connected from a banned address');
+        this.store(SYSTEM_ACTOR, player.userId, 'kick', 'Connected from a banned IP');
       }
     }
     return kicked;

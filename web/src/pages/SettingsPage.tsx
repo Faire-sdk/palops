@@ -28,6 +28,7 @@ import { IntegrationsSettingsTab } from '../components/IntegrationsSettings';
 import { ErrorState, KeyValue, Loading, Mono, PageHeader, Section, ServerStateChip } from '../components/common';
 import { DataTable } from '../components/DataTable';
 import { useToast } from '../components/Toast';
+import { WebsiteSettingsTab } from '../components/WebsiteSettings';
 import { formatDateTime } from '../format';
 import { refreshAll, useApi } from '../hooks/useApi';
 
@@ -37,6 +38,7 @@ export function SettingsPage() {
   const tabs = [
     { id: 'account', label: 'Account' },
     ...(can('server.connection') ? [{ id: 'connection', label: 'Server connection' }, { id: 'console', label: 'Console logs' }, { id: 'integrations', label: 'Integrations' }, { id: 'discord', label: 'Discord bot' }] : []),
+    ...(can('server.control') ? [{ id: 'website', label: 'Website' }] : []),
     ...(can('users.manage') ? [{ id: 'users', label: 'Users' }] : []),
   ];
   const tab = tabs.find((t) => t.id === params.get('tab'))?.id ?? 'account';
@@ -54,6 +56,7 @@ export function SettingsPage() {
       {tab === 'console' && <ConsoleSettingsTab />}
       {tab === 'discord' && <DiscordBotSettingsTab />}
       {tab === 'integrations' && <IntegrationsSettingsTab />}
+      {tab === 'website' && <WebsiteSettingsTab />}
       {tab === 'users' && <UserSettings />}
     </>
   );

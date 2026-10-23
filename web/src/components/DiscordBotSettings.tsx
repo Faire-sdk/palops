@@ -376,7 +376,7 @@ export function DiscordBotSettingsTab() {
               <li>
                 Save here <em>first</em>, then set <strong>Interactions Endpoint URL</strong> in the portal to:
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mt: 0.5 }}>
-                  <TextField size="small" value={data.interactionsUrl} slotProps={{ input: { readOnly: true, endAdornment: <InputAdornment position="end"><Tooltip title="Copy"><IconButton size="small" onClick={copy} aria-label="Copy URL"><ContentCopyIcon fontSize="small" /></IconButton></Tooltip></InputAdornment> } }} fullWidth />
+                  <TextField size="small" value={data.interactionsUrl} slotProps={{ htmlInput: { 'aria-label': 'Interactions Endpoint URL' }, input: { readOnly: true, endAdornment: <InputAdornment position="end"><Tooltip title="Copy"><IconButton size="small" onClick={copy} aria-label="Copy URL"><ContentCopyIcon fontSize="small" /></IconButton></Tooltip></InputAdornment> } }} fullWidth />
                 </Stack>
                 Discord checks it straight away, so PalOps must be reachable there over HTTPS.
               </li>

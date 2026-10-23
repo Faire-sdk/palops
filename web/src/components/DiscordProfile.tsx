@@ -1,9 +1,11 @@
+import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { DiscordProfile } from '../api/types';
 import { formatDateTime } from '../format';
+import { visuallyHidden } from './common';
 
 /** Display names for Discord connection types; anything else shows as Discord names it. */
 const CONNECTION_NAMES: Record<string, string> = {
@@ -28,9 +30,24 @@ export function MemberChip({ profile }: { profile: DiscordProfile | null | undef
   const m = profile?.communityMember;
   if (m === undefined || m === null) return <Chip size="small" variant="outlined" label="Unknown" />;
   if (m === false) return <Chip size="small" variant="outlined" color="warning" label="Not in server" />;
+  const joined = m.joinedAt ? `Joined ${formatDateTime(m.joinedAt)}` : '';
   return (
-    <Tooltip title={m.joinedAt ? `Joined ${formatDateTime(m.joinedAt)}` : ''}>
-      <Chip size="small" variant="outlined" color="success" label={m.nick ? `Member · ${m.nick}` : 'Member'} />
+    <Tooltip title={joined} describeChild>
+      <Chip
+        size="small"
+        variant="outlined"
+        color="success"
+        label={
+          <>
+            {m.nick ? `Member · ${m.nick}` : 'Member'}
+            {joined && (
+              <Box component="span" sx={visuallyHidden}>
+                , {joined}
+              </Box>
+            )}
+          </>
+        }
+      />
     </Tooltip>
   );
 }
@@ -38,12 +55,13 @@ export function MemberChip({ profile }: { profile: DiscordProfile | null | undef
 /** Linked accounts (Steam, Xbox, ...) as chips. */
 export function ConnectionChips({ profile }: { profile: DiscordProfile | null | undefined }) {
   const list = profile?.connections;
-  if (!list?.length) return <Typography variant="body2" color="text.secondary">{list ? 'None' : '—'}</Typography>;
+  if (!list?.length) return <Typography variant="body2" color="text.secondary">{list ? 'None' : 'Unknown'}</Typography>;
   return (
     <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
       {list.map((c) => (
-        <Tooltip key={`${c.type}:${c.id}`} title={`${c.id}${c.verified ? ' · verified by Discord' : ''}`}>
-          <Chip size="small" label={`${connectionName(c.type)}: ${c.name}`} variant={c.verified ? 'filled' : 'outlined'} />
+        <Tooltip key={`${c.type}:${c.id}`} title={`ID ${c.id}`} describeChild>
+          {/* Verified is said in words, not only by the filled style. */}
+          <Chip size="small" label={`${connectionName(c.type)}: ${c.name}${c.verified ? ', verified' : ''}`} variant={c.verified ? 'filled' : 'outlined'} />
         </Tooltip>
       ))}
     </Stack>

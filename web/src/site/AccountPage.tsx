@@ -111,8 +111,8 @@ function CharacterCard({ session }: { session: PlayerSession }) {
 
           <Grid container spacing={2}>
             {[
-              ['Level', c.level ?? '—'],
-              ['Guild', c.guild ?? '—'],
+              ['Level', c.level ?? 'Unknown'],
+              ['Guild', c.guild ?? 'No guild'],
               ['Time played', formatDuration(c.playtimeSeconds)],
               ['Visits', c.sessions],
             ].map(([label, value]) => (

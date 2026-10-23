@@ -651,4 +651,27 @@ export const migrations: Migration[] = [
       INSERT INTO world_settings (id) VALUES (1);
     `,
   },
+  {
+    id: 24,
+    name: 'site_rules',
+    sql: `
+      -- What staff write for the public website (one row). Rules are a JSON array
+      -- of strings; none means the website shows no rules section.
+      CREATE TABLE site_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        rules TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT,
+        updated_by TEXT
+      );
+      INSERT INTO site_settings (id) VALUES (1);
+    `,
+  },
+  {
+    id: 25,
+    name: 'site_accent_color',
+    sql: `
+      -- The server's own colour for its public website (#rrggbb). NULL keeps PalOps colours.
+      ALTER TABLE site_settings ADD COLUMN accent_color TEXT;
+    `,
+  },
 ];

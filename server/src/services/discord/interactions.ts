@@ -70,7 +70,7 @@ export const COMMANDS: CommandDefinition[] = [
     name: 'ban',
     description: 'Ban a player',
     type: 1,
-    options: [player('Who to ban in game'), member('A Discord member: banned here, and in game if their character is linked and verified'), reason, { name: 'ban_ip', description: 'Also ban the address they last connected from', type: BOOLEAN }],
+    options: [player('Who to ban in game'), member('A Discord member: banned here, and in game if their character is linked and verified'), reason, { name: 'ban_ip', description: 'Also ban the IP they last connected from', type: BOOLEAN }],
   },
   { name: 'unban', description: 'Unban a player', type: 1, options: [player('Who to unban in game'), member('A Discord member to unban here (and their linked character)'), reason] },
   { name: 'announce', description: 'Broadcast a message to everyone on the server', type: 1, options: [{ name: 'message', description: 'What to say', type: STRING, required: true, max_length: 200 }] },

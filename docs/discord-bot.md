@@ -24,9 +24,9 @@ allows in the web panel:
 | --- | --- | --- |
 | `/status` | `server.view` | Online or not, players, FPS, uptime |
 | `/players` | `players.view` | Who is online |
-| `/player <name>` | `players.view` | Level, guild, first and last seen, banned or not. No addresses. |
+| `/player <name>` | `players.view` | Level, guild, first and last seen, banned or not. No IPs. |
 | `/kick <player> [reason]` | `players.kick` (moderators and up) | |
-| `/ban <player> [reason] [ban_ip]` | `players.ban` (admins and up) | `ban_ip` also needs a role that can see addresses |
+| `/ban <player> [reason] [ban_ip]` | `players.ban` (admins and up) | `ban_ip` also needs a role that can see IPs |
 | `/unban <player> [reason]` | `players.ban` | |
 | `/announce <message>` | `server.broadcast` | |
 | `/save` | `server.control` | |
@@ -73,7 +73,7 @@ The bot only touches the roles you configure, never any other. It needs **Manage
 
 Turn on **Keep bans in step** and:
 
-- banning a player in game (from the panel, the bot, or the address enforcement) also bans their **verified** Discord account, and unbanning them unbans it;
+- banning a player in game (from the panel, the bot, or the IP enforcement) also bans their **verified** Discord account, and unbanning them unbans it;
 - banning or unbanning someone in Discord directly does the same to their **verified** character;
 - panel users are never banned on Discord as a side effect, and each side's own actions aren't echoed back (a ban followed straight away by an unban still goes through).
 
@@ -97,7 +97,7 @@ Relayed messages carry a prefix and are remembered for a minute, so the game log
 
 ## Notifications
 
-Pick an **events channel** and choose what goes there: bans, unbans and kicks (from the panel, the bot or PalDefender's address enforcement), cheat signals, the
+Pick an **events channel** and choose what goes there: bans, unbans and kicks (from the panel, the bot or PalDefender's IP enforcement), cheat signals, the
 server going offline or coming back (it has to be down for a minute before it's announced, so a blip stays quiet), and optionally joins and leaves.
 
 Pick a **log channel** to forward warning or error lines (or everything) from the game's and PalDefender's logs, which needs the [Console](console.md) set up.

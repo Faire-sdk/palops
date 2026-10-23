@@ -73,9 +73,9 @@ export function ServerPage() {
           <Section title="Status" action={<ServerStateChip state={status.state} />}>
             <KeyValue
               items={[
-                ['Server', status.info?.name ?? status.connection?.name ?? '—'],
-                ['Uptime', status.metrics ? formatDuration(status.metrics.uptimeSeconds) : '—'],
-                ['Players', status.metrics ? `${status.metrics.currentPlayers} of ${status.metrics.maxPlayers}` : '—'],
+                ['Server', status.info?.name ?? status.connection?.name ?? 'Unknown'],
+                ['Uptime', status.metrics ? formatDuration(status.metrics.uptimeSeconds) : 'Unavailable'],
+                ['Players', status.metrics ? `${status.metrics.currentPlayers} of ${status.metrics.maxPlayers}` : 'Unavailable'],
               ]}
             />
             {!online && status.error && (

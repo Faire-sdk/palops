@@ -14,7 +14,7 @@ When the server publishes its player list (`SITE_SHOW_ONLINE_PLAYERS`, on by def
 
 - **Players** lists everyone who has played, searchable and sortable by recent activity, playtime, level or name, with a verified badge and who's online.
 - Each player has a **profile page**: level, time played, visits and longest visit, their strongest pals, their guild (members, online, bases), and when they started.
-  Profiles use an internal number in the address, so platform IDs never appear in a URL, and there are no IP addresses anywhere.
+  Profiles use an internal number in the address, so platform IDs never appear in a URL, and there are no IPs anywhere.
 - A player's **Discord name** is shown only if the link is verified **and** they switch on "Show my Discord name on my public profile" on their account page.
 - The account page shows the player's own stats, the verification steps, and a link to their public profile.
 

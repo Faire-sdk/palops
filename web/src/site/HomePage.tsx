@@ -9,9 +9,6 @@ import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useState, type ReactNode } from 'react';
@@ -53,13 +50,7 @@ export function HomePage({ server, session }: Props) {
 
   return (
     <>
-      <Box
-        component="section"
-        sx={(theme) => ({
-          py: { xs: 7, md: 11 },
-          background: `radial-gradient(1000px 420px at 15% 0%, ${theme.alpha(theme.vars!.palette.primary.main, 0.22)}, transparent 70%), radial-gradient(700px 360px at 90% 10%, ${theme.alpha(theme.vars!.palette.secondary.main, 0.18)}, transparent 70%)`,
-        })}
-      >
+      <Box component="section" sx={{ py: { xs: 7, md: 11 } }}>
         <Container>
           <Stack spacing={3} sx={{ maxWidth: 760 }}>
             <div>
@@ -72,9 +63,12 @@ export function HomePage({ server, session }: Props) {
             <Typography variant="h2" component="h1" sx={{ fontWeight: 700, fontSize: { xs: 38, md: 56 }, lineHeight: 1.1 }}>
               {s?.name ?? 'Palworld server'}
             </Typography>
-            <Typography variant="h6" component="p" color="text.secondary" sx={{ fontWeight: 400 }}>
-              {s?.description || 'A community Palworld server. Catch, build and explore with friends.'}
-            </Typography>
+            {/* Only the server's own description; nothing stands in for it when there is none. */}
+            {s?.description && (
+              <Typography variant="h6" component="p" color="text.secondary" sx={{ fontWeight: 400 }}>
+                {s.description}
+              </Typography>
+            )}
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
               {s?.joinAddress && (
                 <Button variant="contained" size="large" onClick={copyAddress} startIcon={copied ? <CheckIcon /> : <ContentCopyIcon />}>
@@ -104,10 +98,10 @@ export function HomePage({ server, session }: Props) {
       <Container>
         <Grid container spacing={2} sx={{ mb: 6 }}>
           {[
-            ['Players online', s?.players ? `${s.players.online} / ${s.players.max}` : '—'],
-            ['In-game day', s?.inGameDays ?? '—'],
-            ['Uptime', s?.uptimeSeconds != null ? formatDuration(s.uptimeSeconds) : '—'],
-            ['Players seen', s?.knownPlayers ?? '—'],
+            ['Players online', s?.players ? `${s.players.online} / ${s.players.max}` : 'Unavailable'],
+            ['In-game day', s?.inGameDays ?? 'Unavailable'],
+            ['Uptime', s?.uptimeSeconds != null ? formatDuration(s.uptimeSeconds) : 'Unavailable'],
+            ['Players seen', s?.knownPlayers ?? 'Unavailable'],
           ].map(([label, value]) => (
             <Grid key={label as string} size={{ xs: 6, md: 3 }}>
               <Card>
@@ -184,38 +178,48 @@ export function HomePage({ server, session }: Props) {
           </Box>
         )}
 
-        <Grid container spacing={4}>
+        <Grid container spacing={4} sx={{ mb: 6 }}>
           <Grid size={{ xs: 12, md: 6 }} component="section" id="join" sx={{ scrollMarginTop: 80 }}>
             <SectionTitle>How to join</SectionTitle>
-            <List disablePadding>
-              {[
-                ['Open Palworld', 'Choose Join Multiplayer Game.'],
-                ['Enter the address', s?.joinAddress ? <>Type <Mono>{s.joinAddress}</Mono> and connect.</> : 'It’s shared in our Discord.'],
-                ['Sign in here with Discord', 'Link your character to see your level and guild on this site.'],
-              ].map(([title, text], i) => (
-                <ListItem key={i} disableGutters alignItems="flex-start" sx={{ gap: 2 }}>
-                  <Avatar sx={{ width: 32, height: 32, fontSize: 15, bgcolor: 'primary.main', color: 'primary.contrastText', mt: 0.5 }}>{i + 1}</Avatar>
-                  <ListItemText primary={title} secondary={text} slotProps={{ primary: { sx: { fontWeight: 600 } } }} />
-                </ListItem>
-              ))}
-            </List>
+            <Card>
+              <CardContent>
+                <Stack spacing={1.5}>
+                  {s?.joinAddress ? (
+                    <>
+                      <Typography>In Palworld, choose Join Multiplayer Game and enter the server IP:</Typography>
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                        <Typography component="span" sx={{ fontSize: 20, fontWeight: 600 }}>
+                          <Mono>{s.joinAddress}</Mono>
+                        </Typography>
+                        <Button variant="outlined" onClick={copyAddress} startIcon={copied ? <CheckIcon /> : <ContentCopyIcon />}>
+                          {copied ? 'Copied' : 'Copy IP'}
+                        </Button>
+                      </Stack>
+                    </>
+                  ) : (
+                    <Typography>In Palworld, choose Join Multiplayer Game and enter the server IP. {s?.discordInvite ? 'It’s shared in our Discord.' : 'Ask the server staff for it.'}</Typography>
+                  )}
+                  {s?.playerLogin && (
+                    <Typography variant="body2" color="text.secondary">
+                      Signing in here with Discord is optional. It links your character, so this site can show your level and guild.
+                    </Typography>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
           </Grid>
-          <Grid size={{ xs: 12, md: 6 }} component="section">
-            <SectionTitle>Server rules</SectionTitle>
-            <List disablePadding>
-              {[
-                'Be respectful. No harassment, hate speech or spam.',
-                'No cheating, exploits or third-party tools that give an advantage.',
-                'Don’t grief or raid bases outside of agreed PvP.',
-                'Staff decisions are final; appeal on Discord.',
-              ].map((rule) => (
-                <ListItem key={rule} disableGutters sx={{ gap: 1.5 }}>
-                  <CheckIcon color="primary" fontSize="small" />
-                  <ListItemText primary={rule} />
-                </ListItem>
-              ))}
-            </List>
-          </Grid>
+          {!!s?.rules.length && (
+            <Grid size={{ xs: 12, md: 6 }} component="section" id="rules" sx={{ scrollMarginTop: 80 }}>
+              <SectionTitle>Server rules</SectionTitle>
+              <Box component="ol" sx={{ m: 0, pl: 3, display: 'grid', gap: 1 }}>
+                {s.rules.map((rule, i) => (
+                  <Typography component="li" key={i}>
+                    {rule}
+                  </Typography>
+                ))}
+              </Box>
+            </Grid>
+          )}
         </Grid>
       </Container>
     </>

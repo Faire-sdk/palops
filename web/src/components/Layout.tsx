@@ -17,6 +17,7 @@ import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
@@ -32,7 +33,8 @@ import { discordAvatarUrl } from '../auth/discord';
 import { useApi } from '../hooks/useApi';
 import { usePalDefender } from '../hooks/usePalDefender';
 import { Brand } from './Brand';
-import { ServerStateChip, type IconComponent } from './common';
+import { ServerStateChip, SkipLink, type IconComponent } from './common';
+import { ThemeModeButton } from './ThemeModeButton';
 
 const DRAWER_WIDTH = 248;
 
@@ -74,23 +76,27 @@ export function Layout() {
       </Toolbar>
       <List sx={{ px: 1.5 }}>
         {NAV.filter((n) => (!n.permission || can(n.permission)) && (!n.paldefender || paldefender)).map((n) => (
-          <ListItemButton
-            key={n.to}
-            component={NavLink}
-            to={n.to}
-            end={n.to === '/'}
-            onClick={() => setMobileOpen(false)}
-            sx={{
-              borderRadius: '8px',
-              mb: 0.5,
-              '&.active': { bgcolor: 'action.selected', color: 'primary.main', '& .MuiListItemIcon-root': { color: 'primary.main' } },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <n.icon />
-            </ListItemIcon>
-            <ListItemText primary={n.label} />
-          </ListItemButton>
+          <ListItem key={n.to} disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              component={NavLink}
+              to={n.to}
+              end={n.to === '/'}
+              onClick={() => setMobileOpen(false)}
+              sx={(theme) => {
+                // An 8% primary tint behind the primary label: 7.21:1 light, 7.11:1 dark.
+                const selected = { bgcolor: `rgba(${theme.vars!.palette.primary.mainChannel} / 0.08)` };
+                return {
+                  borderRadius: '8px',
+                  '&.active': { ...selected, color: 'primary.main', '& .MuiListItemIcon-root': { color: 'primary.main' }, '&.Mui-focusVisible, &:hover': selected },
+                };
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <n.icon />
+              </ListItemIcon>
+              <ListItemText primary={n.label} />
+            </ListItemButton>
+          </ListItem>
         ))}
       </List>
     </>
@@ -98,6 +104,7 @@ export function Layout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      <SkipLink />
       <AppBar
         position="fixed"
         color="inherit"
@@ -117,6 +124,7 @@ export function Layout() {
             <ServerStateChip state={status?.state} />
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', ml: 1 }}>
+            <ThemeModeButton />
             <Avatar src={avatar ?? undefined} sx={{ width: 32, height: 32, fontSize: 15 }}>
               {(user?.displayName ?? user?.username)?.slice(0, 1).toUpperCase()}
             </Avatar>
@@ -151,7 +159,7 @@ export function Layout() {
         </Drawer>
       </Box>
 
-      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, p: { xs: 2, sm: 3 }, width: { md: `calc(100% - ${DRAWER_WIDTH}px)` } }}>
+      <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1, minWidth: 0, p: { xs: 2, sm: 3 }, width: { md: `calc(100% - ${DRAWER_WIDTH}px)` } }}>
         <Toolbar />
         <Outlet />
       </Box>

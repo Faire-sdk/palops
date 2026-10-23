@@ -175,7 +175,7 @@ function Block({ title, action, children }: { title: string; action?: ReactNode;
   return (
     <Box>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-        <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+        <Typography variant="subtitle2" component="h3" color="text.secondary">
           {title}
         </Typography>
         {action}

@@ -11,6 +11,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import Link from '@mui/material/Link';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
@@ -217,10 +218,12 @@ function MapTab({ focus, onPlayer, onBase }: { focus: MapPoint | null; onPlayer:
           ) : (
             <List dense>
               {map.players.map((p) => (
-                <ListItemButton key={p.userId} onClick={() => onPlayer(p.userId)}>
-                  <GuildDot guildId={p.guildId} />
-                  <ListItemText primary={p.name} secondary={`Level ${p.level ?? '?'}${p.guildName ? ` · ${p.guildName}` : ''} · ${formatMapPoint(p.at)}`} />
-                </ListItemButton>
+                <ListItem key={p.userId} disablePadding>
+                  <ListItemButton onClick={() => onPlayer(p.userId)}>
+                    <GuildDot guildId={p.guildId} />
+                    <ListItemText primary={p.name} secondary={`Level ${p.level ?? 'unknown'}${p.guildName ? ` · ${p.guildName}` : ''} · ${formatMapPoint(p.at)}`} />
+                  </ListItemButton>
+                </ListItem>
               ))}
             </List>
           )}
@@ -298,7 +301,7 @@ function BasesTab({ onOpen }: { onOpen: (baseId: number) => void }) {
               ),
             },
             { key: 'at', header: 'Location', nowrap: true, render: (b) => formatMapPoint(b.location) },
-            { key: 'workers', header: 'Workers', render: (b) => (b.workers ? b.workers.length : '—') },
+            { key: 'workers', header: 'Workers', render: (b) => (b.workers ? b.workers.length : 'Unknown') },
             { key: 'level', header: 'Avg level', render: (b) => avgLevel(b.workers) },
             { key: 'injured', header: 'Injured', render: (b) => injuredChip(b.workers) },
             { key: 'seen', header: 'Last seen', nowrap: true, render: (b) => formatDateTime(b.lastSeenAt) },
@@ -313,11 +316,11 @@ const isInjured = (w: WorkerPal) => w.hp !== null && !!w.maxHp && w.hp / w.maxHp
 
 function avgLevel(workers: WorkerPal[] | null) {
   const levels = (workers ?? []).map((w) => w.level).filter((l): l is number => l !== null);
-  return levels.length ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : '—';
+  return levels.length ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : 'Unknown';
 }
 
 function injuredChip(workers: WorkerPal[] | null) {
-  if (!workers) return '—';
+  if (!workers) return 'Unknown';
   const n = workers.filter(isInjured).length;
   return n ? <Chip label={n} color="error" variant="outlined" /> : 0;
 }
@@ -331,7 +334,7 @@ function WorkerTable({ workers }: { workers: WorkerPal[] | null }) {
       empty={<EmptyState title="No worker pals seen here" />}
       columns={[
         { key: 'name', header: 'Pal', render: (w) => palLabel(w) },
-        { key: 'level', header: 'Level', render: (w) => w.level ?? '—' },
+        { key: 'level', header: 'Level', render: (w) => w.level ?? 'Unknown' },
         { key: 'hp', header: 'HP', render: (w) => <HpBar hp={w.hp} maxHp={w.maxHp} /> },
       ]}
     />
@@ -396,7 +399,7 @@ function GuildDialog({ guildId, onClose, onPlayer, onBase }: { guildId: string |
                   </Link>
                 ),
               },
-              { key: 'level', header: 'Level', render: (m) => m.level ?? '—' },
+              { key: 'level', header: 'Level', render: (m) => m.level ?? 'Unknown' },
               { key: 'online', header: 'Status', render: (m) => (m.online ? <Chip label="Online" color="success" /> : formatDateTime(m.lastSeenAt)) },
             ]}
           />
@@ -420,7 +423,7 @@ function GuildDialog({ guildId, onClose, onPlayer, onBase }: { guildId: string |
                     </Link>
                   ),
                 },
-                { key: 'workers', header: 'Workers', render: (b) => (b.workers ? b.workers.length : '—') },
+                { key: 'workers', header: 'Workers', render: (b) => (b.workers ? b.workers.length : 'Unknown') },
                 { key: 'injured', header: 'Injured', render: (b) => injuredChip(b.workers) },
               ]}
             />
@@ -467,13 +470,13 @@ function PerformanceTab({ onShow }: { onShow: (p: MapPoint) => void }) {
             {
               key: 'fps',
               header: 'Avg FPS when busy',
-              render: (h) => (h.avgFps === null ? '—' : <Chip label={h.avgFps} color={h.avgFps < 30 ? 'error' : h.avgFps < 45 ? 'warning' : 'success'} variant="outlined" />),
+              render: (h) => (h.avgFps === null ? 'No data' : <Chip label={h.avgFps} color={h.avgFps < 30 ? 'error' : h.avgFps < 45 ? 'warning' : 'success'} variant="outlined" />),
             },
             {
               key: 'delta',
               header: 'vs average',
               render: (h) =>
-                h.fpsVsAverage === null ? '—' : (
+                h.fpsVsAverage === null ? 'No data' : (
                   <Typography variant="body2" color={h.fpsVsAverage <= -3 ? 'error' : 'text.secondary'} sx={{ fontWeight: h.fpsVsAverage <= -3 ? 600 : 400 }}>
                     {h.fpsVsAverage > 0 ? '+' : ''}
                     {h.fpsVsAverage}
