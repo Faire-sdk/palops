@@ -13,14 +13,16 @@ import Link from '@mui/material/Link';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import type { Base, GuildDetail, Guild, MapImage, MapPoint, MapRegion, WorkerPal, WorldMapData, WorldPerformance, WorldStatus } from '../api/types';
+import type { Base, GuildDetail, Guild, MapImage, MapPoint, MapRegion, WorkerPal, WorldMapData, WorldPerformance, WorldSettings, WorldStatus } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { EmptyState, ErrorState, Loading, PageHeader, Section, Stat } from '../components/common';
 import { DataTable } from '../components/DataTable';
@@ -105,20 +107,70 @@ export function WorldPage() {
 
 const NO_IMAGES: MapImage[] = [];
 
+const intervalLabel = (seconds: number) => (seconds === 0 ? 'Off' : seconds < 60 ? `Every ${seconds} s` : `Every ${seconds / 60} min`);
+
+/** How often the panel reads the world snapshot, which is how fast the map moves. */
+function PollIntervalSelect() {
+  const notify = useToast();
+  const { data, reload } = useApi<{ settings: WorldSettings; choices: number[] }>('/world/settings');
+  const [saving, setSaving] = useState(false);
+  if (!data) return null;
+  const { settings, choices } = data;
+  const save = async (value: number) => {
+    setSaving(true);
+    try {
+      await api.put('/world/settings', { pollSeconds: value === settings.defaultPollSeconds ? null : value });
+      notify(value === 0 ? 'World snapshots turned off' : `The map now updates ${intervalLabel(value).toLowerCase()}`, 'success');
+      await reload();
+    } catch (err) {
+      notify(errorMessage(err), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <TextField
+      select
+      size="small"
+      label="Map updates"
+      value={settings.pollSeconds}
+      disabled={saving}
+      onChange={(e) => void save(Number(e.target.value))}
+      sx={{ minWidth: 150 }}
+    >
+      {choices.map((c) => (
+        <MenuItem key={c} value={c}>
+          {intervalLabel(c)}
+          {c === settings.defaultPollSeconds ? ' (default)' : ''}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+}
+/** How often the map checks for a new snapshot; the small status call, not the whole map. */
+const SNAPSHOT_CHECK_MS = 3000;
+
 function MapTab({ focus, onPlayer, onBase }: { focus: MapPoint | null; onPlayer: (id: string) => void; onBase: (id: number) => void }) {
   const { can } = useAuth();
-  const { data, error, loading, reload } = useApi<{ status: WorldStatus; map: WorldMapData | null }>('/world/map', { pollMs: 20000 });
+  const { data, error, loading, reload } = useApi<{ status: WorldStatus; map: WorldMapData | null }>('/world/map', { pollMs: 60000 });
+  // Fetch the (large) map as soon as the panel has a newer snapshot, instead of on a second timer of its own.
+  const { data: latest } = useApi<WorldStatus>('/world/status', { pollMs: SNAPSHOT_CHECK_MS });
+  const shownAt = data ? data.status.takenAt : undefined;
+  useEffect(() => {
+    if (latest?.takenAt && shownAt !== undefined && latest.takenAt !== shownAt) void reload();
+  }, [latest?.takenAt, shownAt, reload]);
   const { data: imageData } = useApi<{ regions: MapRegion[]; images: MapImage[] }>('/world/map-images');
   const [editing, setEditing] = useState(false);
   const images = imageData?.images ?? NO_IMAGES;
   const unaligned = images.filter((i) => !i.aligned).map((i) => imageData?.regions.find((r) => r.id === i.region)?.label ?? i.region);
   const editor = can('config.edit') && (
-    <>
-      <Button variant="outlined" startIcon={<ImageOutlinedIcon />} onClick={() => setEditing(true)}>
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <PollIntervalSelect />
+      <Button variant="outlined" startIcon={<ImageOutlinedIcon />} onClick={() => setEditing(true)} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
         {images.length > 0 ? 'Map images' : 'Add map images'}
       </Button>
       <MapImageDialog open={editing} onClose={() => setEditing(false)} regions={imageData?.regions ?? []} images={images} map={data?.map ?? null} />
-    </>
+    </Stack>
   );
   if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorState error={error} onRetry={reload} />;

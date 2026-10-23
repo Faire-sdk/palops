@@ -94,7 +94,7 @@ export function createServices(config: Config, db: DB): Services {
   const players = new PlayerDirectory(db, palworld, servers);
   const paldefender = new PalDefenderService(db, new SecretBox(config.secret, 'paldefender-token'), players, servers);
   const consoleLog = new ConsoleService(db, config.databasePath === ':memory:' ? [] : [dirname(resolve(config.databasePath))], new SecretBox(config.secret, 'console-logger-token'));
-  const world = new WorldService(db, palworld, players, servers, audit);
+  const world = new WorldService(db, palworld, players, servers, audit, config.worldPollSeconds);
   // Mirror what the panel knows into the console, so it's useful even before any log file is set up.
   audit.onRecord((actor, entry) => {
     if (entry.category === 'auth') return;

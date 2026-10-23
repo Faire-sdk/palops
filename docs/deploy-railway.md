@@ -38,7 +38,7 @@ On the service's **Variables** tab:
 | `SITE_JOIN_ADDRESS` | Optional. What players type in Palworld, e.g. `play.lambland.gg:8211` |
 | `SITE_DISCORD_INVITE` | Optional. Your community Discord invite link |
 | `SITE_SHOW_ONLINE_PLAYERS` | Optional. `false` hides the online player list on the website |
-| `WORLD_POLL_SECONDS` | Optional. Seconds between world snapshots (default 20, `0` turns them off) |
+| `WORLD_POLL_SECONDS` | Optional. Seconds between world snapshots (default 10, `0` turns them off) |
 | `AUTH_PASSWORD_LOGIN` | Optional. `true` keeps username/password sign-in for staff as a fallback |
 | `PANEL_EMERGENCY_PASSWORD` | Optional, 16+ characters. Owner sign-in for when Discord sign-in is broken ([details](../README.md#signing-in)) |
 
